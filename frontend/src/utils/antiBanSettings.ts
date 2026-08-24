@@ -17,10 +17,10 @@ export const ANTI_BAN_PRESETS: Record<'ultra_safe' | 'standard_balanced' | 'fast
     typingDelaySeconds: 5,
     dailyMessageLimit: 35,
     workingHoursEnabled: true,
-    workingHoursStart: '09:30',
-    workingHoursEnd: '18:30',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '18:00',
   },
-  // Standard Balanced (Recommended Default): Zero-ban algorithm compliance
+  // Standard Balanced (Recommended Default): Zero-ban algorithm compliance with corporate working hours
   standard_balanced: {
     minDelaySeconds: 45,
     maxDelaySeconds: 120,
@@ -28,7 +28,7 @@ export const ANTI_BAN_PRESETS: Record<'ultra_safe' | 'standard_balanced' | 'fast
     dailyMessageLimit: 50,
     workingHoursEnabled: true,
     workingHoursStart: '09:00',
-    workingHoursEnd: '19:00',
+    workingHoursEnd: '18:30',
   },
   // Fast: Only for heavily warmed-up and established WhatsApp Business numbers (> 6 months)
   fast_warmed: {
@@ -37,8 +37,8 @@ export const ANTI_BAN_PRESETS: Record<'ultra_safe' | 'standard_balanced' | 'fast
     typingDelaySeconds: 2,
     dailyMessageLimit: 100,
     workingHoursEnabled: true,
-    workingHoursStart: '09:00',
-    workingHoursEnd: '20:00',
+    workingHoursStart: '08:30',
+    workingHoursEnd: '19:00',
   }
 };
 
@@ -53,7 +53,15 @@ export const getStoredAntiBanConfig = (): AntiBanConfig => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
-      return { ...DEFAULT_ANTI_BAN_CONFIG, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      return { 
+        ...DEFAULT_ANTI_BAN_CONFIG, 
+        ...parsed,
+        // Guarantee workingHoursEnabled is active with valid corporate defaults
+        workingHoursEnabled: parsed.workingHoursEnabled !== undefined ? parsed.workingHoursEnabled : true,
+        workingHoursStart: parsed.workingHoursStart || '09:00',
+        workingHoursEnd: parsed.workingHoursEnd || '18:30',
+      };
     }
   } catch (e) {
     console.warn('Failed to load anti-ban config from storage:', e);
@@ -70,31 +78,50 @@ export const saveAntiBanConfig = (config: AntiBanConfig): void => {
 };
 
 export const calculateRiskLevel = (minDelay: number, dailyLimit: number): {
+  score: number;
   level: 'safe' | 'moderate' | 'high';
   title: string;
   desc: string;
   color: string;
+  badgeBg: string;
+  badgeText: string;
 } => {
-  if (minDelay < 20 || dailyLimit > 120) {
+  // Score: 0 (Ultra Safe) to 100 (Maximum Risk)
+  const delayRisk = Math.max(0, Math.min(100, ((60 - minDelay) / 50) * 100));
+  const limitRisk = Math.max(0, Math.min(100, ((dailyLimit - 30) / 120) * 100));
+  const score = Math.round((delayRisk * 0.55) + (limitRisk * 0.45));
+
+  if (score >= 65 || minDelay < 20 || dailyLimit > 120) {
     return {
+      score: Math.max(70, Math.min(95, score)),
       level: 'high',
-      title: '⚠️ Yüksek Ban Riski',
-      desc: 'Çok kısa gecikmeler veya yüksek günlük limitler WhatsApp spam tespit algoritmalarını tetikleyebilir.',
-      color: '#EA5455'
+      title: 'Yüksek Ban Riski',
+      desc: 'Çok kısa gecikmeler veya yüksek günlük limitler WhatsApp spam filtrelerini ve kullanıcı şikayetlerini tetikleyebilir.',
+      color: '#EA5455',
+      badgeBg: 'bg-rose-50 dark:bg-rose-500/15 border-rose-200 dark:border-rose-500/30',
+      badgeText: 'text-[#EA5455]'
     };
   }
-  if (minDelay < 40 || dailyLimit > 70) {
+  
+  if (score >= 35 || minDelay < 40 || dailyLimit > 70) {
     return {
+      score: Math.max(35, Math.min(64, score)),
       level: 'moderate',
-      title: '⚡ Orta Düzey Risk (Isınmış Hatlar)',
-      desc: 'Bu ayar yalnızca en az 3-6 aydır aktif kullanılan ve ısınmış WhatsApp hesapları için uygundur.',
-      color: '#FF9F43'
+      title: 'Orta Düzey Risk (Isınmış Hatlar)',
+      desc: 'Bu ayar yalnızca en az 3-6 aydır düzenli kullanılan ve ısınmış WhatsApp Business hatları için tavsiye edilir.',
+      color: '#FF9F43',
+      badgeBg: 'bg-amber-50 dark:bg-amber-500/15 border-amber-200 dark:border-amber-500/30',
+      badgeText: 'text-[#FF9F43]'
     };
   }
+
   return {
+    score: Math.max(8, Math.min(34, score)),
     level: 'safe',
-    title: '🛡️ Maksimum Ban Koruması (Önerilen)',
-    desc: 'Gaussian Jitter ve doğal insan bekleme süreleriyle WhatsApp algoritmalarına %100 uyumludur.',
-    color: '#28C76F'
+    title: 'Düşük Risk (Maksimum Güvenlik)',
+    desc: 'Gaussian Jitter ve doğal insan bekleme süreleriyle WhatsApp algoritmalarına ve güvenlik kurallarına %100 uyumludur.',
+    color: '#28C76F',
+    badgeBg: 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-200 dark:border-emerald-500/30',
+    badgeText: 'text-[#28C76F]'
   };
 };
