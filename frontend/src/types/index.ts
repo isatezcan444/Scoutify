@@ -112,6 +112,18 @@ export interface DashboardStats {
   }>;
 }
 
+export interface AntiBanConfig {
+  preset: string;
+  min_delay_seconds: number;
+  max_delay_seconds: number;
+  typing_delay_seconds: number;
+  daily_message_limit: number;
+  working_hours_enabled: boolean;
+  working_hours_start: string;
+  working_hours_end: string;
+  updated_at?: string;
+}
+
 export interface ScraperJob {
   id: number;
   keyword: string;

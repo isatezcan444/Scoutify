@@ -1,0 +1,83 @@
+"""
+Başlangıç (startup) veritabanı uyumluluk geçişleri.
+
+Proje henüz Alembic kullanmadığı için, model şeması ile mevcut SQLite/PostgreSQL
+şeması arasındaki bilinen kırıcı farklar burada idempotent şekilde giderilir.
+Her geçiş yalnızca gerektiğinde çalışır; hata halinde uygulama açık hata ile
+başlamayı reddeder (sessiz şema sapması kabul edilmez).
+"""
+import logging
+from typing import Any, Dict, List
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+logger = logging.getLogger(__name__)
+
+
+def _sqlite_columns(raw_rows: List[Any]) -> Dict[str, bool]:
+    """PRAGMA table_info satırlarından {kolon_adı: notnull} haritası çıkarır."""
+    return {row[1]: bool(row[3]) for row in raw_rows}
+
+
+async def ensure_leads_phone_nullable(engine: AsyncEngine) -> None:
+    """`leads.phone_e164` kolonunu nullable yapar (uydurma numara üretimi kaldırıldı).
+
+    - PostgreSQL: ALTER TABLE ... ALTER COLUMN ... DROP NOT NULL
+    - SQLite: ALTER COLUMN desteklenmediği için yedek tablo üzerinden rebuild.
+    """
+    if engine.dialect.name == "postgresql":
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("ALTER TABLE leads ALTER COLUMN phone_e164 DROP NOT NULL")
+            )
+        logger.info("[MIGRATION] leads.phone_e164 -> NULLABLE (postgresql)")
+        return
+
+    if engine.dialect.name != "sqlite":
+        logger.warning("[MIGRATION] Bilinmeyen dialect %r; phone_e164 kontrolü atlandı.", engine.dialect.name)
+        return
+
+    async with engine.begin() as conn:
+        exists = await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='leads'")
+        )
+        if exists.first() is None:
+            return  # Tablo henüz yok; create_all yeni şemayı doğru kurar.
+
+        info_rows = (await conn.execute(text("PRAGMA table_info(leads)"))).fetchall()
+        columns = _sqlite_columns(info_rows)
+        if "phone_e164" not in columns:
+            return
+        if not columns["phone_e164"]:
+            return  # Zaten nullable.
+
+        # Rebuild: yedekle -> düşür -> model şemasıyla yeniden oluştur -> geri yükle.
+        await conn.execute(text("DROP TABLE IF EXISTS _leads_migrate_backup"))
+        await conn.execute(text("CREATE TABLE _leads_migrate_backup AS SELECT * FROM leads"))
+        await conn.execute(text("DROP TABLE leads"))
+
+        await conn.run_sync(_create_leads_only)
+
+        backup_info = (await conn.execute(text("PRAGMA table_info(_leads_migrate_backup)"))).fetchall()
+        backup_cols = {row[1] for row in backup_info}
+
+        new_info = (await conn.execute(text("PRAGMA table_info(leads)"))).fetchall()
+        new_cols = {row[1] for row in new_info}
+
+        shared = [c for c in new_cols if c in backup_cols]
+        shared_sorted = sorted(shared)
+        col_list = ", ".join(shared_sorted)
+        await conn.execute(
+            text(f"INSERT INTO leads ({col_list}) SELECT {col_list} FROM _leads_migrate_backup")
+        )
+        await conn.execute(text("DROP TABLE _leads_migrate_backup"))
+        logger.info("[MIGRATION] leads.phone_e164 -> NULLABLE (sqlite rebuild, %d kolon taşındı)", len(shared_sorted))
+
+
+def _create_leads_only(sync_conn: Any) -> None:
+    """Yalnızca `leads` tablosunu model metadata'sından oluşturur."""
+    from backend.app.core.database import Base
+    from backend.app.models.lead import Lead  # noqa: F401 — metadata'ya kayıt için
+
+    Lead.__table__.create(sync_conn, checkfirst=True)

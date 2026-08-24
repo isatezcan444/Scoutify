@@ -82,6 +82,27 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   useEffect(() => {
     fetchSessionsAndLogs();
+    // Load backend Anti-Ban settings
+    ApiClient.getAntiBanSettings()
+      .then((remote) => {
+        if (remote) {
+          const loaded: AntiBanConfig = {
+            preset: (remote.preset as any) || 'standard_balanced',
+            minDelaySeconds: remote.min_delay_seconds,
+            maxDelaySeconds: remote.max_delay_seconds,
+            typingDelaySeconds: remote.typing_delay_seconds,
+            dailyMessageLimit: remote.daily_message_limit,
+            workingHoursEnabled: remote.working_hours_enabled,
+            workingHoursStart: remote.working_hours_start,
+            workingHoursEnd: remote.working_hours_end,
+          };
+          setConfig(loaded);
+          saveAntiBanConfig(loaded);
+        }
+      })
+      .catch(() => {
+        // Fallback to local storage
+      });
   }, []);
 
   const handlePresetSelect = (presetKey: 'ultra_safe' | 'standard_balanced' | 'fast_warmed') => {
@@ -100,19 +121,47 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     }));
   };
 
-  const handleSaveAntiBan = () => {
-    saveAntiBanConfig(config);
-    setSaveSuccess(true);
-    toast.success('Anti-Ban ve gecikme parametreleri güvenle kaydedildi.', 'Yapılandırma Güncellendi');
-    setTimeout(() => setSaveSuccess(false), 3500);
+  const handleSaveAntiBan = async () => {
+    try {
+      saveAntiBanConfig(config);
+      await ApiClient.updateAntiBanSettings({
+        preset: config.preset,
+        min_delay_seconds: config.minDelaySeconds,
+        max_delay_seconds: config.maxDelaySeconds,
+        typing_delay_seconds: config.typingDelaySeconds,
+        daily_message_limit: config.dailyMessageLimit,
+        working_hours_enabled: config.workingHoursEnabled,
+        working_hours_start: config.workingHoursStart,
+        working_hours_end: config.workingHoursEnd
+      });
+      setSaveSuccess(true);
+      toast.success('Anti-Ban ve gecikme parametreleri backend sunucusuna kalıcı olarak kaydedildi.', 'Yapılandırma Güncellendi');
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err: any) {
+      toast.error(err.message, 'Ayar Kaydetme Hatası');
+    }
   };
 
-  const handleResetDefaults = () => {
-    setConfig(DEFAULT_ANTI_BAN_CONFIG);
-    saveAntiBanConfig(DEFAULT_ANTI_BAN_CONFIG);
-    setSaveSuccess(true);
-    toast.success('Ayarlar varsayılan güvenli değerlere döndürüldü.', 'Sıfırlandı');
-    setTimeout(() => setSaveSuccess(false), 3500);
+  const handleResetDefaults = async () => {
+    try {
+      setConfig(DEFAULT_ANTI_BAN_CONFIG);
+      saveAntiBanConfig(DEFAULT_ANTI_BAN_CONFIG);
+      await ApiClient.updateAntiBanSettings({
+        preset: DEFAULT_ANTI_BAN_CONFIG.preset,
+        min_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.minDelaySeconds,
+        max_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.maxDelaySeconds,
+        typing_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.typingDelaySeconds,
+        daily_message_limit: DEFAULT_ANTI_BAN_CONFIG.dailyMessageLimit,
+        working_hours_enabled: DEFAULT_ANTI_BAN_CONFIG.workingHoursEnabled,
+        working_hours_start: DEFAULT_ANTI_BAN_CONFIG.workingHoursStart,
+        working_hours_end: DEFAULT_ANTI_BAN_CONFIG.workingHoursEnd
+      });
+      setSaveSuccess(true);
+      toast.success('Ayarlar varsayılan güvenli değerlere döndürüldü.', 'Sıfırlandı');
+      setTimeout(() => setSaveSuccess(false), 3500);
+    } catch (err: any) {
+      toast.error(err.message, 'Sıfırlama Hatası');
+    }
   };
 
   const riskInfo = calculateRiskLevel(config.minDelaySeconds, config.dailyMessageLimit);

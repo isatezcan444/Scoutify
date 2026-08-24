@@ -63,7 +63,9 @@ class Lead(Base):
 
     # Phone Numbers
     phone = Column(String(50), nullable=False)  # raw input
-    phone_e164 = Column(String(30), nullable=False, unique=True, index=True)  # standardized e.g. +905321234567
+    # Standardized e.g. +905321234567. Telefonsuz kayıtlar (kartta telefon
+    # bulunamayan işletmeler) NULL bırakılır — asla uydurma numara üretilmez.
+    phone_e164 = Column(String(30), nullable=True, unique=True, index=True)
     is_mobile = Column(Boolean, default=True)
     is_whatsapp_eligible = Column(Boolean, default=True)
 

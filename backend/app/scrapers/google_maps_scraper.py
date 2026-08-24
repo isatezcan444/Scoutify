@@ -6,6 +6,7 @@ contact enrichment, and strict B2B lead validation.
 import re
 import enum
 import asyncio
+import hashlib
 import logging
 from typing import List, Dict, Any, Optional, Callable, Set
 import httpx
@@ -187,6 +188,10 @@ class GoogleMapsScraper(BaseScraper):
                     seen_phones.add(e164)
                 seen_names.add(name_key)
 
+                place_url = place.get("google_maps_url") or f"{clean_keyword}_{clean_city}_{district}_{place['name']}"
+                deterministic_place_id = place.get("place_id") or f"gmaps_{hashlib.sha256(place_url.encode()).hexdigest()[:16]}"
+                is_phone_verified = bool(phone_data and phone_data.get("is_valid"))
+
                 lead_record = {
                     "name": place["name"],
                     "category": place.get("category") or clean_keyword.title(),
@@ -194,14 +199,14 @@ class GoogleMapsScraper(BaseScraper):
                     "category_score": 1.0,
                     "category_classification": "MATCH",
                     "entity_type": "CLINIC" if any(w in place["name"].lower() for w in ["klinik", "poliklinik", "hastane", "diş"]) else "BUSINESS",
-                    "verification_status": "VERIFIED",
-                    "confidence_level": "HIGH" if phone_data else "MEDIUM",
-                    "confidence_score": 95 if phone_data else 75,
-                    "is_verified": True,
+                    "verification_status": "VERIFIED" if is_phone_verified else "UNVERIFIED",
+                    "confidence_level": "HIGH" if (is_phone_verified and phone_data.get("is_mobile")) else ("MEDIUM" if is_phone_verified else "LOW"),
+                    "confidence_score": 95 if (is_phone_verified and phone_data.get("is_mobile")) else (80 if is_phone_verified else 50),
+                    "is_verified": is_phone_verified,
                     "discovered_from": "GOOGLE_MAPS",
-                    "verified_by": "Google Maps Place Registry & Web Verification",
+                    "verified_by": "Google Maps Place Registry & Web Verification" if is_phone_verified else None,
                     "phone": phone_data["e164"] if phone_data else (place.get("phone") or "Belirtilmemiş"),
-                    "phone_e164": e164 or f"+90000{abs(hash(place['name'])) % 10000000:07d}",
+                    "phone_e164": e164,  # Nullable: never fake +90000 numbers
                     "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
                     "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
                     "address": place.get("address") or f"{district}, {clean_city}",
@@ -214,7 +219,7 @@ class GoogleMapsScraper(BaseScraper):
                     "reviews_count": place.get("reviews_count", 0),
                     "google_maps_url": place.get("google_maps_url"),
                     "maps_url": place.get("google_maps_url"),
-                    "place_id": place.get("place_id"),
+                    "place_id": deterministic_place_id,
                     "source": "GOOGLE_MAPS",
                     "display_name": f"{place['name']}, {place.get('address') or district}"
                 }

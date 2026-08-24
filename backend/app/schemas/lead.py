@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, ConfigDict
 from backend.app.models.lead import LeadStatus
 
+
 class LeadBase(BaseModel):
     name: str
     category: Optional[str] = None
@@ -18,8 +19,10 @@ class LeadBase(BaseModel):
     search_location: Optional[str] = None
     notes: Optional[str] = None
 
+
 class LeadCreate(LeadBase):
     pass
+
 
 class LeadUpdate(BaseModel):
     name: Optional[str] = None
@@ -33,11 +36,12 @@ class LeadUpdate(BaseModel):
     email: Optional[str] = None
     notes: Optional[str] = None
 
+
 class LeadResponse(LeadBase):
     id: int
-    phone_e164: str
-    is_mobile: bool
-    is_whatsapp_eligible: bool
+    phone_e164: Optional[str] = None
+    is_mobile: bool = False
+    is_whatsapp_eligible: bool = False
     status: LeadStatus
     entity_type: Optional[str] = "BUSINESS"
     verification_status: Optional[str] = "UNVERIFIED"
@@ -57,12 +61,14 @@ class LeadResponse(LeadBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class LeadListResponse(BaseModel):
     items: List[LeadResponse]
     total: int
     page: int
     size: int
     pages: int
+
 
 class BulkDeleteRequest(BaseModel):
     lead_ids: Optional[List[int]] = None
@@ -74,7 +80,23 @@ class BulkDeleteRequest(BaseModel):
     status: Optional[LeadStatus] = None
     whatsapp_eligible_only: Optional[bool] = False
 
-class BulkBlacklistRequest(BaseModel):
-    lead_ids: List[int]
-    reason: Optional[str] = "Toplu kara listeye eklendi"
 
+class BulkBlacklistRequest(BaseModel):
+    lead_ids: Optional[List[int]] = None
+    blacklist_all_matching: Optional[bool] = False
+    reason: Optional[str] = "Toplu kara listeye eklendi"
+    search: Optional[str] = None
+    city: Optional[str] = None
+    districts: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    status: Optional[LeadStatus] = None
+    whatsapp_eligible_only: Optional[bool] = False
+
+
+class ExportLeadsRequest(BaseModel):
+    search: Optional[str] = None
+    city: Optional[str] = None
+    districts: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    status: Optional[LeadStatus] = None
+    whatsapp_eligible_only: Optional[bool] = False

@@ -7,6 +7,8 @@ from backend.app.models.blacklist import Blacklist, ScraperJob, ScraperJobStatus
 from backend.app.models.raw_candidate import RawCandidate
 from backend.app.models.discovery_run import DiscoveryRun, DiscoveryRunStatus
 
+from backend.app.models.system_settings import SystemSetting
+
 __all__ = [
     "Base",
     "Lead",
@@ -26,4 +28,5 @@ __all__ = [
     "RawCandidate",
     "DiscoveryRun",
     "DiscoveryRunStatus",
+    "SystemSetting",
 ]

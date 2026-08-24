@@ -48,12 +48,21 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   
   // Search & Filter State
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
   const [waOnly, setWaOnly] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
 
   // Selection state (Gmail style)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -94,7 +103,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       const data = await ApiClient.getLeads({
         page,
         size: pageSize,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         city: selectedCity || undefined,
         districts: selectedDistricts.length > 0 ? selectedDistricts : undefined,
         categories: selectedCategories.length > 0 ? selectedCategories : undefined,
@@ -112,14 +121,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
   useEffect(() => {
     fetchLeads();
-  }, [page, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
+  }, [page, debouncedSearch, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
 
   // Clear selection on page/filter change unless all-matching is active
   useEffect(() => {
     if (!selectAllMatching) {
       setSelectedIds([]);
     }
-  }, [page, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
+  }, [page, debouncedSearch, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
 
   // --- Gmail-style Checkbox logic ---
   const currentPageIds = leads.map((l) => l.id);
@@ -233,15 +242,27 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     setIsBlacklisting(true);
     try {
       if (isBulkBlacklist) {
-        const idsToBlacklist = selectAllMatching
-          ? currentPageIds
-          : selectedIds;
-        await ApiClient.bulkBlacklistLeads({
-          lead_ids: idsToBlacklist,
-          reason: blacklistReason,
-        });
-        handleClearSelection();
-        toast.success(`${idsToBlacklist.length} işletme numarası kara listeye eklendi.`, 'Toplu Kara Liste');
+        if (selectAllMatching) {
+          const res = await ApiClient.bulkBlacklistLeads({
+            blacklist_all_matching: true,
+            reason: blacklistReason,
+            search: debouncedSearch || undefined,
+            city: selectedCity || undefined,
+            districts: selectedDistricts.length > 0 ? selectedDistricts : undefined,
+            categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+            status: statusFilter || undefined,
+            whatsapp_eligible_only: waOnly,
+          });
+          handleClearSelection();
+          toast.success(`${res.blacklisted_count} işletme numarası kara listeye eklendi (${res.leads_updated} kayıt güncellendi).`, 'Toplu Kara Liste');
+        } else {
+          await ApiClient.bulkBlacklistLeads({
+            lead_ids: selectedIds,
+            reason: blacklistReason,
+          });
+          handleClearSelection();
+          toast.success(`${selectedIds.length} işletme numarası kara listeye eklendi.`, 'Toplu Kara Liste');
+        }
       } else if (leadToBlacklist) {
         await ApiClient.addBlacklist({
           phone: leadToBlacklist.phone_e164 || leadToBlacklist.phone,

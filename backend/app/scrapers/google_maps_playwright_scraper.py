@@ -7,6 +7,7 @@ Streams each discovered place in real-time with satellite-tuner style progress u
 """
 import re
 import asyncio
+import hashlib
 import logging
 from typing import List, Dict, Any, Optional, Set, Callable
 from urllib.parse import quote, unquote, urlparse
@@ -215,7 +216,7 @@ class GoogleMapsPlaywrightScraper:
                             "rating": details.get("rating"),
                             "reviews_count": details.get("reviewsCount", 0),
                             "google_maps_url": page.url,
-                            "place_id": f"gmaps_{hash(page.url)}",
+                            "place_id": f"gmaps_{hashlib.sha256(page.url.encode()).hexdigest()[:16]}",
                             "source": "GOOGLE_MAPS",
                             "is_verified": True if (phone_data or clean_web or details.get("rating")) else False,
                             "display_name": f"{raw_name}, {full_address}"
@@ -380,7 +381,7 @@ class GoogleMapsPlaywrightScraper:
                         "rating": details.get("rating"),
                         "reviews_count": details.get("reviewsCount", 0),
                         "google_maps_url": href,
-                        "place_id": f"gmaps_{hash(href)}",
+                        "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
                         "source": "GOOGLE_MAPS",
                         "is_verified": True if (phone_data or clean_web or details.get("rating")) else False,
                         "display_name": f"{raw_name}, {full_address}"

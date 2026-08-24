@@ -1,20 +1,21 @@
-import random
 import logging
 from datetime import datetime, time
-from typing import Optional, Tuple, List, Dict, Any
-import httpx
+from typing import Optional, Tuple, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select
 
 from backend.app.core.config import settings
 from backend.app.models.lead import Lead, LeadStatus
-from backend.app.models.campaign import Campaign, CampaignStatus
+from backend.app.models.campaign import Campaign
 from backend.app.models.whatsapp_session import WhatsAppSession, SessionStatus
 from backend.app.models.message_log import MessageLog, MessageStatus
 from backend.app.models.blacklist import Blacklist
 from backend.app.services.spintax_service import SpintaxService
+from backend.app.services.antiban_policy import AntibanPolicy, gaussian_jitter_seconds
+from backend.app.services.whatsapp_sender import WhatsAppSender, get_whatsapp_sender
 
 logger = logging.getLogger(__name__)
+
 
 class OutreachManager:
     """
@@ -24,36 +25,23 @@ class OutreachManager:
 
     @classmethod
     def calculate_jitter_delay(cls, min_delay: int, max_delay: int) -> int:
-        """
-        Calculates a realistic humanized delay using a Gaussian (normal) distribution
-        centered between min_delay and max_delay with slight variance.
-        """
-        if min_delay >= max_delay:
-            return min_delay
-        
-        mean = (min_delay + max_delay) / 2.0
-        std_dev = (max_delay - min_delay) / 4.0
-        
-        # Sample Gaussian delay
-        delay = random.gauss(mean, std_dev)
-        # Clamp strictly between min_delay and max_delay
-        clamped = max(min_delay, min(max_delay, int(delay)))
-        return clamped
+        """Calculates a realistic humanized delay using Gaussian distribution."""
+        return gaussian_jitter_seconds(min_delay, max_delay)
 
     @classmethod
     def is_within_working_hours(cls, start_str: str = "09:30", end_str: str = "18:30") -> bool:
         """
         Checks if current local time is within allowable outreach working hours.
+        Fail-closed: returns False if format is invalid.
         """
         try:
             now = datetime.now().time()
-            s_hour, s_min = map(int, start_str.split(":"))
-            e_hour, e_min = map(int, end_str.split(":"))
-            start_time = time(s_hour, s_min)
-            end_time = time(e_hour, e_min)
-            return start_time <= now <= end_time
-        except Exception:
-            return True
+            s_h, s_m = map(int, start_str.strip().split(":"))
+            e_h, e_m = map(int, end_str.strip().split(":"))
+            return time(s_h, s_m) <= now <= time(e_h, e_m)
+        except Exception as e:
+            logger.warning(f"Working hours parse failed ({start_str}-{end_str}): {e}. Failing closed.")
+            return False
 
     @classmethod
     async def is_blacklisted(cls, db: AsyncSession, phone_e164: str) -> bool:
@@ -63,7 +51,11 @@ class OutreachManager:
         return result.scalar_one_or_none() is not None
 
     @classmethod
-    async def get_available_session(cls, db: AsyncSession, preferred_session_id: Optional[int] = None) -> Optional[WhatsAppSession]:
+    async def get_available_session(
+        cls,
+        db: AsyncSession,
+        preferred_session_id: Optional[int] = None
+    ) -> Optional[WhatsAppSession]:
         """
         Retrieves a healthy, connected WhatsApp session that has not exceeded its daily limit.
         If preferred_session_id is provided, checks that session first; otherwise selects round-robin.
@@ -79,7 +71,6 @@ class OutreachManager:
             res = await db.execute(stmt)
             session = res.scalar_one_or_none()
             if session:
-                # Reset daily count if day rolled over
                 if session.last_reset_date and session.last_reset_date.date() < now_date:
                     session.daily_sent_count = 0
                     session.last_reset_date = datetime.utcnow()
@@ -88,11 +79,11 @@ class OutreachManager:
                     return session
             return None
 
-        # Fetch all active connected sessions
+        # Fetch all active connected sessions, least used first
         stmt = select(WhatsAppSession).where(
             WhatsAppSession.status == SessionStatus.CONNECTED,
             WhatsAppSession.is_active == True
-        ).order_by(WhatsAppSession.daily_sent_count.asc()) # Pick least used session
+        ).order_by(WhatsAppSession.daily_sent_count.asc())
         
         res = await db.execute(stmt)
         sessions = res.scalars().all()
@@ -113,44 +104,19 @@ class OutreachManager:
         session_name: str,
         phone_e164: str,
         message_text: str,
-        typing_seconds: int = 4
+        typing_seconds: int = 4,
+        sender: Optional[WhatsAppSender] = None
     ) -> Dict[str, Any]:
         """
-        Sends message through the WhatsApp Gateway microservice.
-        Simulates 'typing' state first, then dispatches the text.
+        Sends message using WhatsAppSender interface.
         """
-        # If WhatsApp Gateway is accessible
-        gateway_url = f"{settings.WA_GATEWAY_URL}/api/send"
-        digits_phone = phone_e164.replace("+", "")
-        
-        payload = {
-            "session": session_name,
-            "phone": digits_phone,
-            "message": message_text,
-            "typingDelayMs": typing_seconds * 1000
-        }
-        
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(gateway_url, json=payload)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    return {"success": True, "data": data, "message_id": data.get("messageId")}
-                else:
-                    # Gateway responded with error or simulation fallback
-                    return {
-                        "success": False,
-                        "error": f"Gateway HTTP {resp.status_code}: {resp.text}",
-                        "is_simulated": True
-                    }
-        except Exception as e:
-            logger.warning(f"WhatsApp Gateway not reachable ({e}). Simulation mode active.")
-            # Graceful simulation fallback for offline development / test mode
-            return {
-                "success": True,
-                "is_simulated": True,
-                "message_id": f"sim_{random.randint(100000, 999999)}"
-            }
+        active_sender = sender or get_whatsapp_sender()
+        return await active_sender.send_message(
+            session_name=session_name,
+            phone_e164=phone_e164,
+            message_text=message_text,
+            typing_seconds=typing_seconds
+        )
 
     @classmethod
     async def process_single_outreach(
@@ -158,19 +124,20 @@ class OutreachManager:
         db: AsyncSession,
         lead_id: int,
         campaign_id: int,
-        session_id: Optional[int] = None
+        session_id: Optional[int] = None,
+        sender: Optional[WhatsAppSender] = None
     ) -> Tuple[bool, str, Optional[int]]:
         """
         Validates lead, checks blacklist, generates customized Spintax message,
-        applies humanized jitter delay, calls gateway, and logs transaction.
+        applies policy checks, calls sender, and logs transaction truthfully.
         """
         # 1. Fetch Lead
         lead = await db.get(Lead, lead_id)
         if not lead:
             return False, "Lead bulunamadı", None
             
-        if not lead.is_whatsapp_eligible:
-            return False, "Telefon WhatsApp için uygun değil veya sabit hat", None
+        if not lead.is_whatsapp_eligible or not lead.phone_e164:
+            return False, "Telefon WhatsApp için uygun değil veya geçerli E.164 numarası yok", None
 
         # 2. Check Blacklist
         if await cls.is_blacklisted(db, lead.phone_e164):
@@ -183,10 +150,10 @@ class OutreachManager:
         if not campaign:
             return False, "Kampanya bulunamadı", None
 
-        # 4. Check Working Hours
-        if campaign.working_hours_enabled:
-            if not cls.is_within_working_hours(campaign.working_hours_start, campaign.working_hours_end):
-                return False, f"Mesai saatleri dışında ({campaign.working_hours_start}-{campaign.working_hours_end})", None
+        # 4. Check Policy & Working Hours (Fail-Closed)
+        policy = AntibanPolicy.from_campaign(campaign)
+        if not policy.is_within_working_hours():
+            return False, f"Mesai saatleri dışında ({campaign.working_hours_start}-{campaign.working_hours_end})", None
 
         # 5. Acquire Active Session
         target_session = await cls.get_available_session(db, session_id or campaign.session_id)
@@ -196,18 +163,18 @@ class OutreachManager:
         # 6. Render Spintax Message with Lead Variables
         lead_dict = {
             "name": lead.name,
-            "category": lead.category,
-            "city": lead.city,
-            "district": lead.district,
-            "address": lead.address,
-            "rating": lead.rating,
-            "website": lead.website,
+            "category": lead.category or "",
+            "city": lead.city or "",
+            "district": lead.district or "",
+            "address": lead.address or "",
+            "rating": lead.rating or "",
+            "website": lead.website or "",
             "phone": lead.phone_e164
         }
         rendered_msg = SpintaxService.render_template(campaign.message_template, lead_dict)
 
         # 7. Calculate Humanized Jitter Delay
-        delay_sec = cls.calculate_jitter_delay(campaign.min_delay_seconds, campaign.max_delay_seconds)
+        delay_sec = policy.jitter_seconds()
 
         # 8. Create Pending Log Record
         log = MessageLog(
@@ -223,12 +190,13 @@ class OutreachManager:
         db.add(log)
         await db.flush()
 
-        # 9. Send via Gateway
+        # 9. Send via WhatsAppSender
         send_res = await cls.send_via_gateway(
             session_name=target_session.session_name,
             phone_e164=lead.phone_e164,
             message_text=rendered_msg,
-            typing_seconds=campaign.typing_delay_seconds
+            typing_seconds=campaign.typing_delay_seconds,
+            sender=sender
         )
 
         if send_res.get("success"):
@@ -248,10 +216,12 @@ class OutreachManager:
             campaign.sent_count += 1
             
             await db.commit()
-            return True, f"Mesaj başarıyla iletildi (Gecikme: {delay_sec}s)", log.id
+            is_sim = send_res.get("is_simulated", False)
+            sim_badge = " (DEMO / Simüle)" if is_sim else ""
+            return True, f"Mesaj başarıyla iletildi{sim_badge} (Gecikme: {delay_sec}s)", log.id
         else:
             log.status = MessageStatus.FAILED
-            log.error_reason = send_res.get("error") or "Gateway gönderim hatası"
+            log.error_reason = send_res.get("error") or "Gönderim başarısız oldu"
             campaign.failed_count += 1
             await db.commit()
             return False, log.error_reason, log.id

@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, distinct
+from sqlalchemy import select, func
 
 from backend.app.core.database import get_db
 from backend.app.models.lead import Lead, LeadStatus
@@ -12,6 +12,7 @@ from backend.app.models.message_log import MessageLog, MessageStatus
 from backend.app.schemas.analytics import DashboardStatsResponse
 
 router = APIRouter()
+
 
 @router.get("/dashboard", response_model=DashboardStatsResponse)
 async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
@@ -24,11 +25,19 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     wa_eligible = wa_eligible_res.scalar_one()
 
     # 3. Contacted Leads
-    contacted_res = await db.execute(select(func.count(Lead.id)).where(Lead.status.in_([LeadStatus.CONTACTED, LeadStatus.REPLIED, LeadStatus.INTERESTED])))
+    contacted_res = await db.execute(
+        select(func.count(Lead.id)).where(
+            Lead.status.in_([LeadStatus.CONTACTED, LeadStatus.REPLIED, LeadStatus.INTERESTED])
+        )
+    )
     contacted = contacted_res.scalar_one()
 
     # 4. Replied Leads
-    replied_res = await db.execute(select(func.count(Lead.id)).where(Lead.status.in_([LeadStatus.REPLIED, LeadStatus.INTERESTED])))
+    replied_res = await db.execute(
+        select(func.count(Lead.id)).where(
+            Lead.status.in_([LeadStatus.REPLIED, LeadStatus.INTERESTED])
+        )
+    )
     replied = replied_res.scalar_one()
 
     # Response Rate %
@@ -42,11 +51,17 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     active_campaigns = active_camp_res.scalar_one()
 
     # 6. Connected WhatsApp Sessions
-    connected_sess_res = await db.execute(select(func.count(WhatsAppSession.id)).where(WhatsAppSession.status == SessionStatus.CONNECTED))
+    connected_sess_res = await db.execute(
+        select(func.count(WhatsAppSession.id)).where(WhatsAppSession.status == SessionStatus.CONNECTED)
+    )
     connected_sessions = connected_sess_res.scalar_one()
 
     # 7. Messages Sent Metrics
-    total_sent_res = await db.execute(select(func.count(MessageLog.id)).where(MessageLog.status.in_([MessageStatus.SENT, MessageStatus.DELIVERED, MessageStatus.READ, MessageStatus.REPLIED])))
+    total_sent_res = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            MessageLog.status.in_([MessageStatus.SENT, MessageStatus.DELIVERED, MessageStatus.READ, MessageStatus.REPLIED])
+        )
+    )
     total_messages_sent = total_sent_res.scalar_one()
 
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -55,7 +70,10 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
 
     # 8. Leads by Status Breakdown
     status_counts_res = await db.execute(select(Lead.status, func.count(Lead.id)).group_by(Lead.status))
-    leads_by_status = {status.value if hasattr(status, "value") else str(status): count for status, count in status_counts_res.all()}
+    leads_by_status = {
+        status.value if hasattr(status, "value") else str(status): count
+        for status, count in status_counts_res.all()
+    }
 
     # 9. Top Categories
     top_cat_res = await db.execute(
@@ -67,20 +85,37 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     )
     top_categories = [{"category": cat, "count": count} for cat, count in top_cat_res.all()]
 
-    # 10. Last 7 Days Volume Trend
+    # 10. Last 7 Days Volume Trend (Optimized single GROUP BY query)
+    seven_days_ago = today_start - timedelta(days=6)
+    
+    sent_by_day_res = await db.execute(
+        select(
+            func.date(MessageLog.created_at).label("d"),
+            func.count(MessageLog.id)
+        )
+        .where(MessageLog.created_at >= seven_days_ago)
+        .group_by(func.date(MessageLog.created_at))
+    )
+    sent_map = {str(row[0]): row[1] for row in sent_by_day_res.all()}
+
+    leads_by_day_res = await db.execute(
+        select(
+            func.date(Lead.created_at).label("d"),
+            func.count(Lead.id)
+        )
+        .where(Lead.created_at >= seven_days_ago)
+        .group_by(func.date(Lead.created_at))
+    )
+    leads_map = {str(row[0]): row[1] for row in leads_by_day_res.all()}
+
     daily_volume = []
     for i in range(6, -1, -1):
         day = (datetime.utcnow() - timedelta(days=i)).date()
-        day_start = datetime.combine(day, datetime.min.time())
-        day_end = datetime.combine(day, datetime.max.time())
-        
-        sent_c = await db.execute(select(func.count(MessageLog.id)).where(MessageLog.created_at >= day_start, MessageLog.created_at <= day_end))
-        leads_c = await db.execute(select(func.count(Lead.id)).where(Lead.created_at >= day_start, Lead.created_at <= day_end))
-        
+        day_str = str(day)
         daily_volume.append({
             "date": day.strftime("%d %b"),
-            "sent_messages": sent_c.scalar_one(),
-            "leads_scraped": leads_c.scalar_one()
+            "sent_messages": sent_map.get(day_str, 0),
+            "leads_scraped": leads_map.get(day_str, 0)
         })
 
     # 11. Recent Activity
@@ -100,14 +135,14 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "whatsapp_eligible_leads": wa_eligible,
         "contacted_leads": contacted,
         "replied_leads": replied,
-        "response_rate_percentage": response_rate,
+        "response_rate": response_rate,
         "total_campaigns": total_campaigns,
         "active_campaigns": active_campaigns,
         "connected_sessions": connected_sessions,
         "total_messages_sent": total_messages_sent,
         "messages_sent_today": messages_sent_today,
-        "daily_volume": daily_volume,
         "leads_by_status": leads_by_status,
         "top_categories": top_categories,
+        "daily_volume": daily_volume,
         "recent_activity": recent_activity
     }

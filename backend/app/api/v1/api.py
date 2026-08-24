@@ -5,7 +5,8 @@ from backend.app.api.v1.endpoints import (
     campaigns,
     whatsapp,
     blacklist,
-    analytics
+    analytics,
+    settings
 )
 
 api_router = APIRouter()
@@ -16,3 +17,4 @@ api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaign
 api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["WhatsApp"])
 api_router.include_router(blacklist.router, prefix="/blacklist", tags=["Blacklist"])
 api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
+api_router.include_router(settings.router, prefix="/settings", tags=["Settings"])

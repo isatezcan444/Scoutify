@@ -2,6 +2,8 @@ import enum
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, Enum, ForeignKey
 from sqlalchemy.orm import relationship
+
+from backend.app.core.config import settings
 from backend.app.core.database import Base
 
 class CampaignStatus(str, enum.Enum):
@@ -24,14 +26,14 @@ class Campaign(Base):
     
     # Campaign Controls & Anti-Ban Config
     status = Column(Enum(CampaignStatus), default=CampaignStatus.DRAFT, index=True)
-    min_delay_seconds = Column(Integer, default=45) # Random delay lower bound
-    max_delay_seconds = Column(Integer, default=120) # Random delay upper bound
-    typing_delay_seconds = Column(Integer, default=5) # Typing simulation
-    
+    min_delay_seconds = Column(Integer, default=settings.DEFAULT_MIN_DELAY_SECONDS)  # Random delay lower bound
+    max_delay_seconds = Column(Integer, default=settings.DEFAULT_MAX_DELAY_SECONDS)  # Random delay upper bound
+    typing_delay_seconds = Column(Integer, default=settings.DEFAULT_TYPING_DELAY_SECONDS)  # Typing simulation
+
     # Working Hours Gate
     working_hours_enabled = Column(Boolean, default=True)
-    working_hours_start = Column(String(10), default="09:30") # HH:MM
-    working_hours_end = Column(String(10), default="18:30") # HH:MM
+    working_hours_start = Column(String(10), default=settings.DEFAULT_WORKING_HOURS_START)  # HH:MM
+    working_hours_end = Column(String(10), default=settings.DEFAULT_WORKING_HOURS_END)  # HH:MM
     
     # Session Association (Optional: specific session or round-robin all active)
     session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="SET NULL"), nullable=True)

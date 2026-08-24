@@ -1,7 +1,7 @@
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, update, delete
+from sqlalchemy import select, func, or_, delete
 
 from backend.app.core.database import get_db
 from backend.app.models.lead import Lead, LeadStatus
@@ -12,12 +12,76 @@ from backend.app.schemas.lead import (
     LeadCreate,
     LeadUpdate,
     BulkDeleteRequest,
-    BulkBlacklistRequest
+    BulkBlacklistRequest,
+    ExportLeadsRequest
 )
 from backend.app.services.phone_service import PhoneService
 from backend.app.services.export_service import ExportService
 
 router = APIRouter()
+
+
+def build_lead_filter_conditions(
+    search: Optional[str] = None,
+    city: Optional[str] = None,
+    district: Optional[str] = None,
+    districts: Optional[List[str]] = None,
+    category: Optional[str] = None,
+    categories: Optional[List[str]] = None,
+    status: Optional[LeadStatus] = None,
+    whatsapp_eligible_only: bool = False,
+) -> list:
+    """Builds a unified list of SQLAlchemy filter expressions for Lead queries."""
+    conditions = []
+    if search:
+        search_filter = or_(
+            Lead.name.ilike(f"%{search}%"),
+            Lead.phone.ilike(f"%{search}%"),
+            Lead.phone_e164.ilike(f"%{search}%"),
+            Lead.category.ilike(f"%{search}%"),
+            Lead.address.ilike(f"%{search}%"),
+            Lead.notes.ilike(f"%{search}%")
+        )
+        conditions.append(search_filter)
+
+    if city:
+        conditions.append(Lead.city.ilike(f"%{city}%"))
+
+    # Multi-district filtering
+    all_districts = []
+    if districts:
+        for d in districts:
+            if "," in d:
+                all_districts.extend([x.strip() for x in d.split(",") if x.strip()])
+            elif d.strip():
+                all_districts.append(d.strip())
+    if district and district.strip():
+        all_districts.append(district.strip())
+
+    if all_districts:
+        conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in set(all_districts)]))
+
+    # Multi-category filtering
+    all_categories = []
+    if categories:
+        for c in categories:
+            if "," in c:
+                all_categories.extend([x.strip() for x in c.split(",") if x.strip()])
+            elif c.strip():
+                all_categories.append(c.strip())
+    if category and category.strip():
+        all_categories.append(category.strip())
+
+    if all_categories:
+        conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in set(all_categories)]))
+
+    if status:
+        conditions.append(Lead.status == status)
+    if whatsapp_eligible_only:
+        conditions.append(Lead.is_whatsapp_eligible == True)
+
+    return conditions
+
 
 @router.get("", response_model=LeadListResponse)
 async def list_leads(
@@ -35,73 +99,33 @@ async def list_leads(
 ):
     query = select(Lead)
     count_query = select(func.count(Lead.id))
-    
-    conditions = []
-    if search:
-        search_filter = or_(
-            Lead.name.ilike(f"%{search}%"),
-            Lead.phone.ilike(f"%{search}%"),
-            Lead.phone_e164.ilike(f"%{search}%"),
-            Lead.category.ilike(f"%{search}%"),
-            Lead.address.ilike(f"%{search}%"),
-            Lead.notes.ilike(f"%{search}%")
-        )
-        conditions.append(search_filter)
-        
-    if city:
-        conditions.append(Lead.city.ilike(f"%{city}%"))
-        
-    # Multi-district filtering
-    all_districts = []
-    if districts:
-        for d in districts:
-            if "," in d:
-                all_districts.extend([x.strip() for x in d.split(",") if x.strip()])
-            elif d.strip():
-                all_districts.append(d.strip())
-    if district and district.strip():
-        all_districts.append(district.strip())
-        
-    if all_districts:
-        conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in set(all_districts)]))
-        
-    # Multi-category filtering
-    all_categories = []
-    if categories:
-        for c in categories:
-            if "," in c:
-                all_categories.extend([x.strip() for x in c.split(",") if x.strip()])
-            elif c.strip():
-                all_categories.append(c.strip())
-    if category and category.strip():
-        all_categories.append(category.strip())
-        
-    if all_categories:
-        conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in set(all_categories)]))
-        
-    if status:
-        conditions.append(Lead.status == status)
-    if whatsapp_eligible_only:
-        conditions.append(Lead.is_whatsapp_eligible == True)
-        
-    if conditions:
-        for c in conditions:
-            query = query.where(c)
-            count_query = count_query.where(c)
-            
-    # Count total
+
+    conditions = build_lead_filter_conditions(
+        search=search,
+        city=city,
+        district=district,
+        districts=districts,
+        category=category,
+        categories=categories,
+        status=status,
+        whatsapp_eligible_only=whatsapp_eligible_only
+    )
+
+    for c in conditions:
+        query = query.where(c)
+        count_query = count_query.where(c)
+
     total_res = await db.execute(count_query)
     total = total_res.scalar_one()
-    
-    # Paginate and order by newest
+
     offset = (page - 1) * size
     query = query.order_by(Lead.id.desc()).offset(offset).limit(size)
-    
+
     res = await db.execute(query)
     items = res.scalars().all()
-    
+
     pages = (total + size - 1) // size if total > 0 else 1
-    
+
     return {
         "items": items,
         "total": total,
@@ -110,11 +134,13 @@ async def list_leads(
         "pages": pages
     }
 
+
 @router.get("/categories", response_model=List[str])
 async def get_distinct_categories(db: AsyncSession = Depends(get_db)):
     stmt = select(Lead.category).where(Lead.category.is_not(None)).distinct().order_by(Lead.category)
     res = await db.execute(stmt)
     return [c for c in res.scalars().all() if c]
+
 
 @router.get("/cities", response_model=List[str])
 async def get_distinct_cities(db: AsyncSession = Depends(get_db)):
@@ -122,25 +148,42 @@ async def get_distinct_cities(db: AsyncSession = Depends(get_db)):
     res = await db.execute(stmt)
     return [c for c in res.scalars().all() if c]
 
+
 @router.post("", response_model=LeadResponse, status_code=201)
 async def create_lead(lead_in: LeadCreate, db: AsyncSession = Depends(get_db)):
-    # Validate and normalize phone
     phone_data = PhoneService.normalize_to_e164(lead_in.phone)
-    if not phone_data:
-        raise HTTPException(status_code=400, detail="Geçersiz telefon numarası formatı.")
-        
-    # Check if duplicate exists
-    stmt = select(Lead).where(Lead.phone_e164 == phone_data["e164"])
-    existing = await db.execute(stmt)
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"Bu telefon numarası ({phone_data['e164']}) sistemde zaten kayıtlı.")
-        
-    lead_dict = lead_in.model_dump()
+    if not phone_data or not phone_data["is_valid"]:
+        raise HTTPException(status_code=400, detail="Geçersiz telefon numarası.")
+
+    e164 = phone_data["e164"]
+
+    bl_stmt = select(Blacklist).where(Blacklist.phone_e164 == e164)
+    bl_res = await db.execute(bl_stmt)
+    if bl_res.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Bu numara kara listede bulunmaktadır.")
+
+    existing_stmt = select(Lead).where(Lead.phone_e164 == e164)
+    existing_res = await db.execute(existing_stmt)
+    if existing_res.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="Bu numara ile kayıtlı bir müşteri adayı zaten mevcut.")
+
     lead = Lead(
-        **lead_dict,
-        phone_e164=phone_data["e164"],
-        is_mobile=phone_data["is_mobile"],
-        is_whatsapp_eligible=phone_data["is_whatsapp_eligible"],
+        name=lead_in.name,
+        category=lead_in.category,
+        phone=lead_in.phone,
+        phone_e164=e164,
+        is_mobile=phone_data.get("is_mobile", False),
+        is_whatsapp_eligible=phone_data.get("is_whatsapp_eligible", False),
+        city=lead_in.city,
+        district=lead_in.district,
+        address=lead_in.address,
+        website=lead_in.website,
+        email=lead_in.email,
+        rating=lead_in.rating,
+        reviews_count=lead_in.reviews_count,
+        search_keyword=lead_in.search_keyword,
+        search_location=lead_in.search_location,
+        notes=lead_in.notes,
         status=LeadStatus.NEW
     )
     db.add(lead)
@@ -148,91 +191,97 @@ async def create_lead(lead_in: LeadCreate, db: AsyncSession = Depends(get_db)):
     await db.refresh(lead)
     return lead
 
+
 @router.get("/{lead_id}", response_model=LeadResponse)
 async def get_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     lead = await db.get(Lead, lead_id)
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead bulunamadı")
+        raise HTTPException(status_code=404, detail="Müşteri adayı bulunamadı")
     return lead
+
 
 @router.patch("/{lead_id}", response_model=LeadResponse)
 async def update_lead(lead_id: int, lead_in: LeadUpdate, db: AsyncSession = Depends(get_db)):
     lead = await db.get(Lead, lead_id)
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead bulunamadı")
-        
+        raise HTTPException(status_code=404, detail="Müşteri adayı bulunamadı")
+
     update_data = lead_in.model_dump(exclude_unset=True)
     if "phone" in update_data and update_data["phone"]:
         phone_data = PhoneService.normalize_to_e164(update_data["phone"])
-        if phone_data:
+        if phone_data and phone_data["is_valid"]:
             lead.phone_e164 = phone_data["e164"]
-            lead.is_mobile = phone_data["is_mobile"]
-            lead.is_whatsapp_eligible = phone_data["is_whatsapp_eligible"]
-            
-    for key, value in update_data.items():
-        setattr(lead, key, value)
-        
+            lead.is_mobile = phone_data.get("is_mobile", False)
+            lead.is_whatsapp_eligible = phone_data.get("is_whatsapp_eligible", False)
+
+    for field, value in update_data.items():
+        setattr(lead, field, value)
+
     await db.commit()
     await db.refresh(lead)
     return lead
 
-@router.delete("/{lead_id}")
+
+@router.delete("/{lead_id}", status_code=204)
 async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     lead = await db.get(Lead, lead_id)
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead bulunamadı")
+        raise HTTPException(status_code=404, detail="Müşteri adayı bulunamadı")
     await db.delete(lead)
     await db.commit()
-    return {"message": "Lead başarıyla silindi", "id": lead_id}
+    return None
+
 
 @router.post("/bulk-delete")
 async def bulk_delete_leads(payload: BulkDeleteRequest, db: AsyncSession = Depends(get_db)):
-    if payload.lead_ids and len(payload.lead_ids) > 0:
-        stmt = delete(Lead).where(Lead.id.in_(payload.lead_ids))
+    if payload.delete_all_matching:
+        conditions = build_lead_filter_conditions(
+            search=payload.search,
+            city=payload.city,
+            districts=payload.districts,
+            categories=payload.categories,
+            status=payload.status,
+            whatsapp_eligible_only=payload.whatsapp_eligible_only or False
+        )
+        stmt = delete(Lead)
+        for c in conditions:
+            stmt = stmt.where(c)
         res = await db.execute(stmt)
         await db.commit()
-        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else len(payload.lead_ids)}
-    elif payload.delete_all_matching:
-        stmt = delete(Lead)
-        conditions = []
-        if payload.search:
-            conditions.append(or_(
-                Lead.name.ilike(f"%{payload.search}%"),
-                Lead.phone.ilike(f"%{payload.search}%"),
-                Lead.phone_e164.ilike(f"%{payload.search}%"),
-                Lead.category.ilike(f"%{payload.search}%"),
-                Lead.address.ilike(f"%{payload.search}%")
-            ))
-        if payload.city:
-            conditions.append(Lead.city.ilike(f"%{payload.city}%"))
-        if payload.districts:
-            conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in payload.districts if d.strip()]))
-        if payload.categories:
-            conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in payload.categories if c.strip()]))
-        if payload.status:
-            conditions.append(Lead.status == payload.status)
-        if payload.whatsapp_eligible_only:
-            conditions.append(Lead.is_whatsapp_eligible == True)
-        
-        if conditions:
-            for c in conditions:
-                stmt = stmt.where(c)
-                
+        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0}
+
+    elif payload.lead_ids:
+        stmt = delete(Lead).where(Lead.id.in_(payload.lead_ids))
         res = await db.execute(stmt)
         await db.commit()
         return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0}
     else:
         raise HTTPException(status_code=400, detail="Silinecek lead belirtilmedi")
 
+
 @router.post("/bulk-blacklist")
 async def bulk_blacklist_leads(payload: BulkBlacklistRequest, db: AsyncSession = Depends(get_db)):
-    if not payload.lead_ids:
+    if payload.blacklist_all_matching:
+        conditions = build_lead_filter_conditions(
+            search=payload.search,
+            city=payload.city,
+            districts=payload.districts,
+            categories=payload.categories,
+            status=payload.status,
+            whatsapp_eligible_only=payload.whatsapp_eligible_only or False
+        )
+        stmt = select(Lead)
+        for c in conditions:
+            stmt = stmt.where(c)
+        res = await db.execute(stmt)
+        leads = res.scalars().all()
+    elif payload.lead_ids:
+        stmt = select(Lead).where(Lead.id.in_(payload.lead_ids))
+        res = await db.execute(stmt)
+        leads = res.scalars().all()
+    else:
         raise HTTPException(status_code=400, detail="Kara listeye eklenecek lead belirtilmedi")
-        
-    stmt = select(Lead).where(Lead.id.in_(payload.lead_ids))
-    res = await db.execute(stmt)
-    leads = res.scalars().all()
-    
+
     count = 0
     for lead in leads:
         lead.status = LeadStatus.UNSUBSCRIBED
@@ -243,64 +292,91 @@ async def bulk_blacklist_leads(payload: BulkBlacklistRequest, db: AsyncSession =
                 bl = Blacklist(phone_e164=lead.phone_e164, reason=payload.reason or "Toplu kara listeye eklendi")
                 db.add(bl)
                 count += 1
-                
+
     await db.commit()
     return {"blacklisted_count": count, "leads_updated": len(leads)}
 
+
 @router.post("/export/csv")
 async def export_leads_csv(
-    search: Optional[str] = None,
-    city: Optional[str] = None,
-    category: Optional[str] = None,
-    status: Optional[LeadStatus] = None,
+    payload: Optional[ExportLeadsRequest] = Body(None),
+    search: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    status: Optional[LeadStatus] = Query(None),
+    whatsapp_eligible_only: bool = Query(False),
     db: AsyncSession = Depends(get_db)
 ):
+    # Support both JSON body and Query param requests
+    req_search = payload.search if payload else search
+    req_city = payload.city if payload else city
+    req_districts = payload.districts if payload else None
+    req_categories = payload.categories if payload else ([category] if category else None)
+    req_status = payload.status if payload else status
+    req_wa_only = payload.whatsapp_eligible_only if payload else whatsapp_eligible_only
+
+    conditions = build_lead_filter_conditions(
+        search=req_search,
+        city=req_city,
+        districts=req_districts,
+        categories=req_categories,
+        status=req_status,
+        whatsapp_eligible_only=req_wa_only
+    )
+
     query = select(Lead)
-    if search:
-        query = query.where(or_(Lead.name.ilike(f"%{search}%"), Lead.phone_e164.ilike(f"%{search}%")))
-    if city:
-        query = query.where(Lead.city.ilike(f"%{city}%"))
-    if category:
-        query = query.where(Lead.category.ilike(f"%{category}%"))
-    if status:
-        query = query.where(Lead.status == status)
-        
+    for c in conditions:
+        query = query.where(c)
+
     res = await db.execute(query.order_by(Lead.id.desc()))
     leads = res.scalars().all()
-    
+
     leads_dicts = [l.__dict__ for l in leads]
     csv_bytes = ExportService.export_csv(leads_dicts)
-    
+
     return Response(
         content=csv_bytes,
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=scoutify_leads.csv"}
     )
 
+
 @router.post("/export/excel")
 async def export_leads_excel(
-    search: Optional[str] = None,
-    city: Optional[str] = None,
-    category: Optional[str] = None,
-    status: Optional[LeadStatus] = None,
+    payload: Optional[ExportLeadsRequest] = Body(None),
+    search: Optional[str] = Query(None),
+    city: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    status: Optional[LeadStatus] = Query(None),
+    whatsapp_eligible_only: bool = Query(False),
     db: AsyncSession = Depends(get_db)
 ):
+    req_search = payload.search if payload else search
+    req_city = payload.city if payload else city
+    req_districts = payload.districts if payload else None
+    req_categories = payload.categories if payload else ([category] if category else None)
+    req_status = payload.status if payload else status
+    req_wa_only = payload.whatsapp_eligible_only if payload else whatsapp_eligible_only
+
+    conditions = build_lead_filter_conditions(
+        search=req_search,
+        city=req_city,
+        districts=req_districts,
+        categories=req_categories,
+        status=req_status,
+        whatsapp_eligible_only=req_wa_only
+    )
+
     query = select(Lead)
-    if search:
-        query = query.where(or_(Lead.name.ilike(f"%{search}%"), Lead.phone_e164.ilike(f"%{search}%")))
-    if city:
-        query = query.where(Lead.city.ilike(f"%{city}%"))
-    if category:
-        query = query.where(Lead.category.ilike(f"%{category}%"))
-    if status:
-        query = query.where(Lead.status == status)
-        
+    for c in conditions:
+        query = query.where(c)
+
     res = await db.execute(query.order_by(Lead.id.desc()))
     leads = res.scalars().all()
-    
+
     leads_dicts = [l.__dict__ for l in leads]
     excel_bytes = ExportService.export_excel(leads_dicts)
-    
+
     return Response(
         content=excel_bytes,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

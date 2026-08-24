@@ -1,7 +1,12 @@
-import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry } from '../types';
+import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry, AntiBanConfig } from '../types';
 
-const API_BASE = 'http://localhost:8000/api/v1';
-const WS_URL = 'ws://localhost:8000/ws';
+const API_BASE = (import.meta as any).env?.VITE_API_URL
+  ? `${(import.meta as any).env.VITE_API_URL}/api/v1`
+  : 'http://localhost:8000/api/v1';
+
+const WS_URL = (import.meta as any).env?.VITE_WS_URL
+  ? (import.meta as any).env.VITE_WS_URL
+  : 'ws://localhost:8000/ws';
 
 export class ApiClient {
   // --- Analytics ---
@@ -93,8 +98,15 @@ export class ApiClient {
   }
 
   static async bulkBlacklistLeads(payload: {
-    lead_ids: number[];
+    lead_ids?: number[];
+    blacklist_all_matching?: boolean;
     reason?: string;
+    search?: string;
+    city?: string;
+    districts?: string[];
+    categories?: string[];
+    status?: string;
+    whatsapp_eligible_only?: boolean;
   }): Promise<{ blacklisted_count: number; leads_updated: number }> {
     const res = await fetch(`${API_BASE}/leads/bulk-blacklist`, {
       method: 'POST',
@@ -111,12 +123,18 @@ export class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(filters)
     });
+    if (!res.ok) {
+      throw new Error('CSV dışa aktarma başarısız oldu');
+    }
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `scoutify_leads_${new Date().toISOString().slice(0,10)}.csv`;
+    a.download = `scoutify_leads_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   }
 
   static async exportExcel(filters: any = {}): Promise<void> {
@@ -125,12 +143,18 @@ export class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(filters)
     });
+    if (!res.ok) {
+      throw new Error('Excel dışa aktarma başarısız oldu');
+    }
     const blob = await res.blob();
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `scoutify_leads_${new Date().toISOString().slice(0,10)}.xlsx`;
+    a.download = `scoutify_leads_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
   }
 
   // --- Scraper ---
@@ -195,7 +219,35 @@ export class ApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params)
     });
-    if (!res.ok) throw new Error('Kampanya başlatılamadı');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Kampanya başlatılamadı');
+    }
+    return res.json();
+  }
+
+  static async pauseCampaign(campaignId: number): Promise<any> {
+    const res = await fetch(`${API_BASE}/campaigns/${campaignId}/pause`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error('Kampanya duraklatılamadı');
+    return res.json();
+  }
+
+  // --- Settings & Anti-Ban Suite ---
+  static async getAntiBanSettings(): Promise<AntiBanConfig> {
+    const res = await fetch(`${API_BASE}/settings/antiban`);
+    if (!res.ok) throw new Error('Anti-ban ayarları alınamadı');
+    return res.json();
+  }
+
+  static async updateAntiBanSettings(settings: Partial<AntiBanConfig>): Promise<AntiBanConfig> {
+    const res = await fetch(`${API_BASE}/settings/antiban`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings)
+    });
+    if (!res.ok) throw new Error('Anti-ban ayarları güncellenemedi');
     return res.json();
   }
 
