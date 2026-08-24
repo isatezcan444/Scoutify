@@ -17,12 +17,14 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { getStoredAntiBanConfig, ANTI_BAN_PRESETS } from '../utils/antiBanSettings';
+import { useToast } from '../context/ToastContext';
 
 interface CampaignsPageProps {
   onRefreshStats: () => void;
 }
 
 export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) => {
+  const toast = useToast();
   const storedConfig = getStoredAntiBanConfig();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -82,7 +84,10 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !template) return;
+    if (!name || !template) {
+      toast.warning('Lütfen kampanya adı ve mesaj şablonunu eksiksiz doldurun.');
+      return;
+    }
 
     try {
       await ApiClient.createCampaign({
@@ -97,13 +102,14 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
         working_hours_end: workingHoursEnd,
       });
 
+      toast.success('Yeni WhatsApp kampanyası başarıyla oluşturuldu.', 'Kampanya Kaydedildi');
       setActiveTab('list');
       setName('');
       setDescription('');
       fetchCampaigns();
       onRefreshStats();
     } catch (err: any) {
-      alert(`Kampanya oluşturulamadı: ${err.message}`);
+      toast.error(err.message, 'Kampanya Oluşturulamadı');
     }
   };
 
@@ -111,11 +117,11 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
     setLaunchingId(campaignId);
     try {
       await ApiClient.launchCampaign(campaignId, { limit: 50 });
-      alert('🚀 Kampanya gönderim kuyruğuna alındı ve arka planda güvenle işleniyor!');
+      toast.success('Kampanya gönderim kuyruğuna alındı ve arka planda güvenle işleniyor!', '🚀 Kampanya Başlatıldı');
       fetchCampaigns();
       onRefreshStats();
     } catch (err: any) {
-      alert(`Kampanya başlatılamadı: ${err.message}`);
+      toast.error(err.message, 'Kampanya Başlatılamadı');
     } finally {
       setLaunchingId(null);
     }

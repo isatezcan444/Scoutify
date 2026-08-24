@@ -14,7 +14,10 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 
+import { useToast } from '../context/ToastContext';
+
 export const BlacklistPage: React.FC = () => {
+  const toast = useToast();
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [newPhone, setNewPhone] = useState('');
@@ -26,8 +29,8 @@ export const BlacklistPage: React.FC = () => {
     try {
       const data = await ApiClient.getBlacklist();
       setBlacklist(data);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      toast.error(err.message, 'Kara Liste Yüklenemedi');
     } finally {
       setLoading(false);
     }
@@ -43,21 +46,31 @@ export const BlacklistPage: React.FC = () => {
 
     try {
       await ApiClient.addToBlacklist(newPhone, newReason);
+      toast.success('Numara başarıyla kara listeye eklendi.', 'Numara Engellendi');
       setNewPhone('');
       setIsAddOpen(false);
       fetchBlacklist();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Kara Listeye Eklenemedi');
     }
   };
 
   const handleRemove = async (id: number) => {
-    if (!confirm('Bu numarayı kara listeden kaldırmak istediğinize emin misiniz?')) return;
+    const ok = await toast.confirm({
+      title: 'Numarayı Kara Listeden Kaldır',
+      message: 'Bu numaranın engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?',
+      confirmText: 'Evet, Engeli Kaldır',
+      cancelText: 'Vazgeç',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
     try {
       await ApiClient.removeFromBlacklist(id);
+      toast.success('Numara kara listeden çıkarıldı.', 'Engel Kaldırıldı');
       fetchBlacklist();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Engel Kaldırılamadı');
     }
   };
 

@@ -35,12 +35,14 @@ import {
   saveAntiBanConfig, 
   calculateRiskLevel 
 } from '../utils/antiBanSettings';
+import { useToast } from '../context/ToastContext';
 
 interface WhatsAppHubPageProps {
   onRefreshStats: () => void;
 }
 
 export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats }) => {
+  const toast = useToast();
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,8 +73,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       ]);
       setSessions(sessData);
       setLogs(logsData);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      toast.error(err.message, 'Veriler Yüklenemedi');
     } finally {
       setLoading(false);
     }
@@ -101,6 +103,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const handleSaveAntiBan = () => {
     saveAntiBanConfig(config);
     setSaveSuccess(true);
+    toast.success('Anti-Ban ve gecikme parametreleri güvenle kaydedildi.', 'Yapılandırma Güncellendi');
     setTimeout(() => setSaveSuccess(false), 3500);
   };
 
@@ -108,6 +111,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     setConfig(DEFAULT_ANTI_BAN_CONFIG);
     saveAntiBanConfig(DEFAULT_ANTI_BAN_CONFIG);
     setSaveSuccess(true);
+    toast.success('Ayarlar varsayılan güvenli değerlere döndürüldü.', 'Sıfırlandı');
     setTimeout(() => setSaveSuccess(false), 3500);
   };
 
@@ -122,7 +126,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setIsPairingSuccess(false);
       fetchSessionsAndLogs();
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'Oturum Oluşturulamadı');
     }
   };
 
@@ -131,34 +135,44 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     try {
       await ApiClient.simulateConnectSession(pairingSessionId);
       setIsPairingSuccess(true);
+      toast.success('WhatsApp hattı başarıyla eşlendi ve aktif edildi!', 'Oturum Bağlandı');
       setTimeout(() => {
         setIsQRModalOpen(false);
         fetchSessionsAndLogs();
         onRefreshStats();
       }, 1500);
     } catch (err: any) {
-      alert(err.message);
+      toast.error(err.message, 'QR Eşleme Hatası');
     }
   };
 
   const handleDisconnect = async (sessionId: number) => {
     try {
       await ApiClient.disconnectSession(sessionId);
+      toast.info('WhatsApp oturum bağlantısı kesildi.', 'Bağlantı Sonlandırıldı');
       fetchSessionsAndLogs();
       onRefreshStats();
-    } catch (err) {
-      alert('Bağlantı kesilemedi');
+    } catch (err: any) {
+      toast.error(err.message || 'Bağlantı kesilemedi', 'Hata');
     }
   };
 
   const handleDelete = async (sessionId: number) => {
-    if (!confirm('Bu WhatsApp oturumunu silmek istediğinize emin misiniz?')) return;
+    const ok = await toast.confirm({
+      title: 'WhatsApp Oturumunu Sil',
+      message: 'Bu WhatsApp oturumunu silmek istediğinize emin misiniz?',
+      confirmText: 'Evet, Sil',
+      cancelText: 'Vazgeç',
+      variant: 'danger',
+    });
+    if (!ok) return;
     try {
       await ApiClient.deleteSession(sessionId);
+      toast.success('WhatsApp oturumu başarıyla silindi.', 'Oturum Silindi');
       fetchSessionsAndLogs();
       onRefreshStats();
-    } catch (err) {
-      alert('Oturum silinemedi');
+    } catch (err: any) {
+      toast.error(err.message || 'Oturum silinemedi', 'Hata');
     }
   };
 

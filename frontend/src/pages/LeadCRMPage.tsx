@@ -33,11 +33,14 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 
+import { useToast } from '../context/ToastContext';
+
 interface LeadCRMPageProps {
   onRefreshStats: () => void;
 }
 
 export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
+  const toast = useToast();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -194,8 +197,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           await ApiClient.bulkDeleteLeads({ lead_ids: selectedIds });
         }
         handleClearSelection();
+        toast.success(`Seçilen ${selectedCount} müşteri adayı başarıyla silindi.`, 'Toplu Silme');
       } else if (leadToDelete) {
         await ApiClient.deleteLead(leadToDelete.id);
+        toast.success(`${leadToDelete.name} başarıyla silindi.`, 'Lead Silindi');
       }
 
       setIsDeleteModalOpen(false);
@@ -203,7 +208,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       fetchLeads();
       onRefreshStats();
     } catch (err: any) {
-      alert(`Silme hatası: ${err.message}`);
+      toast.error(err.message, 'Silme Hatası');
     } finally {
       setIsDeleting(false);
     }
@@ -236,11 +241,13 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           reason: blacklistReason,
         });
         handleClearSelection();
+        toast.success(`${idsToBlacklist.length} işletme numarası kara listeye eklendi.`, 'Toplu Kara Liste');
       } else if (leadToBlacklist) {
         await ApiClient.addBlacklist({
           phone: leadToBlacklist.phone_e164 || leadToBlacklist.phone,
           reason: blacklistReason,
         });
+        toast.success(`${leadToBlacklist.name} kara listeye alındı.`, 'Kara Listeye Eklendi');
       }
 
       setIsBlacklistModalOpen(false);
@@ -248,7 +255,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       fetchLeads();
       onRefreshStats();
     } catch (err: any) {
-      alert(`Kara liste hatası: ${err.message}`);
+      toast.error(err.message, 'Kara Liste Hatası');
     } finally {
       setIsBlacklisting(false);
     }
@@ -259,9 +266,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     try {
       await ApiClient.updateLead(leadId, { status: newStatus });
       setLeads(leads.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l)));
+      toast.success(`Durum "${newStatus}" olarak güncellendi.`, 'Durum Güncellendi');
       onRefreshStats();
-    } catch (err) {
-      alert('Durum güncellenemedi');
+    } catch (err: any) {
+      toast.error(err.message || 'Durum güncellenemedi', 'Hata');
     }
   };
 
@@ -282,6 +290,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         district: newLeadDistrict,
       });
 
+      toast.success(`${newLeadName} başarıyla rehbere eklendi.`, 'Yeni Müşteri Adayı');
       setIsAddModalOpen(false);
       setNewLeadName('');
       setNewLeadPhone('');
@@ -314,6 +323,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         lead_id: selectedLeadForSend.id,
       });
 
+      toast.success(`${selectedLeadForSend.name} alıcısına mesaj başarıyla iletildi.`, 'Mesaj Gönderildi');
       setSendSuccessMsg('✅ Mesaj kuyruğa alındı ve iletildi!');
       setTimeout(() => {
         setIsSendModalOpen(false);
@@ -321,7 +331,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         onRefreshStats();
       }, 1200);
     } catch (err: any) {
-      alert(`Mesaj gönderilemedi: ${err.message}`);
+      toast.error(err.message, 'Mesaj Gönderilemedi');
     } finally {
       setIsSending(false);
     }

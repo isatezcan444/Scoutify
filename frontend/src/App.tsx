@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider, useToast } from './context/ToastContext';
 import { Sidebar } from './components/Layout/Sidebar';
 import { TopHeader } from './components/Layout/TopHeader';
 import { DashboardPage } from './pages/DashboardPage';
@@ -11,14 +12,13 @@ import { BlacklistPage } from './pages/BlacklistPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { ApiClient, createWebSocket } from './api/client';
 import { DashboardStats } from './types';
-import { Sparkles, CheckCircle2, MessageCircle, X } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; desc: string; type: 'success' | 'info' | 'reply' }>>([]);
+  const toast = useToast();
 
   const refreshStats = async () => {
     try {
@@ -39,25 +39,22 @@ const AppContent: React.FC = () => {
         setIsWsConnected(true);
         // Handle Inbound Reply Event
         if (eventData.event === 'inbound_reply') {
-          addNotification({
-            title: '📩 Yeni WhatsApp Yanıtı!',
-            desc: `${eventData.lead_name} (${eventData.phone}): "${eventData.message}"`,
-            type: 'reply'
-          });
+          toast.reply(
+            `${eventData.lead_name} (${eventData.phone}): "${eventData.message}"`,
+            '📩 Yeni WhatsApp Yanıtı!'
+          );
           refreshStats();
         } else if (eventData.event === 'message_sent') {
-          addNotification({
-            title: '✅ Mesaj İletildi',
-            desc: `${eventData.lead_name} (${eventData.phone}) alıcısına güvenle iletildi.`,
-            type: 'success'
-          });
+          toast.success(
+            `${eventData.lead_name} (${eventData.phone}) alıcısına güvenle iletildi.`,
+            '✅ Mesaj İletildi'
+          );
           refreshStats();
         } else if (eventData.event === 'scraper_completed') {
-          addNotification({
-            title: '🎉 Tarama Tamamlandı',
-            desc: `Toplam ${eventData.total_found} işletme bulundu, ${eventData.total_new_leads} yeni lead eklendi.`,
-            type: 'info'
-          });
+          toast.info(
+            `Toplam ${eventData.total_found} işletme bulundu, ${eventData.total_new_leads} yeni lead eklendi.`,
+            '🎉 Tarama Tamamlandı'
+          );
           refreshStats();
         }
       });
@@ -71,15 +68,7 @@ const AppContent: React.FC = () => {
       clearInterval(interval);
       if (ws) ws.close();
     };
-  }, []);
-
-  const addNotification = (notif: { title: string; desc: string; type: 'success' | 'info' | 'reply' }) => {
-    const id = Math.random().toString(36).substring(2, 9);
-    setNotifications((prev) => [{ id, ...notif }, ...prev.slice(0, 3)]);
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 5000);
-  };
+  }, [toast]);
 
   const getPageTitle = () => {
     switch (activeTab) {
@@ -173,42 +162,6 @@ const AppContent: React.FC = () => {
           )}
         </main>
       </div>
-
-      {/* Realtime Toast Notifications Floating Container */}
-      <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 space-y-2 max-w-[calc(100vw-2rem)] sm:max-w-sm w-full pointer-events-none">
-        {notifications.map((notif) => (
-          <div
-            key={notif.id}
-            className={`pointer-events-auto p-3.5 sm:p-4 rounded-xl shadow-lg border flex items-start space-x-3 animate-fade-in ${
-              notif.type === 'reply'
-                ? 'bg-white dark:bg-[#2F3349] border-[#7367F0]/40 text-slate-800 dark:text-slate-100'
-                : notif.type === 'success'
-                ? 'bg-white dark:bg-[#2F3349] border-[#28C76F]/40 text-slate-800 dark:text-slate-100'
-                : 'bg-white dark:bg-[#2F3349] border-[#00CFE8]/40 text-slate-800 dark:text-slate-100'
-            }`}
-          >
-            <div className="shrink-0 mt-0.5">
-              {notif.type === 'reply' ? (
-                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#7367F0]" />
-              ) : notif.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 sm:w-5 sm:h-5 text-[#28C76F]" />
-              ) : (
-                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5 text-[#00CFE8]" />
-              )}
-            </div>
-            <div className="flex-1 text-xs">
-              <h4 className="font-bold text-slate-900 dark:text-white mb-0.5">{notif.title}</h4>
-              <p className="text-slate-500 dark:text-[#7E7F96] leading-tight">{notif.desc}</p>
-            </div>
-            <button
-              onClick={() => setNotifications((prev) => prev.filter((n) => n.id !== notif.id))}
-              className="text-slate-400 hover:text-slate-700 dark:hover:text-white shrink-0 p-1"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        ))}
-      </div>
     </div>
   );
 };
@@ -216,7 +169,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </ThemeProvider>
   );
 };
