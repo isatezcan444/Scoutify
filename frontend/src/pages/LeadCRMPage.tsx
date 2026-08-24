@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Users, 
   Search, 
@@ -896,9 +897,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       {/* ========================================================================= */}
       {/* BEAUTIFUL DELETE CONFIRMATION MODAL */}
       {/* ========================================================================= */}
-      {isDeleteModalOpen && (
+      {isDeleteModalOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in select-none"
           onClick={() => !isDeleting && setIsDeleteModalOpen(false)}
         >
           <div 
@@ -1006,15 +1007,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* BEAUTIFUL BLACKLIST CONFIRMATION MODAL */}
       {/* ========================================================================= */}
-      {isBlacklistModalOpen && (
+      {isBlacklistModalOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in select-none"
           onClick={() => !isBlacklisting && setIsBlacklistModalOpen(false)}
         >
           <div 
@@ -1115,15 +1117,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* ADD NEW LEAD MODAL */}
       {/* ========================================================================= */}
-      {isAddModalOpen && (
+      {isAddModalOpen && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in select-none"
           onClick={() => setIsAddModalOpen(false)}
         >
           <div 
@@ -1227,15 +1230,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================================= */}
       {/* QUICK SINGLE MESSAGE SEND MODAL */}
       {/* ========================================================================= */}
-      {isSendModalOpen && selectedLeadForSend && (
+      {isSendModalOpen && selectedLeadForSend && typeof document !== 'undefined' && createPortal(
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-slate-900/60 animate-fade-in select-none"
           onClick={() => setIsSendModalOpen(false)}
         >
           <div 
@@ -1309,7 +1313,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

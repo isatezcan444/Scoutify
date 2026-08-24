@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Smartphone, 
   QrCode, 
@@ -828,52 +829,79 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       </div>
 
       {/* QR Pairing Modal */}
-      {isQRModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="vuexy-card max-w-sm w-full p-6 text-center space-y-5 shadow-xl border border-slate-200 dark:border-white/[0.1]">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-800 dark:text-white">WhatsApp Hattı Eşle</h3>
+      {isQRModalOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-900/60 flex items-center justify-center p-4 animate-fade-in select-none"
+          onClick={() => setIsQRModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#2F3349] p-6 text-center space-y-4 shadow-2xl border border-slate-200/80 dark:border-white/[0.1] animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
+                  <Smartphone className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">WhatsApp Hattı Eşle</h3>
+              </div>
               <button
+                type="button"
                 onClick={() => setIsQRModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-[#7E7F96] font-medium">
-              Telefonunuzda <strong>WhatsApp &gt; Bağlı Cihazlar &gt; Cihaz Bağla</strong> seçeneğine tıklayarak aşağıdaki QR kodu taratın.
-            </p>
+            {/* 3-Step Instruction Box */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-left text-xs space-y-1.5">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
+                <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">1</span>
+                <span>WhatsApp uygulamasını açın</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
+                <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">2</span>
+                <span>Ayarlar → Bağlı Cihazlar → Cihaz Bağla</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
+                <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">3</span>
+                <span>Aşağıdaki QR kodu kameranızla taratın</span>
+              </div>
+            </div>
 
             {/* QR Code Presentation */}
-            <div className="p-4 bg-white rounded-xl mx-auto inline-block shadow-md border border-slate-200">
+            <div className="p-3.5 bg-white rounded-2xl mx-auto inline-block shadow-md border border-slate-200/80 relative">
               <svg viewBox="0 0 100 100" className="w-44 h-44">
                 <rect width="100" height="100" fill="white" />
-                <rect x="10" y="10" width="25" height="25" fill="#2F3349" />
-                <rect x="15" y="15" width="15" height="15" fill="white" />
-                <rect x="18" y="18" width="9" height="9" fill="#2F3349" />
+                <rect x="8" y="8" width="26" height="26" fill="#1E293B" rx="3" />
+                <rect x="12" y="12" width="18" height="18" fill="white" rx="2" />
+                <rect x="15" y="15" width="12" height="12" fill="#1E293B" rx="1.5" />
 
-                <rect x="65" y="10" width="25" height="25" fill="#2F3349" />
-                <rect x="70" y="15" width="15" height="15" fill="white" />
-                <rect x="73" y="18" width="9" height="9" fill="#2F3349" />
+                <rect x="66" y="8" width="26" height="26" fill="#1E293B" rx="3" />
+                <rect x="70" y="12" width="18" height="18" fill="white" rx="2" />
+                <rect x="73" y="15" width="12" height="12" fill="#1E293B" rx="1.5" />
 
-                <rect x="10" y="65" width="25" height="25" fill="#2F3349" />
-                <rect x="15" y="70" width="15" height="15" fill="white" />
-                <rect x="18" y="73" width="9" height="9" fill="#2F3349" />
+                <rect x="8" y="66" width="26" height="26" fill="#1E293B" rx="3" />
+                <rect x="12" y="70" width="18" height="18" fill="white" rx="2" />
+                <rect x="15" y="73" width="12" height="12" fill="#1E293B" rx="1.5" />
 
-                <rect x="42" y="15" width="6" height="6" fill="#2F3349" />
-                <rect x="52" y="25" width="6" height="6" fill="#2F3349" />
-                <rect x="42" y="35" width="6" height="6" fill="#2F3349" />
-                <rect x="65" y="45" width="6" height="6" fill="#2F3349" />
-                <rect x="45" y="55" width="6" height="6" fill="#2F3349" />
-                <rect x="55" y="65" width="6" height="6" fill="#2F3349" />
-                <rect x="42" y="75" width="6" height="6" fill="#2F3349" />
-                <rect x="75" y="75" width="6" height="6" fill="#2F3349" />
+                <rect x="42" y="12" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="52" y="20" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="42" y="32" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="66" y="42" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="46" y="52" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="56" y="62" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="42" y="72" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="76" y="72" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="84" y="52" width="6" height="6" fill="#1E293B" rx="1" />
+                <rect x="52" y="82" width="6" height="6" fill="#1E293B" rx="1" />
               </svg>
             </div>
 
             {isPairingSuccess ? (
-              <div className="p-3 rounded-lg bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F] text-xs font-bold flex items-center justify-center gap-2">
+              <div className="p-3 rounded-xl bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F] text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>Oturum Başarıyla Bağlandı!</span>
               </div>
@@ -887,7 +915,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               </Button>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   ShieldAlert, 
   Plus, 
@@ -140,21 +141,29 @@ export const BlacklistPage: React.FC = () => {
         </div>
       </Card>
 
-      {isAddOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      {isAddOpen && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] bg-slate-900/60 flex items-center justify-center p-4 animate-fade-in select-none"
+          onClick={() => setIsAddOpen(false)}
+        >
           <form 
             onSubmit={handleAdd} 
-            className="vuexy-card max-w-sm w-full p-6 space-y-4 shadow-xl border border-slate-200 dark:border-white/[0.1]"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#2F3349] p-6 space-y-4 shadow-2xl border border-slate-200/80 dark:border-white/[0.1] animate-scale-in"
           >
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                <ShieldAlert className="w-4 h-4 text-[#EA5455]" />
-                Kara Listeye Ekle
-              </h3>
+            <div className="flex items-center justify-between pb-1">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-[#EA5455]/15 text-[#EA5455] flex items-center justify-center font-bold">
+                  <ShieldAlert className="w-4 h-4" />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  Kara Listeye Ekle
+                </h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsAddOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -178,34 +187,36 @@ export const BlacklistPage: React.FC = () => {
                 <select
                   value={newReason}
                   onChange={(e) => setNewReason(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-semibold"
+                  className="w-full p-2.5 rounded-lg vuexy-input text-xs font-bold"
                 >
-                  <option value="USER_REQUEST">Kullanıcı Talebi</option>
-                  <option value="OPT_OUT_KEYWORD">Opt-Out Yanıtı (İstemiyorum)</option>
-                  <option value="SPAM_REPORT">Spam Şikayeti</option>
-                  <option value="INVALID_NUMBER">Geçersiz Numara</option>
+                  <option value="USER_REQUEST">Müşteri Talebi (İptal/Opt-out)</option>
+                  <option value="BOUNCED">Ulaşılamayan / Geçersiz Numara</option>
+                  <option value="SPAM_COMPLAINT">Şikayet Riski Önleme</option>
+                  <option value="MANUAL_BLACKLIST">Manuel Yönetici Engeli</option>
                 </select>
               </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-2 pt-2">
+            <div className="pt-2 flex items-center space-x-2">
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 onClick={() => setIsAddOpen(false)}
+                className="w-1/2 font-bold cursor-pointer"
               >
                 İptal
               </Button>
               <Button
                 type="submit"
                 variant="destructive"
-                className="font-bold"
+                className="w-1/2 font-bold shadow-md shadow-[#EA5455]/30 cursor-pointer"
               >
-                Kara Listeye Kaydet
+                Engelle & Kaydet
               </Button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

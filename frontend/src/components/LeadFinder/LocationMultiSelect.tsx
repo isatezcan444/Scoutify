@@ -89,7 +89,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
 
   const modalContent = isOpen && mounted ? (
     <div 
-      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-sm overflow-hidden select-none"
+      className="fixed inset-0 z-[99999] flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 overflow-hidden select-none animate-fade-in"
       onClick={() => setIsOpen(false)}
     >
       <div 
