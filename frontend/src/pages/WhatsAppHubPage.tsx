@@ -11,13 +11,27 @@ import {
   PowerOff, 
   Loader2, 
   X, 
-  Zap 
+  Zap,
+  Clock,
+  Sliders,
+  Check,
+  RotateCcw,
+  AlertTriangle,
+  Shield
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { WhatsAppSession, MessageLog } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Card } from '../components/ui/card';
+import { 
+  AntiBanConfig, 
+  DEFAULT_ANTI_BAN_CONFIG, 
+  ANTI_BAN_PRESETS, 
+  getStoredAntiBanConfig, 
+  saveAntiBanConfig, 
+  calculateRiskLevel 
+} from '../utils/antiBanSettings';
 
 interface WhatsAppHubPageProps {
   onRefreshStats: () => void;
@@ -27,6 +41,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Anti-Ban Timing State
+  const [config, setConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   // New Line / QR Pairing Modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
@@ -60,6 +78,37 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   useEffect(() => {
     fetchSessionsAndLogs();
   }, []);
+
+  const handlePresetSelect = (presetKey: 'ultra_safe' | 'standard_balanced' | 'fast_warmed') => {
+    const presetData = ANTI_BAN_PRESETS[presetKey];
+    setConfig({
+      preset: presetKey,
+      ...presetData
+    });
+  };
+
+  const handleCustomChange = (field: keyof AntiBanConfig, value: any) => {
+    setConfig((prev) => ({
+      ...prev,
+      preset: 'custom',
+      [field]: value
+    }));
+  };
+
+  const handleSaveAntiBan = () => {
+    saveAntiBanConfig(config);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  const handleResetDefaults = () => {
+    setConfig(DEFAULT_ANTI_BAN_CONFIG);
+    saveAntiBanConfig(DEFAULT_ANTI_BAN_CONFIG);
+    setSaveSuccess(true);
+    setTimeout(() => setSaveSuccess(false), 3500);
+  };
+
+  const riskInfo = calculateRiskLevel(config.minDelaySeconds, config.dailyMessageLimit);
 
   const handleCreateSession = async () => {
     if (!newSessionName) return;
@@ -129,7 +178,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   };
 
   return (
-    <div className="space-y-8 pb-16 select-none animate-fade-in">
+    <div className="space-y-6 pb-16 select-none animate-fade-in">
       {/* Top Header & New Account Action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -138,7 +187,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             WhatsApp Oturumları & Anti-Ban Hub
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            Çoklu hat yönetimi, kademeli hesap ısınma (warm-up) ve günlük kota güvenliği
+            Çoklu hat yönetimi, QR eşleme, Gaussian Jitter bekleme süreleri ve anti-ban koruma parametreleri
           </p>
         </div>
 
@@ -157,7 +206,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
         {sessions.map((sess) => {
           const quotaPercent = Math.round((sess.daily_sent_count / sess.max_daily_limit) * 100);
           return (
-            <Card key={sess.id} className="p-6 hover:shadow-md transition-shadow flex flex-col justify-between h-full space-y-5">
+            <Card key={sess.id} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between h-full space-y-4">
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
@@ -180,7 +229,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                         ? 'warning'
                         : 'danger'
                     }
-                    className="gap-1 font-bold"
+                    className="gap-1 font-bold text-[10px]"
                   >
                     {sess.status === 'CONNECTED' && (
                       <span className="w-1.5 h-1.5 rounded-full bg-[#28C76F] live-dot" />
@@ -190,7 +239,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 </div>
 
                 {/* Warm-Up Day & Quota Status */}
-                <div className="mt-5 space-y-3 p-3.5 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05]">
+                <div className="mt-4 space-y-2.5 p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05]">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500 dark:text-[#7E7F96] flex items-center gap-1 font-semibold">
                       <Flame className="w-3.5 h-3.5 text-[#FF9F43]" />
@@ -229,7 +278,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 {sess.status === 'CONNECTED' ? (
                   <button
                     onClick={() => handleDisconnect(sess.id)}
-                    className="text-slate-500 hover:text-[#FF9F43] flex items-center gap-1 font-bold transition-colors"
+                    className="text-slate-500 hover:text-[#FF9F43] flex items-center gap-1 font-bold transition-colors text-xs"
                   >
                     <PowerOff className="w-3.5 h-3.5" />
                     <span>Bağlantıyı Kes</span>
@@ -240,7 +289,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                       setPairingSessionId(sess.id);
                       setIsQRModalOpen(true);
                     }}
-                    className="text-[#7367F0] hover:text-[#685DD8] flex items-center gap-1 font-bold"
+                    className="text-[#7367F0] hover:text-[#685DD8] flex items-center gap-1 font-bold text-xs"
                   >
                     <QrCode className="w-3.5 h-3.5" />
                     <span>QR Kodu Tara</span>
@@ -259,6 +308,330 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
           );
         })}
       </div>
+
+      {/* ========================================================================= */}
+      {/* WHATSAPP ANTI-BAN YAPILANDIRMASI SUITE */}
+      {/* ========================================================================= */}
+      <Card className="p-4 sm:p-6 space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/[0.08] pb-4">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-9 h-9 rounded-xl bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
+                WhatsApp Anti-Ban Yapılandırması
+              </h3>
+              <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium">
+                Mesajlar arası bekleme süreleri (Jitter), insan taklidi ve günlük limit ayarları
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleResetDefaults}
+              className="text-xs font-bold text-slate-500 hover:text-[#7367F0] dark:text-[#7E7F96] dark:hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all"
+              title="WhatsApp için ban yemeyen önerilen standart ayarlara dön"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Güvenli Varsayılanlara Dön</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Preset Selector Tabs */}
+        <div>
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block mb-2">
+            Güvenlik Ön Ayar Modu (Preset)
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {/* Preset 1: Ultra Safe */}
+            <button
+              type="button"
+              onClick={() => handlePresetSelect('ultra_safe')}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                config.preset === 'ultra_safe'
+                  ? 'border-[#28C76F] bg-[#28C76F]/10 ring-1 ring-[#28C76F]/50 shadow-sm'
+                  : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-[#28C76F]" />
+                  Ultra Güvenli
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#28C76F]/15 text-[#28C76F]">
+                  Yeni Hatlar
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
+                60 - 150 sn bekleme, 35 mesaj/gün. Sıfır risk.
+              </p>
+            </button>
+
+            {/* Preset 2: Standard Balanced (Default) */}
+            <button
+              type="button"
+              onClick={() => handlePresetSelect('standard_balanced')}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                config.preset === 'standard_balanced'
+                  ? 'border-[#7367F0] bg-[#7367F0]/10 ring-1 ring-[#7367F0]/50 shadow-sm'
+                  : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-[#7367F0]" />
+                  Dengeli Standart
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/15 text-[#7367F0]">
+                  Varsayılan ⭐
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
+                45 - 120 sn bekleme, 50 mesaj/gün. Önerilen altın denge.
+              </p>
+            </button>
+
+            {/* Preset 3: Fast Warmed */}
+            <button
+              type="button"
+              onClick={() => handlePresetSelect('fast_warmed')}
+              className={`p-3 rounded-xl border text-left transition-all ${
+                config.preset === 'fast_warmed'
+                  ? 'border-[#FF9F43] bg-[#FF9F43]/10 ring-1 ring-[#FF9F43]/50 shadow-sm'
+                  : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.04]'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-[#FF9F43]" />
+                  Hızlı & Isınmış
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#FF9F43]/15 text-[#FF9F43]">
+                  Eski Hatlar
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
+                20 - 60 sn bekleme, 100 mesaj/gün. Isınmış numaralar.
+              </p>
+            </button>
+          </div>
+        </div>
+
+        {/* Detailed Slider Controls */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+          {/* Min Delay Slider */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
+                Minimum Bekleme Süresi
+              </label>
+              <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2 py-0.5 rounded">
+                {config.minDelaySeconds} saniye
+              </span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={120}
+              step={5}
+              value={config.minDelaySeconds}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                handleCustomChange('minDelaySeconds', val);
+                if (val >= config.maxDelaySeconds) {
+                  handleCustomChange('maxDelaySeconds', val + 15);
+                }
+              }}
+              className="w-full accent-[#7367F0] cursor-pointer"
+            />
+            <p className="text-[10px] text-slate-400">
+              İki mesaj arasında beklenecek en az süre. (WhatsApp bot tespitini engeller)
+            </p>
+          </div>
+
+          {/* Max Delay Slider */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[#28C76F]" />
+                Maksimum Bekleme Süresi
+              </label>
+              <span className="text-xs font-extrabold font-mono text-[#28C76F] bg-[#28C76F]/10 px-2 py-0.5 rounded">
+                {config.maxDelaySeconds} saniye
+              </span>
+            </div>
+            <input
+              type="range"
+              min={config.minDelaySeconds + 5}
+              max={240}
+              step={5}
+              value={config.maxDelaySeconds}
+              onChange={(e) => handleCustomChange('maxDelaySeconds', Number(e.target.value))}
+              className="w-full accent-[#28C76F] cursor-pointer"
+            />
+            <p className="text-[10px] text-slate-400">
+              İki mesaj arasında beklenecek en fazla süre (Gaussian Jitter rastgele aralığı).
+            </p>
+          </div>
+
+          {/* Typing Simulation Slider */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-[#00CFE8]" />
+                "Yazıyor..." İnsan Taklidi Süresi
+              </label>
+              <span className="text-xs font-extrabold font-mono text-[#00CFE8] bg-[#00CFE8]/10 px-2 py-0.5 rounded">
+                {config.typingDelaySeconds} saniye
+              </span>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={15}
+              step={1}
+              value={config.typingDelaySeconds}
+              onChange={(e) => handleCustomChange('typingDelaySeconds', Number(e.target.value))}
+              className="w-full accent-[#00CFE8] cursor-pointer"
+            />
+            <p className="text-[10px] text-slate-400">
+              Mesaj gönderilmeden önce WhatsApp soketinde aktif insan gibi yazıyor gösterilir.
+            </p>
+          </div>
+
+          {/* Daily Limit Slider */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-[#FF9F43]" />
+                Hat Başına Günlük Mesaj Limiti
+              </label>
+              <span className="text-xs font-extrabold font-mono text-[#FF9F43] bg-[#FF9F43]/10 px-2 py-0.5 rounded">
+                {config.dailyMessageLimit} mesaj / gün
+              </span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={250}
+              step={5}
+              value={config.dailyMessageLimit}
+              onChange={(e) => handleCustomChange('dailyMessageLimit', Number(e.target.value))}
+              className="w-full accent-[#FF9F43] cursor-pointer"
+            />
+            <p className="text-[10px] text-slate-400">
+              Günlük limit dolduğunda kampanya güvenli şekilde bir sonraki güne ertelenir.
+            </p>
+          </div>
+        </div>
+
+        {/* Working Hours Protection & Realtime Risk Level Meter */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+          {/* Working Hours Box */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
+                Güvenli Çalışma Saatleri Koruması
+              </label>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={config.workingHoursOnly}
+                  onChange={(e) => handleCustomChange('workingHoursOnly', e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7367F0]"></div>
+              </label>
+            </div>
+
+            {config.workingHoursOnly && (
+              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-[#7E7F96] block mb-1">
+                    Başlangıç Saati
+                  </label>
+                  <input
+                    type="time"
+                    value={config.workStartHour}
+                    onChange={(e) => handleCustomChange('workStartHour', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg vuexy-input text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-[#7E7F96] block mb-1">
+                    Bitiş Saati
+                  </label>
+                  <input
+                    type="time"
+                    value={config.workEndHour}
+                    onChange={(e) => handleCustomChange('workEndHour', e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg vuexy-input text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400">
+              Mesai saatleri dışında (gece/hafta sonu) spam şikayetlerini ve ban riskini sıfırlar.
+            </p>
+          </div>
+
+          {/* Real-time Risk Level Meter */}
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] flex flex-col justify-between space-y-2">
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+                  <AlertTriangle className={`w-3.5 h-3.5 ${riskInfo.color}`} />
+                  Anlık WhatsApp Ban Risk Seviyesi
+                </span>
+                <span className={`text-xs font-extrabold ${riskInfo.color} font-mono uppercase`}>
+                  {riskInfo.level}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-[#7E7F96] leading-relaxed">
+                {riskInfo.description}
+              </p>
+            </div>
+
+            <div className="h-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${
+                  riskInfo.level === 'DÜŞÜK (GÜVENLİ)'
+                    ? 'w-1/4 bg-[#28C76F]'
+                    : riskInfo.level === 'ORTA'
+                    ? 'w-2/3 bg-[#FF9F43]'
+                    : 'w-full bg-[#EA5455]'
+                }`}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Save Actions */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+          <div>
+            {saveSuccess && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#28C76F] bg-[#28C76F]/15 px-3 py-1.5 rounded-lg border border-[#28C76F]/30 animate-fade-in">
+                <Check className="w-3.5 h-3.5" />
+                <span>Anti-Ban ayarları başarıyla kaydedildi ve uygulandı!</span>
+              </span>
+            )}
+          </div>
+
+          <Button
+            onClick={handleSaveAntiBan}
+            className="space-x-2 font-bold shadow-md shadow-[#7367F0]/30 w-full sm:w-auto justify-center"
+          >
+            <Check className="w-4 h-4" />
+            <span>Ayarları Kaydet</span>
+          </Button>
+        </div>
+      </Card>
 
       {/* Two-Column: Test Sandbox & Anti-Ban Protocols */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
