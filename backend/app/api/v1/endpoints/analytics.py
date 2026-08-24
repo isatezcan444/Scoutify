@@ -135,7 +135,7 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
         "whatsapp_eligible_leads": wa_eligible,
         "contacted_leads": contacted,
         "replied_leads": replied,
-        "response_rate": response_rate,
+        "response_rate_percentage": response_rate,
         "total_campaigns": total_campaigns,
         "active_campaigns": active_campaigns,
         "connected_sessions": connected_sessions,

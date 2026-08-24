@@ -1,12 +1,15 @@
 import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry, AntiBanConfig } from '../types';
 
+const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+const defaultApiPort = '8000';
+
 const API_BASE = (import.meta as any).env?.VITE_API_URL
   ? `${(import.meta as any).env.VITE_API_URL}/api/v1`
-  : 'http://localhost:8000/api/v1';
+  : `http://${host}:${defaultApiPort}/api/v1`;
 
 const WS_URL = (import.meta as any).env?.VITE_WS_URL
   ? (import.meta as any).env.VITE_WS_URL
-  : 'ws://localhost:8000/ws';
+  : `ws://${host}:${defaultApiPort}/ws`;
 
 export class ApiClient {
   // --- Analytics ---
