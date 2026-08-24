@@ -88,7 +88,7 @@ const AppContent: React.FC = () => {
       case 'lead-finder':
         return 'İşletme Ara';
       case 'leads':
-        return 'Müşteri Adayları (CRM) Veritabanı';
+        return 'Müşteri Adayları';
       case 'campaigns':
         return 'WhatsApp Kampanyaları & Spintax Studio';
       case 'whatsapp':

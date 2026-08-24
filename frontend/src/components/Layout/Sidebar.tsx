@@ -39,7 +39,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'dashboard', label: 'Genel Bakış (Analytics)', icon: LayoutDashboard, badge: null },
         { id: 'lead-finder', label: 'İşletme Ara', icon: Search, badge: 'Live', badgeVariant: 'success' as const },
-        { id: 'leads', label: 'Müşteri Adayları (CRM)', icon: Users, badge: totalLeadsCount > 0 ? `${totalLeadsCount}` : null, badgeVariant: 'primary' as const },
+        { id: 'leads', label: 'Müşteri Adayları', icon: Users, badge: totalLeadsCount > 0 ? `${totalLeadsCount}` : null, badgeVariant: 'primary' as const },
       ]
     },
     {

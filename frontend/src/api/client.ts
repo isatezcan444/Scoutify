@@ -17,7 +17,10 @@ export class ApiClient {
     size?: number;
     search?: string;
     city?: string;
+    district?: string;
+    districts?: string[];
     category?: string;
+    categories?: string[];
     status?: string;
     whatsapp_eligible_only?: boolean;
   }): Promise<{ items: Lead[]; total: number; page: number; size: number; pages: number }> {
@@ -26,7 +29,14 @@ export class ApiClient {
     if (params.size) query.set('size', params.size.toString());
     if (params.search) query.set('search', params.search);
     if (params.city) query.set('city', params.city);
+    if (params.district) query.set('district', params.district);
+    if (params.districts && params.districts.length > 0) {
+      params.districts.forEach(d => query.append('districts', d));
+    }
     if (params.category) query.set('category', params.category);
+    if (params.categories && params.categories.length > 0) {
+      params.categories.forEach(c => query.append('categories', c));
+    }
     if (params.status) query.set('status', params.status);
     if (params.whatsapp_eligible_only) query.set('whatsapp_eligible_only', 'true');
 

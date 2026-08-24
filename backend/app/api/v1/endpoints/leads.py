@@ -23,7 +23,9 @@ async def list_leads(
     search: Optional[str] = None,
     city: Optional[str] = None,
     district: Optional[str] = None,
+    districts: Optional[List[str]] = Query(None),
     category: Optional[str] = None,
+    categories: Optional[List[str]] = Query(None),
     status: Optional[LeadStatus] = None,
     whatsapp_eligible_only: bool = False,
     db: AsyncSession = Depends(get_db)
@@ -45,10 +47,35 @@ async def list_leads(
         
     if city:
         conditions.append(Lead.city.ilike(f"%{city}%"))
-    if district:
-        conditions.append(Lead.district.ilike(f"%{district}%"))
-    if category:
-        conditions.append(Lead.category.ilike(f"%{category}%"))
+        
+    # Multi-district filtering
+    all_districts = []
+    if districts:
+        for d in districts:
+            if "," in d:
+                all_districts.extend([x.strip() for x in d.split(",") if x.strip()])
+            elif d.strip():
+                all_districts.append(d.strip())
+    if district and district.strip():
+        all_districts.append(district.strip())
+        
+    if all_districts:
+        conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in set(all_districts)]))
+        
+    # Multi-category filtering
+    all_categories = []
+    if categories:
+        for c in categories:
+            if "," in c:
+                all_categories.extend([x.strip() for x in c.split(",") if x.strip()])
+            elif c.strip():
+                all_categories.append(c.strip())
+    if category and category.strip():
+        all_categories.append(category.strip())
+        
+    if all_categories:
+        conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in set(all_categories)]))
+        
     if status:
         conditions.append(Lead.status == status)
     if whatsapp_eligible_only:
