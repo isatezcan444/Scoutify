@@ -667,8 +667,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   </button>
                 </th>
                 <th className="py-3.5 px-4">İşletme Profili</th>
-                <th className="py-3.5 px-4">Lokasyon</th>
                 <th className="py-3.5 px-4">İletişim & WhatsApp</th>
+                <th className="py-3.5 px-4">Lokasyon</th>
                 <th className="py-3.5 px-4">Puan & Web</th>
                 <th className="py-3.5 px-4">Durum</th>
                 <th className="py-3.5 px-4 text-right">İşlemler</th>
@@ -734,26 +734,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </div>
                       </td>
 
-                      {/* Location */}
-                      <td className="py-3.5 px-4 max-w-[240px]">
-                        <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2 leading-tight">
-                            {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
-                          </span>
-                        </div>
-                        <a
-                          href={getGoogleMapsUrl(lead)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-flex items-center space-x-1 text-[11px] font-medium text-slate-400 hover:text-[#7367F0] dark:text-slate-400 dark:hover:text-white transition-colors"
-                          title="Google Maps Haritasında Gör"
-                        >
-                          <GoogleMapsIcon className="w-3 h-3" />
-                          <span>Google Maps</span>
-                        </a>
-                      </td>
-
                       {/* Phone & WhatsApp */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
@@ -771,6 +751,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                               WhatsApp Doğrulanmadı
                             </span>
                           )}
+                        </div>
+                      </td>
+
+                      {/* Location (Clean address without redundant sub-link) */}
+                      <td className="py-3.5 px-4 max-w-[240px]">
+                        <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2 leading-tight">
+                            {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
+                          </span>
                         </div>
                       </td>
 
@@ -826,9 +816,17 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </select>
                       </td>
 
-                      {/* Actions */}
+                      {/* Actions: 1. Send, 2. Google Maps, 3. Blacklist, 4. Delete */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSendModal(lead)}
+                            title="Hızlı WhatsApp Mesajı Gönder"
+                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
                           <a
                             href={getGoogleMapsUrl(lead)}
                             target="_blank"
@@ -838,14 +836,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           >
                             <GoogleMapsIcon className="w-4 h-4" />
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenSendModal(lead)}
-                            title="Hızlı WhatsApp Mesajı Gönder"
-                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
                           <button
                             type="button"
                             onClick={() => handleOpenSingleBlacklist(lead)}
