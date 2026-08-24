@@ -255,6 +255,10 @@ export class ApiClient {
     return res.json();
   }
 
+  static async sendSingleMessage(payload: { phone: string; message: string; lead_id?: number }): Promise<any> {
+    return this.sendTestMessage(payload.phone, payload.message);
+  }
+
   static async getMessageLogs(): Promise<MessageLog[]> {
     const res = await fetch(`${API_BASE}/whatsapp/logs`);
     if (!res.ok) throw new Error('Failed to fetch message logs');
@@ -276,6 +280,13 @@ export class ApiClient {
     });
     if (!res.ok) throw new Error('Numara kara listeye eklenemedi');
     return res.json();
+  }
+
+  static async addBlacklist(payload: { phone: string; reason?: string } | string, reason?: string): Promise<BlacklistEntry> {
+    if (typeof payload === 'string') {
+      return this.addToBlacklist(payload, reason || 'USER_REQUEST');
+    }
+    return this.addToBlacklist(payload.phone, payload.reason || 'USER_REQUEST');
   }
 
   static async removeFromBlacklist(id: number): Promise<void> {
