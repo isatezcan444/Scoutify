@@ -19,7 +19,8 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
-  Shield
+  Shield,
+  Navigation
 } from 'lucide-react';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
@@ -322,6 +323,15 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     } finally {
       setIsSending(false);
     }
+  };
+
+  const getGoogleMapsUrl = (lead: Lead) => {
+    if ((lead as any).maps_url) return (lead as any).maps_url;
+    if ((lead as any).google_maps_url) return (lead as any).google_maps_url;
+    if (lead.custom_data?.google_maps_url) return lead.custom_data.google_maps_url;
+    if (lead.custom_data?.maps_url) return lead.custom_data.maps_url;
+    const query = [lead.name, lead.address || [lead.district, lead.city].filter(Boolean).join(', ')].filter(Boolean).join(' ');
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
   };
 
   const hasActiveFilters = Boolean(
@@ -751,6 +761,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
                           </span>
                         </div>
+                        <a
+                          href={getGoogleMapsUrl(lead)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center space-x-1 text-[11px] font-bold text-[#7367F0] hover:text-[#5E50EE] hover:underline"
+                          title="Google Maps Haritasında Gör"
+                        >
+                          <Navigation className="w-3 h-3 text-[#7367F0]" />
+                          <span>Google Maps'te Aç</span>
+                        </a>
                       </td>
 
                       {/* Rating & Website */}
@@ -808,6 +828,15 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-1.5">
+                          <a
+                            href={getGoogleMapsUrl(lead)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Google Maps'te Aç"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#7367F0] hover:bg-[#7367F0]/15 transition-colors"
+                          >
+                            <Navigation className="w-4 h-4" />
+                          </a>
                           <button
                             type="button"
                             onClick={() => handleOpenSendModal(lead)}
