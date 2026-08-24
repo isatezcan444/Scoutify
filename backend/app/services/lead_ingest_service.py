@@ -38,6 +38,7 @@ class LeadIngestService:
         if not raw_leads:
             return [], 0, 0
 
+        all_processed_leads: List[Lead] = []
         created_leads: List[Lead] = []
         new_count = 0
         updated_count = 0
@@ -104,6 +105,7 @@ class LeadIngestService:
                     existing_lead.status = LeadStatus.UNSUBSCRIBED
                 existing_lead.updated_at = datetime.utcnow()
                 updated_count += 1
+                all_processed_leads.append(existing_lead)
             else:
                 initial_status = LeadStatus.UNSUBSCRIBED if is_blacklisted else LeadStatus.NEW
                 
@@ -140,11 +142,12 @@ class LeadIngestService:
                 )
                 db.add(lead)
                 created_leads.append(lead)
+                all_processed_leads.append(lead)
                 new_count += 1
 
         await db.commit()
-        for l in created_leads:
+        for l in all_processed_leads:
             await db.refresh(l)
 
         logger.info(f"[LeadIngestService] Ingest complete: total_raw={len(raw_leads)}, new={new_count}, updated={updated_count}")
-        return created_leads, new_count, updated_count
+        return all_processed_leads, new_count, updated_count

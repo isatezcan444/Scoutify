@@ -82,7 +82,7 @@ async def run_scraper_task(
                 )
 
             # Ingest leads cleanly via LeadIngestService
-            created_leads, new_count, updated_count = await LeadIngestService.ingest_leads(
+            all_leads, new_count, updated_count = await LeadIngestService.ingest_leads(
                 db=db,
                 raw_leads=raw_leads,
                 source="GOOGLE_MAPS",
@@ -118,7 +118,7 @@ async def run_scraper_task(
                     "status": l.status.value if hasattr(l.status, 'value') else str(l.status),
                     "created_at": str(l.created_at)
                 }
-                for l in created_leads
+                for l in all_leads
             ]
 
             await ws_manager.broadcast({
@@ -126,7 +126,7 @@ async def run_scraper_task(
                 "job_id": job_id,
                 "total_found": len(raw_leads),
                 "total_new_leads": new_count,
-                "leads": lead_dicts[:25],
+                "leads": lead_dicts,
                 "metrics": latest_metrics
             })
 

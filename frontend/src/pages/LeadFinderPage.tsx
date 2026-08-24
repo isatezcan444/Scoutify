@@ -96,7 +96,10 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           } else if (d.type === 'lead_found' && d.lead) {
             setDiscoveredLeads((prev) => {
               const exists = prev.some(
-                (l) => (l.phone_e164 && l.phone_e164 === d.lead.phone_e164) || (l.name.toLowerCase() === d.lead.name.toLowerCase() && l.district === d.lead.district)
+                (l) =>
+                  (l.place_id && d.lead.place_id && l.place_id === d.lead.place_id) ||
+                  (l.phone_e164 && d.lead.phone_e164 && l.phone_e164 === d.lead.phone_e164) ||
+                  (l.name.toLowerCase() === d.lead.name.toLowerCase() && l.district === d.lead.district)
               );
               if (exists) return prev;
               return [...prev, d.lead];
