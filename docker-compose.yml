@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 1. PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: scoutify_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: scoutify
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: scoutifypassword123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  # 2. Redis Message Broker & State
+  redis:
+    image: redis:7-alpine
+    container_name: scoutify_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+  # 3. WhatsApp Gateway Microservice
+  wa-gateway:
+    build:
+      context: ./wa-gateway
+      dockerfile: Dockerfile
+    container_name: scoutify_wa_gateway
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+
+  # 4. FastAPI Backend Core
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: scoutify_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:scoutifypassword123@postgres:5432/scoutify
+      - WA_GATEWAY_URL=http://wa-gateway:3001
+    depends_on:
+      - postgres
+      - redis
+      - wa-gateway
+
+  # 5. React Vite Admin Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: scoutify_frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:

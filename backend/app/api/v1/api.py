@@ -1,0 +1,18 @@
+from fastapi import APIRouter
+from backend.app.api.v1.endpoints import (
+    leads,
+    scraper,
+    campaigns,
+    whatsapp,
+    blacklist,
+    analytics
+)
+
+api_router = APIRouter()
+
+api_router.include_router(leads.router, prefix="/leads", tags=["Leads"])
+api_router.include_router(scraper.router, prefix="/scraper", tags=["Scraper"])
+api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
+api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["WhatsApp"])
+api_router.include_router(blacklist.router, prefix="/blacklist", tags=["Blacklist"])
+api_router.include_router(analytics.router, prefix="/analytics", tags=["Analytics"])
