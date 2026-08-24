@@ -181,11 +181,14 @@ async def start_scraper(
         if not districts:
             districts = [f"{city} Merkez"]
 
+    location_display = f"{city} {', '.join(districts)}" if districts else city
+
     job = ScraperJob(
         keyword=keyword,
+        location=location_display,
         city=city,
         districts_json=districts,
-        max_results=req.max_results or 50,
+        source=req.source or "GOOGLE_MAPS",
         status=ScraperJobStatus.PENDING,
         total_found=0,
         total_valid_phones=0,
@@ -202,7 +205,7 @@ async def start_scraper(
             keyword=keyword,
             city=city,
             districts=districts,
-            max_results=job.max_results,
+            max_results=req.max_results or 50,
         )
     )
     active_tasks[job.id] = task
