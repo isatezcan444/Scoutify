@@ -667,8 +667,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   </button>
                 </th>
                 <th className="py-3.5 px-4">İşletme Profili</th>
-                <th className="py-3.5 px-4">İletişim & WhatsApp</th>
                 <th className="py-3.5 px-4">Lokasyon</th>
+                <th className="py-3.5 px-4">İletişim & WhatsApp</th>
                 <th className="py-3.5 px-4">Puan & Web</th>
                 <th className="py-3.5 px-4">Durum</th>
                 <th className="py-3.5 px-4 text-right">İşlemler</th>
@@ -734,26 +734,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </div>
                       </td>
 
-                      {/* Phone & WhatsApp */}
-                      <td className="py-3.5 px-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
-                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{lead.phone_e164 || lead.phone || 'Belirtilmemiş'}</span>
-                        </div>
-                        <div className="mt-1">
-                          {lead.is_whatsapp_eligible ? (
-                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[10px]">
-                              <WhatsAppIcon className="w-3 h-3" />
-                              <span>WhatsApp Aktif</span>
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-400 font-sans">
-                              WhatsApp Doğrulanmadı
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
                       {/* Location */}
                       <td className="py-3.5 px-4 max-w-[240px]">
                         <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
@@ -772,6 +752,26 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           <GoogleMapsIcon className="w-3 h-3" />
                           <span>Google Maps</span>
                         </a>
+                      </td>
+
+                      {/* Phone & WhatsApp */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{lead.phone_e164 || lead.phone || 'Belirtilmemiş'}</span>
+                        </div>
+                        <div className="mt-1">
+                          {lead.is_whatsapp_eligible ? (
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[10px]">
+                              <WhatsAppIcon className="w-3 h-3" />
+                              <span>WhatsApp Aktif</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-sans">
+                              WhatsApp Doğrulanmadı
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Rating & Website */}
