@@ -22,6 +22,7 @@ import { Card } from '../components/ui/card';
 import { SectorAutocomplete } from '../components/LeadFinder/SectorAutocomplete';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
+import { GoogleMapsIcon } from '../components/ui/google-maps-icon';
 
 interface LeadFinderPageProps {
   onNavigate: (tab: string) => void;
@@ -411,12 +412,12 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                     href={getGoogleMapsUrl(lead)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#28C76F]/10 hover:bg-[#28C76F]/20 text-[#28C76F] border border-[#28C76F]/20 font-bold transition-all active:scale-95 text-[11px]"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.1] text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/[0.08] font-bold transition-all active:scale-95 text-[11px] group"
                     title="Google Maps'te Aç"
                   >
-                    <Navigation className="w-3.5 h-3.5" />
+                    <GoogleMapsIcon className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                     <span>Google Maps'te Aç</span>
-                    <ExternalLink className="w-2.5 h-2.5" />
+                    <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
                   </a>
 
                   {/* Clean Website Link: Only render if valid website exists */}

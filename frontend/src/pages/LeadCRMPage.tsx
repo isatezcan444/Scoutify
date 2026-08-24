@@ -23,6 +23,7 @@ import {
   Navigation
 } from 'lucide-react';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
+import { GoogleMapsIcon } from '../components/ui/google-maps-icon';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { CategoryMultiSelect } from '../components/LeadFinder/CategoryMultiSelect';
 import { ApiClient } from '../api/client';
@@ -765,11 +766,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           href={getGoogleMapsUrl(lead)}
                           target="_blank"
                           rel="noreferrer"
-                          className="mt-1 inline-flex items-center space-x-1 text-[11px] font-bold text-[#7367F0] hover:text-[#5E50EE] hover:underline"
+                          className="mt-1.5 inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] hover:bg-slate-200 dark:hover:bg-white/[0.1] text-[11px] font-bold text-slate-700 dark:text-slate-200 transition-all group border border-slate-200/60 dark:border-white/[0.06]"
                           title="Google Maps Haritasında Gör"
                         >
-                          <Navigation className="w-3 h-3 text-[#7367F0]" />
-                          <span>Google Maps'te Aç</span>
+                          <GoogleMapsIcon className="w-3.5 h-3.5 shrink-0 group-hover:scale-110 transition-transform" />
+                          <span className="text-[#4285F4] dark:text-[#60A5FA]">Haritada Gör</span>
                         </a>
                       </td>
 
@@ -833,9 +834,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             target="_blank"
                             rel="noreferrer"
                             title="Google Maps'te Aç"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#7367F0] hover:bg-[#7367F0]/15 transition-colors"
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors group"
                           >
-                            <Navigation className="w-4 h-4" />
+                            <GoogleMapsIcon className="w-4 h-4 group-hover:scale-115 transition-transform" />
                           </a>
                           <button
                             type="button"
