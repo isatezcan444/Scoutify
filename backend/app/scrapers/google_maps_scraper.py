@@ -177,7 +177,7 @@ class GoogleMapsScraper(BaseScraper):
                         place["phone"] = phone_data["e164"]
 
                 e164 = phone_data["e164"] if phone_data else None
-                name_key = normalize_turkish(place["name"])
+                name_key = f"{normalize_turkish(place['name'])}_{district.lower()}"
 
                 if e164 and e164 in seen_phones:
                     return

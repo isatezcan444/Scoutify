@@ -149,198 +149,42 @@ class GoogleMapsPlaywrightScraper:
                 except Exception:
                     pass
 
-                # Check if Google Maps feed exists
-                feed = page.locator('div[role="feed"]')
-                if await feed.count() == 0:
-                    # Single Place Direct View Check
-                    single_title = page.locator('h1.DUwDvf, div.fontHeadlineLarge')
-                    if await single_title.count() > 0:
-                        raw_name = (await single_title.first.inner_text()).strip()
-                        details = await page.evaluate("""() => {
-                            const res = { address: null, phone: null, website: null, rating: null, reviewsCount: 0, category: null };
-                            const addrBtn = document.querySelector('button[data-item-id="address"], [data-tooltip*="Adres"]');
-                            if (addrBtn) res.address = addrBtn.getAttribute('aria-label') || addrBtn.innerText.trim();
+                # Wait for Google Maps page initial render
+                await page.wait_for_timeout(2500)
 
-                            const phoneBtn = document.querySelector('button[data-item-id*="phone"], a[href*="tel:"]');
-                            if (phoneBtn) res.phone = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
-
-                            const webBtn = document.querySelector('a[data-item-id="authority"]');
-                            if (webBtn) res.website = webBtn.href;
-
-                            const ratingEl = document.querySelector('div.F7nice span[aria-hidden="true"], span.MW4etd');
-                            if (ratingEl) res.rating = parseFloat(ratingEl.innerText.replace(',', '.').trim()) || null;
-
-                            const revEl = document.querySelector('div.F7nice span[aria-label*="yorum"], span.UY7F9');
-                            if (revEl) {
-                                const revClean = revEl.innerText.replace(/[^0-9]/g, '');
-                                if (revClean) res.reviewsCount = parseInt(revClean, 10);
-                            }
-
-                            const catBtn = document.querySelector('button[jsaction*="category"]');
-                            if (catBtn) res.category = catBtn.innerText.trim();
-
-                            const rows = Array.from(document.querySelectorAll('div.Io6YTe, div.rogA2c')).map(r => r.innerText.trim());
-                            for (const row of rows) {
-                                if (!res.phone) {
-                                    const pMatch = row.match(/(?:0[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|\\+90[\\s\\.\\-\\(\\)]*[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}|0850[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2})/);
-                                    if (pMatch) res.phone = pMatch[0];
-                                }
-                                if (!res.address) {
-                                    if (row.includes('Mah') || row.includes('Cd') || row.includes('Sok') || row.includes('No:') || row.includes('347') || row.includes('34')) {
-                                        res.address = row;
-                                    }
-                                }
-                            }
-                            return res;
-                        }""")
-
-                        full_address = clean_extracted_address(details.get("address")) or f"{district}, {city}"
-                        raw_phone = details.get("phone")
-                        phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
-                        clean_web = clean_extracted_website(details.get("website"))
-                        lat, lon = extract_coords_from_url(page.url)
-
-                        lead_data = {
-                            "name": raw_name,
-                            "category": details.get("category") or keyword,
-                            "phone": raw_phone,
-                            "phone_e164": phone_data["e164"] if phone_data else None,
-                            "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
-                            "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
-                            "website": clean_web,
-                            "address": full_address,
-                            "city": city,
-                            "district": district,
-                            "latitude": lat,
-                            "longitude": lon,
-                            "rating": details.get("rating"),
-                            "reviews_count": details.get("reviewsCount", 0),
-                            "google_maps_url": page.url,
-                            "place_id": f"gmaps_{hashlib.sha256(page.url.encode()).hexdigest()[:16]}",
-                            "source": "GOOGLE_MAPS",
-                            "is_verified": True if (phone_data or clean_web or details.get("rating")) else False,
-                            "display_name": f"{raw_name}, {full_address}"
-                        }
-                        results.append(lead_data)
-                        if on_place_inspected:
-                            await on_place_inspected(lead_data, 1, 1)
-
-                    await browser.close()
-                    return results
-
-                # Scroll the feed progressively to load target number of businesses
-                scroll_attempts = 0
-                max_scrolls = max(3, min(max_results // 6, 10)) if max_results > 0 else 6
-                previous_count = 0
-
-                if on_progress_status:
-                    await on_progress_status(f"📡 {city} > {district} işletme kanalları taranıyor...", 15)
-
-                while scroll_attempts < max_scrolls:
-                    await page.evaluate("""() => {
-                        const feedEl = document.querySelector('div[role="feed"]');
-                        if (feedEl) feedEl.scrollTop += 3500;
-                    }""")
-                    await page.wait_for_timeout(600)
-
-                    end_marker = page.locator('span:has-text("Tüm sonuçlara ulaştınız"), span:has-text("Sonuçların sonuna geldiniz"), span:has-text("reached the end")')
-                    if await end_marker.count() > 0:
-                        break
-
-                    current_count = await page.locator('a.hfpxzc').count()
-                    if max_results > 0 and current_count >= max_results:
-                        break
-
-                    if current_count == previous_count and scroll_attempts > 2:
-                        break
-                    previous_count = current_count
-                    scroll_attempts += 1
-
-                # Query all place links in feed
-                place_links = page.locator('a.hfpxzc')
-                total_places_found = await place_links.count()
-                target_count = min(total_places_found, max_results if max_results > 0 else 100)
-                logger.info(f"[GMAPS_PLAYWRIGHT] Feed has {total_places_found} places. Inspecting details for top {target_count}...")
-
-                if on_progress_status:
-                    await on_progress_status(f"🎯 {total_places_found} işletme kanalı tespit edildi. Detaylar canlı ayrıştırılıyor...", 18)
-
-                for i in range(target_count):
-                    card = place_links.nth(i)
-                    raw_name = await card.get_attribute("aria-label")
-                    href = await card.get_attribute("href")
-                    
-                    if not raw_name or not href:
-                        continue
-                    if raw_name in seen_names or href in seen_maps_urls:
-                        continue
-                    seen_names.add(raw_name)
-                    seen_maps_urls.add(href)
-
-                    # Click place card to open detail pane
-                    try:
-                        await card.click()
-                        # Responsive wait for detail pane to load
-                        try:
-                            await page.wait_for_selector('button[data-item-id="address"], div.Io6YTe', timeout=1200)
-                        except Exception:
-                            await page.wait_for_timeout(300)
-                    except Exception:
-                        pass
-
-                    # Extract detailed attributes from the opened place details pane
+                # Check if it's a single direct place result (rare case for exact match brand)
+                feed_count = await page.locator('a.hfpxzc').count()
+                single_title = page.locator('h1.DUwDvf, div.fontHeadlineLarge')
+                if feed_count == 0 and await single_title.count() > 0:
+                    raw_name = (await single_title.first.inner_text()).strip()
                     details = await page.evaluate("""() => {
-                        const res = {
-                            address: null,
-                            phone: null,
-                            website: null,
-                            rating: null,
-                            reviewsCount: 0,
-                            category: null
-                        };
-
-                        // 1. Full Address (button[data-item-id="address"] or data-tooltip="Adresi kopyala")
+                        const res = { address: null, phone: null, website: null, rating: null, reviewsCount: 0, category: null };
                         const addrBtn = document.querySelector('button[data-item-id="address"], [data-tooltip*="Adres"]');
-                        if (addrBtn) {
-                            res.address = addrBtn.getAttribute('aria-label') || addrBtn.innerText.trim();
-                        }
+                        if (addrBtn) res.address = addrBtn.getAttribute('aria-label') || addrBtn.innerText.trim();
 
-                        // 2. Direct Phone (button[data-item-id*="phone"] or a[href*="tel:"])
                         const phoneBtn = document.querySelector('button[data-item-id*="phone"], a[href*="tel:"]');
-                        if (phoneBtn) {
-                            res.phone = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
-                        }
+                        if (phoneBtn) res.phone = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
 
-                        // 3. Official Website (a[data-item-id="authority"] or a[aria-label*="Web sitesi"])
-                        const webBtn = document.querySelector('a[data-item-id="authority"], a[aria-label*="Web sitesi"]');
-                        if (webBtn) {
-                            res.website = webBtn.href;
-                        }
+                        const webBtn = document.querySelector('a[data-item-id="authority"]');
+                        if (webBtn) res.website = webBtn.href;
 
-                        // 4. Rating & Reviews
                         const ratingEl = document.querySelector('div.F7nice span[aria-hidden="true"], span.MW4etd');
-                        if (ratingEl) {
-                            const rText = ratingEl.innerText.replace(',', '.').trim();
-                            res.rating = parseFloat(rText) || null;
-                        }
+                        if (ratingEl) res.rating = parseFloat(ratingEl.innerText.replace(',', '.').trim()) || null;
+
                         const revEl = document.querySelector('div.F7nice span[aria-label*="yorum"], span.UY7F9');
                         if (revEl) {
                             const revClean = revEl.innerText.replace(/[^0-9]/g, '');
                             if (revClean) res.reviewsCount = parseInt(revClean, 10);
                         }
 
-                        // 5. Category
                         const catBtn = document.querySelector('button[jsaction*="category"]');
                         if (catBtn) res.category = catBtn.innerText.trim();
 
-                        // 6. Deep Scan all Io6YTe rows for address or phone if still not matched
                         const rows = Array.from(document.querySelectorAll('div.Io6YTe, div.rogA2c')).map(r => r.innerText.trim());
                         for (const row of rows) {
                             if (!res.phone) {
                                 const pMatch = row.match(/(?:0[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|\\+90[\\s\\.\\-\\(\\)]*[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}|0850[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2})/);
-                                if (pMatch) {
-                                    res.phone = pMatch[0];
-                                }
+                                if (pMatch) res.phone = pMatch[0];
                             }
                             if (!res.address) {
                                 if (row.includes('Mah') || row.includes('Cd') || row.includes('Sok') || row.includes('No:') || row.includes('347') || row.includes('34')) {
@@ -348,24 +192,16 @@ class GoogleMapsPlaywrightScraper:
                                 }
                             }
                         }
-
                         return res;
                     }""")
 
-                    # Clean full address
                     full_address = clean_extracted_address(details.get("address")) or f"{district}, {city}"
-
-                    # Clean & normalize phone
                     raw_phone = details.get("phone")
                     phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
-
-                    # Clean website
                     clean_web = clean_extracted_website(details.get("website"))
+                    lat, lon = extract_coords_from_url(page.url)
 
-                    # Coordinates
-                    lat, lon = extract_coords_from_url(href)
-
-                    lead_dict = {
+                    lead_data = {
                         "name": raw_name,
                         "category": details.get("category") or keyword,
                         "phone": raw_phone,
@@ -380,18 +216,215 @@ class GoogleMapsPlaywrightScraper:
                         "longitude": lon,
                         "rating": details.get("rating"),
                         "reviews_count": details.get("reviewsCount", 0),
-                        "google_maps_url": href,
-                        "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
+                        "google_maps_url": page.url,
+                        "place_id": f"gmaps_{hashlib.sha256(page.url.encode()).hexdigest()[:16]}",
                         "source": "GOOGLE_MAPS",
                         "is_verified": True if (phone_data or clean_web or details.get("rating")) else False,
                         "display_name": f"{raw_name}, {full_address}"
                     }
-
-                    results.append(lead_dict)
-
-                    # Real-time satellite-tuner style callback
+                    results.append(lead_data)
                     if on_place_inspected:
-                        await on_place_inspected(lead_dict, i + 1, target_count)
+                        await on_place_inspected(lead_data, 1, 1)
+
+                    await browser.close()
+                    return results
+
+                # Progressive in-view card inspection loop:
+                # Discovers and inspects each place card in the viewport before Google Maps virtual DOM unmounts it.
+                scroll_attempts = 0
+                max_scroll_attempts = 15 if (max_results == 0 or max_results > 50) else max(5, (max_results // 5) + 2)
+                stagnant_scrolls = 0
+                seen_hrefs: Set[str] = set()
+
+                if on_progress_status:
+                    await on_progress_status(f"📡 {city} > {district} işletme kanalları taranıyor...", 15)
+
+                while scroll_attempts < max_scroll_attempts:
+                    current_cards = await page.locator('a.hfpxzc').all()
+                    if len(current_cards) == 0 and scroll_attempts == 0:
+                        await page.wait_for_timeout(1500)
+                        current_cards = await page.locator('a.hfpxzc').all()
+
+                    logger.info(f"[GMAPS_PLAYWRIGHT] [Scroll {scroll_attempts+1}] Found {len(current_cards)} cards in DOM")
+                    new_cards_inspected_this_scroll = 0
+
+                    for card in current_cards:
+                        try:
+                            href = await card.get_attribute("href")
+                            raw_name = await card.get_attribute("aria-label")
+
+                            if not href or not raw_name:
+                                continue
+                            if href in seen_hrefs or raw_name in seen_names:
+                                continue
+
+                            seen_hrefs.add(href)
+                            seen_names.add(raw_name)
+                            new_cards_inspected_this_scroll += 1
+
+                            # Inspect the visible card
+                            try:
+                                await card.scroll_into_view_if_needed(timeout=1000)
+                                await card.click(timeout=1500)
+                                try:
+                                    await page.wait_for_selector('button[data-item-id="address"], div.Io6YTe, button[data-item-id*="phone"]', timeout=1500)
+                                except Exception:
+                                    await page.wait_for_timeout(450)
+                            except Exception as click_err:
+                                logger.debug(f"[GMAPS_PLAYWRIGHT] Card click fallback for '{raw_name}': {click_err}")
+
+                            # Extract detailed attributes from the active place details pane
+                            details = await page.evaluate("""() => {
+                                const res = {
+                                    address: null,
+                                    phone: null,
+                                    website: null,
+                                    rating: null,
+                                    reviewsCount: 0,
+                                    category: null,
+                                    is_sponsored: false
+                                };
+
+                                // Check sponsored badge
+                                if (document.querySelector('div.kpi10b, span.kpi10b, [aria-label*="Sponsorlu"], [aria-label*="Sponsored"]')) {
+                                    res.is_sponsored = true;
+                                }
+
+                                // 1. Full Address
+                                const addrBtn = document.querySelector('button[data-item-id="address"], [data-tooltip*="Adres"], [data-item-id*="address"]');
+                                if (addrBtn) {
+                                    res.address = addrBtn.getAttribute('aria-label') || addrBtn.innerText.trim();
+                                }
+
+                                // 2. Direct Phone
+                                const phoneBtn = document.querySelector('button[data-item-id*="phone"], a[href*="tel:"]');
+                                if (phoneBtn) {
+                                    res.phone = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
+                                }
+
+                                // 3. Official Website
+                                const webBtn = document.querySelector('a[data-item-id="authority"], a[aria-label*="Web sitesi"], a[data-tooltip*="Web sitesi"]');
+                                if (webBtn) {
+                                    res.website = webBtn.href;
+                                }
+
+                                // 4. Rating & Reviews
+                                const ratingEl = document.querySelector('div.F7nice span[aria-hidden="true"], span.MW4etd');
+                                if (ratingEl) {
+                                    const rText = ratingEl.innerText.replace(',', '.').trim();
+                                    res.rating = parseFloat(rText) || null;
+                                }
+                                const revEl = document.querySelector('div.F7nice span[aria-label*="yorum"], span.UY7F9, span[aria-label*="reviews"]');
+                                if (revEl) {
+                                    const revClean = revEl.innerText.replace(/[^0-9]/g, '');
+                                    if (revClean) res.reviewsCount = parseInt(revClean, 10);
+                                }
+
+                                // 5. Category
+                                const catBtn = document.querySelector('button[jsaction*="category"]');
+                                if (catBtn) res.category = catBtn.innerText.trim();
+
+                                // 6. Deep Scan all Io6YTe / rogA2c text rows if phone/address still missing
+                                const rows = Array.from(document.querySelectorAll('div.Io6YTe, div.rogA2c, span.LrzXr')).map(r => r.innerText.trim());
+                                for (const row of rows) {
+                                    if (!res.phone) {
+                                        const pMatch = row.match(/(?:0[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|\\+90[\\s\\.\\-\\(\\)]*[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}|0850[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2})/);
+                                        if (pMatch) {
+                                            res.phone = pMatch[0];
+                                        }
+                                    }
+                                    if (!res.address) {
+                                        if (row.includes('Mah') || row.includes('Cd') || row.includes('Sok') || row.includes('No:') || row.includes('347') || row.includes('34') || row.includes('/')) {
+                                            res.address = row;
+                                        }
+                                    }
+                                }
+
+                                return res;
+                            }""")
+
+                            # Clean full address
+                            full_address = clean_extracted_address(details.get("address")) or f"{district}, {city}"
+
+                            # Clean & normalize phone
+                            raw_phone = details.get("phone")
+                            phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
+
+                            # Clean website
+                            clean_web = clean_extracted_website(details.get("website"))
+
+                            # Coordinates
+                            lat, lon = extract_coords_from_url(href)
+
+                            lead_dict = {
+                                "name": raw_name,
+                                "category": details.get("category") or keyword,
+                                "phone": raw_phone,
+                                "phone_e164": phone_data["e164"] if phone_data else None,
+                                "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
+                                "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
+                                "website": clean_web,
+                                "address": full_address,
+                                "city": city,
+                                "district": district,
+                                "latitude": lat,
+                                "longitude": lon,
+                                "rating": details.get("rating"),
+                                "reviews_count": details.get("reviewsCount", 0),
+                                "google_maps_url": href,
+                                "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
+                                "source": "GOOGLE_MAPS",
+                                "is_verified": True if (phone_data or clean_web or details.get("rating")) else False,
+                                "display_name": f"{raw_name}, {full_address}"
+                            }
+
+                            results.append(lead_dict)
+                            logger.info(f"[GMAPS_PLAYWRIGHT] Extracted #{len(results)}: '{raw_name}' ({phone_data['e164'] if phone_data else 'No phone'})")
+
+                            # Real-time satellite-tuner style callback
+                            if on_place_inspected:
+                                await on_place_inspected(lead_dict, len(results), max_results or 100)
+
+                            if max_results > 0 and len(results) >= max_results:
+                                break
+                        except Exception as item_err:
+                            logger.warning(f"[GMAPS_PLAYWRIGHT] Error processing card item '{raw_name}': {item_err}", exc_info=True)
+
+                    if max_results > 0 and len(results) >= max_results:
+                        break
+
+                    # Check for explicit end-of-results markers
+                    end_marker = page.locator('span:has-text("Tüm sonuçlara ulaştınız"), span:has-text("Sonuçların sonuna geldiniz"), span:has-text("reached the end"), div.HlvSq')
+                    if await end_marker.count() > 0:
+                        logger.info(f"[GMAPS_PLAYWRIGHT] Reached end of results marker for {city} > {district}.")
+                        break
+
+                    if new_cards_inspected_this_scroll == 0:
+                        stagnant_scrolls += 1
+                        if stagnant_scrolls >= 3:
+                            break
+                    else:
+                        stagnant_scrolls = 0
+
+                    # Feed scroll with last card focus, mouse wheel and PageDown
+                    try:
+                        last_card = page.locator('a.hfpxzc').last
+                        if await last_card.count() > 0:
+                            await last_card.scroll_into_view_if_needed(timeout=1000)
+
+                        feed_el = page.locator('div[role="feed"]').first
+                        if await feed_el.is_visible():
+                            await feed_el.hover()
+                            await page.mouse.wheel(0, 5000)
+                            await page.keyboard.press("PageDown")
+                    except Exception:
+                        await page.evaluate("""() => {
+                            const feedEl = document.querySelector('div[role="feed"]');
+                            if (feedEl) feedEl.scrollTop += 5000;
+                        }""")
+                    
+                    await page.wait_for_timeout(1000)
+                    scroll_attempts += 1
 
             except Exception as e:
                 logger.error(f"[GMAPS_PLAYWRIGHT] Error searching '{query}': {e}", exc_info=True)
