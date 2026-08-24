@@ -549,7 +549,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       {/* Floating / Sticky Bulk Action Toolbar */}
       {selectedCount > 0 && (
         <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2.5 flex-wrap">
             <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center font-bold text-xs">
               {selectedCount}
             </span>
@@ -558,6 +558,17 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 ? `Tüm ${total} Müşteri Adayı Seçildi`
                 : `${selectedCount} Müşteri Adayı Seçildi`}
             </span>
+
+            {/* Quick Button to Select All across all pages if not already done */}
+            {!selectAllMatching && total > leads.length && (
+              <button
+                type="button"
+                onClick={handleSelectAllAcrossPages}
+                className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] underline underline-offset-2 transition-all cursor-pointer"
+              >
+                Tüm {total} Kaydı Seç
+              </button>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -576,7 +587,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Seçilenleri Sil ({selectedCount})</span>
+              <span>{selectAllMatching ? `Tümünü Sil (${total})` : `Seçilenleri Sil (${selectedCount})`}</span>
             </button>
 
             <button
@@ -592,26 +603,27 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       )}
 
       {/* Gmail-Style "Select All Across Pages" Notice Banner */}
-      {isAllCurrentPageSelected && total > pageSize && (
-        <div className="p-3 rounded-xl bg-slate-100 dark:bg-[#2F3349] border border-slate-200/80 dark:border-white/[0.08] text-xs text-center text-slate-700 dark:text-slate-200 animate-fade-in flex items-center justify-center gap-2">
+      {selectedCount > 0 && total > leads.length && (
+        <div className="p-3 rounded-xl bg-indigo-50/80 dark:bg-[#7367F0]/10 border border-[#7367F0]/30 text-xs text-center text-slate-700 dark:text-slate-200 animate-fade-in flex items-center justify-center gap-2">
           {!selectAllMatching ? (
             <>
-              <span>Bu sayfadaki <strong>{leads.length}</strong> müşteri adayı seçildi.</span>
+              <span>Sayfadaki <strong>{selectedCount}</strong> müşteri adayı seçildi.</span>
               <button
                 type="button"
                 onClick={handleSelectAllAcrossPages}
-                className="font-bold text-[#7367F0] hover:underline cursor-pointer"
+                className="font-extrabold text-[#7367F0] dark:text-[#A59DF8] hover:underline cursor-pointer flex items-center gap-1"
               >
-                Filtrelenen tüm {total} müşteri adayını seç
+                <span>Filtrelenen tüm {total} müşteri adayını seçmek için tıklayın</span>
+                <Check className="w-3.5 h-3.5" />
               </button>
             </>
           ) : (
             <>
-              <span>Filtrelenen <strong>tüm {total}</strong> müşteri adayı seçildi.</span>
+              <span>✅ Filtrelenen <strong>TÜM {total}</strong> müşteri adayı seçildi.</span>
               <button
                 type="button"
                 onClick={handleClearSelection}
-                className="font-bold text-slate-400 hover:text-[#EA5455] hover:underline cursor-pointer"
+                className="font-bold text-slate-400 hover:text-[#EA5455] hover:underline cursor-pointer ml-2"
               >
                 Seçimi temizle
               </button>
@@ -889,19 +901,49 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </div>
 
             {/* Modal Body Info */}
-            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-2 mb-5">
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-3 mb-5">
               {!isBulkDelete && leadToDelete ? (
                 <p>
                   <strong className="text-slate-800 dark:text-white font-bold">{leadToDelete.name}</strong> isimli müşteri adayını kalıcı olarak silmek istediğinize emin misiniz?
                 </p>
-              ) : selectAllMatching ? (
-                <p className="text-[#EA5455] font-bold">
-                  ⚠️ Dikkat: Mevcut filtrelere uyan <u>tüm {total} adet</u> müşteri adayı veritabanından kalıcı olarak temizlenecektir!
-                </p>
               ) : (
-                <p>
-                  Seçmiş olduğunuz <strong className="text-slate-800 dark:text-white font-bold">{selectedCount} adet</strong> müşteri adayı veritabanından kalıcı olarak silinecektir.
-                </p>
+                <div className="space-y-2">
+                  <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-slate-200 dark:border-white/[0.08] cursor-pointer hover:bg-slate-100 dark:hover:bg-white/[0.03] transition-colors">
+                    <input
+                      type="radio"
+                      name="deleteScope"
+                      checked={!selectAllMatching}
+                      onChange={() => setSelectAllMatching(false)}
+                      className="mt-0.5 text-[#EA5455] focus:ring-0"
+                    />
+                    <div>
+                      <span className="font-bold text-slate-800 dark:text-white">
+                        Sadece Seçilenleri Sil ({selectedIds.length} Kayıt)
+                      </span>
+                      <p className="text-[11px] text-slate-400">Bu sayfada işaretlediğiniz {selectedIds.length} kayıt silinir.</p>
+                    </div>
+                  </label>
+
+                  {total > leads.length && (
+                    <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/10 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors">
+                      <input
+                        type="radio"
+                        name="deleteScope"
+                        checked={selectAllMatching}
+                        onChange={() => setSelectAllMatching(true)}
+                        className="mt-0.5 text-[#EA5455] focus:ring-0"
+                      />
+                      <div>
+                        <span className="font-bold text-[#EA5455]">
+                          Filtrelenen TÜM Müşteri Adaylarını Sil ({total} Kayıt)
+                        </span>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-300">
+                          Mevcut arama sonucundaki tüm sayfaların kayıtları kalıcı olarak temizlenir.
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                </div>
               )}
               <p className="text-[11px] text-slate-400">
                 Silinen kayıtların iletişim geçmişi ve lead kartları sistemden tamamen kaldırılır.
@@ -934,7 +976,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    <span>Evet, Kalıcı Olarak Sil</span>
+                    <span>
+                      {isBulkDelete 
+                        ? (selectAllMatching ? `Evet, Tüm ${total} Kaydı Sil` : `Evet, ${selectedIds.length} Kaydı Sil`) 
+                        : 'Evet, Kalıcı Olarak Sil'}
+                    </span>
                   </>
                 )}
               </Button>
