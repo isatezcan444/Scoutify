@@ -73,6 +73,38 @@ export class ApiClient {
     if (!res.ok) throw new Error('Lead silinemedi');
   }
 
+  static async bulkDeleteLeads(payload: {
+    lead_ids?: number[];
+    delete_all_matching?: boolean;
+    search?: string;
+    city?: string;
+    districts?: string[];
+    categories?: string[];
+    status?: string;
+    whatsapp_eligible_only?: boolean;
+  }): Promise<{ deleted_count: number }> {
+    const res = await fetch(`${API_BASE}/leads/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Toplu silme işlemi başarısız oldu');
+    return res.json();
+  }
+
+  static async bulkBlacklistLeads(payload: {
+    lead_ids: number[];
+    reason?: string;
+  }): Promise<{ blacklisted_count: number; leads_updated: number }> {
+    const res = await fetch(`${API_BASE}/leads/bulk-blacklist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) throw new Error('Toplu kara listeye ekleme işlemi başarısız oldu');
+    return res.json();
+  }
+
   static async exportCsv(filters: any = {}): Promise<void> {
     const res = await fetch(`${API_BASE}/leads/export/csv`, {
       method: 'POST',

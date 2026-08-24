@@ -63,3 +63,18 @@ class LeadListResponse(BaseModel):
     page: int
     size: int
     pages: int
+
+class BulkDeleteRequest(BaseModel):
+    lead_ids: Optional[List[int]] = None
+    delete_all_matching: Optional[bool] = False
+    search: Optional[str] = None
+    city: Optional[str] = None
+    districts: Optional[List[str]] = None
+    categories: Optional[List[str]] = None
+    status: Optional[LeadStatus] = None
+    whatsapp_eligible_only: Optional[bool] = False
+
+class BulkBlacklistRequest(BaseModel):
+    lead_ids: List[int]
+    reason: Optional[str] = "Toplu kara listeye eklendi"
+

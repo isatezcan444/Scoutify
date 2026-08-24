@@ -5,11 +5,14 @@ from sqlalchemy import select, func, or_, update, delete
 
 from backend.app.core.database import get_db
 from backend.app.models.lead import Lead, LeadStatus
+from backend.app.models.blacklist import Blacklist
 from backend.app.schemas.lead import (
     LeadResponse,
     LeadListResponse,
     LeadCreate,
-    LeadUpdate
+    LeadUpdate,
+    BulkDeleteRequest,
+    BulkBlacklistRequest
 )
 from backend.app.services.phone_service import PhoneService
 from backend.app.services.export_service import ExportService
@@ -181,6 +184,68 @@ async def delete_lead(lead_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(lead)
     await db.commit()
     return {"message": "Lead başarıyla silindi", "id": lead_id}
+
+@router.post("/bulk-delete")
+async def bulk_delete_leads(payload: BulkDeleteRequest, db: AsyncSession = Depends(get_db)):
+    if payload.lead_ids and len(payload.lead_ids) > 0:
+        stmt = delete(Lead).where(Lead.id.in_(payload.lead_ids))
+        res = await db.execute(stmt)
+        await db.commit()
+        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else len(payload.lead_ids)}
+    elif payload.delete_all_matching:
+        stmt = delete(Lead)
+        conditions = []
+        if payload.search:
+            conditions.append(or_(
+                Lead.name.ilike(f"%{payload.search}%"),
+                Lead.phone.ilike(f"%{payload.search}%"),
+                Lead.phone_e164.ilike(f"%{payload.search}%"),
+                Lead.category.ilike(f"%{payload.search}%"),
+                Lead.address.ilike(f"%{payload.search}%")
+            ))
+        if payload.city:
+            conditions.append(Lead.city.ilike(f"%{payload.city}%"))
+        if payload.districts:
+            conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in payload.districts if d.strip()]))
+        if payload.categories:
+            conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in payload.categories if c.strip()]))
+        if payload.status:
+            conditions.append(Lead.status == payload.status)
+        if payload.whatsapp_eligible_only:
+            conditions.append(Lead.is_whatsapp_eligible == True)
+        
+        if conditions:
+            for c in conditions:
+                stmt = stmt.where(c)
+                
+        res = await db.execute(stmt)
+        await db.commit()
+        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0}
+    else:
+        raise HTTPException(status_code=400, detail="Silinecek lead belirtilmedi")
+
+@router.post("/bulk-blacklist")
+async def bulk_blacklist_leads(payload: BulkBlacklistRequest, db: AsyncSession = Depends(get_db)):
+    if not payload.lead_ids:
+        raise HTTPException(status_code=400, detail="Kara listeye eklenecek lead belirtilmedi")
+        
+    stmt = select(Lead).where(Lead.id.in_(payload.lead_ids))
+    res = await db.execute(stmt)
+    leads = res.scalars().all()
+    
+    count = 0
+    for lead in leads:
+        lead.status = LeadStatus.UNSUBSCRIBED
+        if lead.phone_e164:
+            bl_stmt = select(Blacklist).where(Blacklist.phone_e164 == lead.phone_e164)
+            bl_res = await db.execute(bl_stmt)
+            if not bl_res.scalar_one_or_none():
+                bl = Blacklist(phone_e164=lead.phone_e164, reason=payload.reason or "Toplu kara listeye eklendi")
+                db.add(bl)
+                count += 1
+                
+    await db.commit()
+    return {"blacklisted_count": count, "leads_updated": len(leads)}
 
 @router.post("/export/csv")
 async def export_leads_csv(

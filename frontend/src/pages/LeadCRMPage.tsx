@@ -13,12 +13,13 @@ import {
   Globe, 
   Loader2, 
   X, 
-  MessageCircle,
-  Navigation,
-  ExternalLink,
   RotateCcw,
-  Layers,
-  Check
+  Check,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  MinusSquare,
+  Shield
 } from 'lucide-react';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
@@ -27,7 +28,7 @@ import { ApiClient } from '../api/client';
 import { Lead, LeadStatus } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Card } from '../components/ui/card';
 
 interface LeadCRMPageProps {
   onRefreshStats: () => void;
@@ -48,7 +49,24 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const [waOnly, setWaOnly] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Modals state
+  // Selection state (Gmail style)
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+
+  // Delete Modal State
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
+  const [isBulkDelete, setIsBulkDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // Blacklist Modal State
+  const [isBlacklistModalOpen, setIsBlacklistModalOpen] = useState(false);
+  const [leadToBlacklist, setLeadToBlacklist] = useState<Lead | null>(null);
+  const [isBulkBlacklist, setIsBulkBlacklist] = useState(false);
+  const [blacklistReason, setBlacklistReason] = useState('Kullanıcı talebi / İletişim reddi');
+  const [isBlacklisting, setIsBlacklisting] = useState(false);
+
+  // Add & Quick Send Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSendModalOpen, setIsSendModalOpen] = useState(false);
   const [selectedLeadForSend, setSelectedLeadForSend] = useState<Lead | null>(null);
@@ -90,6 +108,150 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     fetchLeads();
   }, [page, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
 
+  // Clear selection on page/filter change unless all-matching is active
+  useEffect(() => {
+    if (!selectAllMatching) {
+      setSelectedIds([]);
+    }
+  }, [page, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
+
+  // --- Gmail-style Checkbox logic ---
+  const currentPageIds = leads.map((l) => l.id);
+  const isAllCurrentPageSelected =
+    leads.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
+  const isSomeCurrentPageSelected =
+    currentPageIds.some((id) => selectedIds.includes(id)) && !isAllCurrentPageSelected;
+
+  const handleToggleSelectAllPage = () => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedIds([]);
+      return;
+    }
+
+    if (isAllCurrentPageSelected) {
+      // Unselect current page
+      setSelectedIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
+    } else {
+      // Select all on current page
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentPageIds])));
+    }
+  };
+
+  const handleToggleSingleSelect = (id: number) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedIds(currentPageIds.filter((x) => x !== id));
+      return;
+    }
+
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllAcrossPages = () => {
+    setSelectAllMatching(true);
+    setSelectedIds(currentPageIds);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+    setSelectAllMatching(false);
+  };
+
+  // --- Delete Modal Handlers ---
+  const handleOpenSingleDelete = (lead: Lead) => {
+    setLeadToDelete(lead);
+    setIsBulkDelete(false);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleOpenBulkDelete = () => {
+    setLeadToDelete(null);
+    setIsBulkDelete(true);
+    setIsDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      if (isBulkDelete) {
+        if (selectAllMatching) {
+          await ApiClient.bulkDeleteLeads({
+            delete_all_matching: true,
+            search: search || undefined,
+            city: selectedCity || undefined,
+            districts: selectedDistricts.length > 0 ? selectedDistricts : undefined,
+            categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+            status: statusFilter || undefined,
+            whatsapp_eligible_only: waOnly,
+          });
+        } else {
+          await ApiClient.bulkDeleteLeads({ lead_ids: selectedIds });
+        }
+        handleClearSelection();
+      } else if (leadToDelete) {
+        await ApiClient.deleteLead(leadToDelete.id);
+      }
+
+      setIsDeleteModalOpen(false);
+      setLeadToDelete(null);
+      fetchLeads();
+      onRefreshStats();
+    } catch (err: any) {
+      alert(`Silme hatası: ${err.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // --- Blacklist Modal Handlers ---
+  const handleOpenSingleBlacklist = (lead: Lead) => {
+    setLeadToBlacklist(lead);
+    setIsBulkBlacklist(false);
+    setBlacklistReason('Kullanıcı talebi / İletişim reddi');
+    setIsBlacklistModalOpen(true);
+  };
+
+  const handleOpenBulkBlacklist = () => {
+    setLeadToBlacklist(null);
+    setIsBulkBlacklist(true);
+    setBlacklistReason('Toplu kara listeye eklendi');
+    setIsBlacklistModalOpen(true);
+  };
+
+  const handleConfirmBlacklist = async () => {
+    setIsBlacklisting(true);
+    try {
+      if (isBulkBlacklist) {
+        const idsToBlacklist = selectAllMatching
+          ? currentPageIds
+          : selectedIds;
+        await ApiClient.bulkBlacklistLeads({
+          lead_ids: idsToBlacklist,
+          reason: blacklistReason,
+        });
+        handleClearSelection();
+      } else if (leadToBlacklist) {
+        await ApiClient.addBlacklist({
+          phone: leadToBlacklist.phone_e164 || leadToBlacklist.phone,
+          reason: blacklistReason,
+        });
+      }
+
+      setIsBlacklistModalOpen(false);
+      setLeadToBlacklist(null);
+      fetchLeads();
+      onRefreshStats();
+    } catch (err: any) {
+      alert(`Kara liste hatası: ${err.message}`);
+    } finally {
+      setIsBlacklisting(false);
+    }
+  };
+
+  // --- Status & Add Lead Handlers ---
   const handleStatusChange = async (leadId: number, newStatus: LeadStatus) => {
     try {
       await ApiClient.updateLead(leadId, { status: newStatus });
@@ -97,18 +259,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       onRefreshStats();
     } catch (err) {
       alert('Durum güncellenemedi');
-    }
-  };
-
-  const handleDeleteLead = async (leadId: number) => {
-    if (!confirm('Bu lead kaydını silmek istediğinize emin misiniz?')) return;
-    try {
-      await ApiClient.deleteLead(leadId);
-      setLeads(leads.filter((l) => l.id !== leadId));
-      setTotal((prev) => Math.max(0, prev - 1));
-      onRefreshStats();
-    } catch (err) {
-      alert('Silme işlemi başarısız');
     }
   };
 
@@ -174,18 +324,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     }
   };
 
-  const handleBlacklistNumber = async (phone: string, reason: string) => {
-    if (!confirm(`${phone} numarasını kara listeye eklemek istediğinize emin misiniz?`)) return;
-    try {
-      await ApiClient.addBlacklist({ phone, reason: reason || 'Kullanıcı talebi' });
-      alert('Numara kara listeye eklendi');
-      fetchLeads();
-      onRefreshStats();
-    } catch (err: any) {
-      alert(`Hata: ${err.message}`);
-    }
-  };
-
   const hasActiveFilters = Boolean(
     search || selectedCity || selectedDistricts.length > 0 || selectedCategories.length > 0 || statusFilter || waOnly
   );
@@ -199,6 +337,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     setWaOnly(false);
     setPage(1);
   };
+
+  const selectedCount = selectAllMatching ? total : selectedIds.length;
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-16 select-none animate-fade-in">
@@ -406,12 +546,103 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         </div>
       </Card>
 
+      {/* Floating / Sticky Bulk Action Toolbar */}
+      {selectedCount > 0 && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center space-x-2.5">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center font-bold text-xs">
+              {selectedCount}
+            </span>
+            <span className="text-xs font-extrabold tracking-wide">
+              {selectAllMatching
+                ? `Tüm ${total} Müşteri Adayı Seçildi`
+                : `${selectedCount} Müşteri Adayı Seçildi`}
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={handleOpenBulkBlacklist}
+              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-[#FF9F43]" />
+              <span>Kara Listeye Ekle</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleOpenBulkDelete}
+              className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Seçilenleri Sil ({selectedCount})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
+              title="Seçimi Temizle"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Gmail-Style "Select All Across Pages" Notice Banner */}
+      {isAllCurrentPageSelected && total > pageSize && (
+        <div className="p-3 rounded-xl bg-slate-100 dark:bg-[#2F3349] border border-slate-200/80 dark:border-white/[0.08] text-xs text-center text-slate-700 dark:text-slate-200 animate-fade-in flex items-center justify-center gap-2">
+          {!selectAllMatching ? (
+            <>
+              <span>Bu sayfadaki <strong>{leads.length}</strong> müşteri adayı seçildi.</span>
+              <button
+                type="button"
+                onClick={handleSelectAllAcrossPages}
+                className="font-bold text-[#7367F0] hover:underline cursor-pointer"
+              >
+                Filtrelenen tüm {total} müşteri adayını seç
+              </button>
+            </>
+          ) : (
+            <>
+              <span>Filtrelenen <strong>tüm {total}</strong> müşteri adayı seçildi.</span>
+              <button
+                type="button"
+                onClick={handleClearSelection}
+                className="font-bold text-slate-400 hover:text-[#EA5455] hover:underline cursor-pointer"
+              >
+                Seçimi temizle
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Leads Table Card */}
       <Card className="overflow-hidden shadow-sm">
         <div className="overflow-x-auto min-w-full">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200/80 dark:border-white/[0.08] bg-slate-50/75 dark:bg-white/[0.02] text-slate-500 dark:text-[#7E7F96] font-bold uppercase tracking-wider text-[11px]">
+                {/* Select All Checkbox Header */}
+                <th className="py-3.5 px-4 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllPage}
+                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors"
+                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Bu Sayfadaki Tümünü Seç'}
+                  >
+                    {selectAllMatching || isAllCurrentPageSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                    ) : isSomeCurrentPageSelected ? (
+                      <MinusSquare className="w-4 h-4 text-[#7367F0]" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">İşletme Profili</th>
                 <th className="py-3.5 px-4">İletişim & WhatsApp</th>
                 <th className="py-3.5 px-4">Lokasyon</th>
@@ -423,155 +654,177 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#7367F0] mb-2" />
                     <span>Müşteri adayları yükleniyor...</span>
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-slate-400">
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Users className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                     <p className="font-bold text-slate-700 dark:text-slate-200">Kayıt Bulunamadı</p>
                     <p className="text-[11px] mt-0.5">Arama kriterlerinizi değiştirin veya "İşletme Ara" bölümünden yeni arama başlatın.</p>
                   </td>
                 </tr>
               ) : (
-                leads.map((lead) => (
-                  <tr 
-                    key={lead.id} 
-                    className="hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition-colors group"
-                  >
-                    {/* Name & Category */}
-                    <td className="py-3.5 px-4 max-w-[240px]">
-                      <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
-                        {lead.name}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                          {lead.category || 'Genel'}
-                        </span>
-                        {lead.entity_type && (
-                          <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
-                            {lead.entity_type}
-                          </span>
-                        )}
-                      </div>
-                    </td>
+                leads.map((lead) => {
+                  const isSelected = selectedIds.includes(lead.id) || selectAllMatching;
+                  return (
+                    <tr 
+                      key={lead.id} 
+                      className={`transition-colors group ${
+                        isSelected
+                          ? 'bg-[#7367F0]/10 dark:bg-[#7367F0]/15'
+                          : 'hover:bg-slate-50/70 dark:hover:bg-white/[0.02]'
+                      }`}
+                    >
+                      {/* Row Checkbox */}
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSingleSelect(lead.id)}
+                          className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-400" />
+                          )}
+                        </button>
+                      </td>
 
-                    {/* Phone & WhatsApp */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
-                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{lead.phone_e164 || lead.phone || 'Belirtilmemiş'}</span>
-                      </div>
-                      <div className="mt-1">
-                        {lead.is_whatsapp_eligible ? (
-                          <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[10px]">
-                            <WhatsAppIcon className="w-3 h-3" />
-                            <span>WhatsApp Aktif</span>
-                          </span>
-                        ) : (
-                          <span className="text-[10px] text-slate-400 font-sans">
-                            WhatsApp Doğrulanmadı
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Location */}
-                    <td className="py-3.5 px-4 max-w-[240px]">
-                      <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
-                        <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                        <span className="line-clamp-2 leading-tight">
-                          {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
-                        </span>
-                      </div>
-                    </td>
-
-                    {/* Rating & Website */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {lead.rating ? (
-                        <div className="flex items-center space-x-1 text-xs">
-                          <Star className="w-3.5 h-3.5 text-[#FF9F43] fill-[#FF9F43]" />
-                          <span className="font-bold text-slate-800 dark:text-white">{lead.rating}</span>
-                          {lead.reviews_count ? (
-                            <span className="text-slate-400 text-[10px]">({lead.reviews_count})</span>
-                          ) : null}
+                      {/* Name & Category */}
+                      <td className="py-3.5 px-4 max-w-[240px]">
+                        <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
+                          {lead.name}
                         </div>
-                      ) : (
-                        <span className="text-slate-400 text-[10px]">Puan Yok</span>
-                      )}
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
+                            {lead.category || 'Genel'}
+                          </span>
+                          {lead.entity_type && (
+                            <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
+                              {lead.entity_type}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                      {lead.website ? (
-                        <a
-                          href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="mt-1 inline-flex items-center space-x-1 text-[11px] text-[#7367F0] hover:underline truncate max-w-[140px]"
-                        >
-                          <Globe className="w-3 h-3 shrink-0" />
-                          <span className="truncate">{lead.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
-                        </a>
-                      ) : null}
-                    </td>
+                      {/* Phone & WhatsApp */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{lead.phone_e164 || lead.phone || 'Belirtilmemiş'}</span>
+                        </div>
+                        <div className="mt-1">
+                          {lead.is_whatsapp_eligible ? (
+                            <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[10px]">
+                              <WhatsAppIcon className="w-3 h-3" />
+                              <span>WhatsApp Aktif</span>
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-sans">
+                              WhatsApp Doğrulanmadı
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* Status Dropdown */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <select
-                        value={lead.status}
-                        onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
-                          lead.status === 'NEW'
-                            ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
-                            : lead.status === 'CONTACTED'
-                            ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
-                            : lead.status === 'REPLIED'
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
-                            : lead.status === 'INTERESTED'
-                            ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20'
-                            : 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
-                        }`}
-                      >
-                        <option value="NEW">NEW</option>
-                        <option value="CONTACTED">CONTACTED</option>
-                        <option value="REPLIED">REPLIED</option>
-                        <option value="INTERESTED">INTERESTED</option>
-                        <option value="UNSUBSCRIBED">UNSUBSCRIBED</option>
-                      </select>
-                    </td>
+                      {/* Location */}
+                      <td className="py-3.5 px-4 max-w-[240px]">
+                        <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2 leading-tight">
+                            {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
+                          </span>
+                        </div>
+                      </td>
 
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <div className="flex items-center justify-end space-x-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSendModal(lead)}
-                          title="Hızlı WhatsApp Mesajı Gönder"
-                          className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors"
+                      {/* Rating & Website */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {lead.rating ? (
+                          <div className="flex items-center space-x-1 text-xs">
+                            <Star className="w-3.5 h-3.5 text-[#FF9F43] fill-[#FF9F43]" />
+                            <span className="font-bold text-slate-800 dark:text-white">{lead.rating}</span>
+                            {lead.reviews_count ? (
+                              <span className="text-slate-400 text-[10px]">({lead.reviews_count})</span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[10px]">Puan Yok</span>
+                        )}
+
+                        {lead.website ? (
+                          <a
+                            href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex items-center space-x-1 text-[11px] text-[#7367F0] hover:underline truncate max-w-[140px]"
+                          >
+                            <Globe className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{lead.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                          </a>
+                        ) : null}
+                      </td>
+
+                      {/* Status Dropdown */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <select
+                          value={lead.status}
+                          onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
+                            lead.status === 'NEW'
+                              ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
+                              : lead.status === 'CONTACTED'
+                              ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
+                              : lead.status === 'REPLIED'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+                              : lead.status === 'INTERESTED'
+                              ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20'
+                              : 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                          }`}
                         >
-                          <Send className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleBlacklistNumber(lead.phone_e164 || lead.phone, 'Kullanıcı manuel engelledi')}
-                          title="Numarayı Kara Listeye Ekle"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-                        >
-                          <ShieldAlert className="w-4 h-4" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteLead(lead.id)}
-                          title="Lead'i Sil"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <option value="NEW">NEW</option>
+                          <option value="CONTACTED">CONTACTED</option>
+                          <option value="REPLIED">REPLIED</option>
+                          <option value="INTERESTED">INTERESTED</option>
+                          <option value="UNSUBSCRIBED">UNSUBSCRIBED</option>
+                        </select>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end space-x-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSendModal(lead)}
+                            title="Hızlı WhatsApp Mesajı Gönder"
+                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSingleBlacklist(lead)}
+                            title="Numarayı Kara Listeye Ekle"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                          >
+                            <ShieldAlert className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSingleDelete(lead)}
+                            title="Lead'i Sil"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -608,7 +861,200 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         )}
       </Card>
 
-      {/* Add New Lead Modal */}
+      {/* ========================================================================= */}
+      {/* BEAUTIFUL DELETE CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {isDeleteModalOpen && (
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          onClick={() => !isDeleting && setIsDeleteModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white dark:bg-[#2F3349] rounded-2xl shadow-2xl border border-slate-200 dark:border-white/[0.08] p-6 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with Danger Badge */}
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-[#EA5455] flex items-center justify-center shrink-0 border border-rose-200 dark:border-rose-500/20">
+                <Trash2 className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  {isBulkDelete 
+                    ? (selectAllMatching ? `Tüm (${total}) Müşteri Adayını Sil` : `Seçilen (${selectedCount}) Müşteri Adayını Sil`) 
+                    : 'Müşteri Adayını Sil'}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">Bu işlem geri alınamaz</p>
+              </div>
+            </div>
+
+            {/* Modal Body Info */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-2 mb-5">
+              {!isBulkDelete && leadToDelete ? (
+                <p>
+                  <strong className="text-slate-800 dark:text-white font-bold">{leadToDelete.name}</strong> isimli müşteri adayını kalıcı olarak silmek istediğinize emin misiniz?
+                </p>
+              ) : selectAllMatching ? (
+                <p className="text-[#EA5455] font-bold">
+                  ⚠️ Dikkat: Mevcut filtrelere uyan <u>tüm {total} adet</u> müşteri adayı veritabanından kalıcı olarak temizlenecektir!
+                </p>
+              ) : (
+                <p>
+                  Seçmiş olduğunuz <strong className="text-slate-800 dark:text-white font-bold">{selectedCount} adet</strong> müşteri adayı veritabanından kalıcı olarak silinecektir.
+                </p>
+              )}
+              <p className="text-[11px] text-slate-400">
+                Silinen kayıtların iletişim geçmişi ve lead kartları sistemden tamamen kaldırılır.
+              </p>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end space-x-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDeleting}
+                onClick={() => setIsDeleteModalOpen(false)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="bg-[#EA5455] hover:bg-[#D43B3C] text-white font-bold space-x-1.5 shadow-md shadow-[#EA5455]/30"
+              >
+                {isDeleting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Siliniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Evet, Kalıcı Olarak Sil</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* BEAUTIFUL BLACKLIST CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {isBlacklistModalOpen && (
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
+          onClick={() => !isBlacklisting && setIsBlacklistModalOpen(false)}
+        >
+          <div 
+            className="w-full max-w-md bg-white dark:bg-[#2F3349] rounded-2xl shadow-2xl border border-slate-200 dark:border-white/[0.08] p-6 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header with Amber Warning Badge */}
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-50 dark:bg-amber-500/10 text-[#FF9F43] flex items-center justify-center shrink-0 border border-amber-200 dark:border-amber-500/20">
+                <ShieldAlert className="w-6 h-6 stroke-[2.2]" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  {isBulkBlacklist ? `Seçilen (${selectedCount}) Numarayı Kara Listeye Ekle` : 'Numarayı Kara Listeye Ekle'}
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">WhatsApp Opt-Out & Anti-Spam Koruması</p>
+              </div>
+            </div>
+
+            {/* Info Message */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-2 mb-4">
+              {!isBulkBlacklist && leadToBlacklist ? (
+                <p>
+                  <strong className="text-slate-800 dark:text-white font-bold">{leadToBlacklist.name}</strong> ({leadToBlacklist.phone_e164 || leadToBlacklist.phone}) kara listeye eklenecek.
+                </p>
+              ) : (
+                <p>
+                  Seçilen <strong className="text-slate-800 dark:text-white font-bold">{selectedCount} adet</strong> işletme numarası kara listeye alınacaktır.
+                </p>
+              )}
+              <p className="text-[11px] text-[#FF9F43] font-semibold">
+                🛡️ Kara listeye alınan numaralara sistem üzerinden bir daha asla otomatik mesaj gönderilmeyecektir.
+              </p>
+            </div>
+
+            {/* Reason Selection */}
+            <div className="space-y-2 mb-5 text-xs">
+              <label className="text-slate-700 dark:text-slate-300 font-bold block">Engelleme / Opt-Out Nedeni</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {[
+                  'Kullanıcı talebi / İletişim reddi',
+                  'Yanlış numara / Ulaşılamıyor',
+                  'Spam şikayeti bildirimi',
+                  'Rakip firma / İlgisiz'
+                ].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setBlacklistReason(r)}
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                      blacklistReason === r
+                        ? 'bg-[#FF9F43]/15 text-[#FF9F43] border-[#FF9F43]'
+                        : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={blacklistReason}
+                onChange={(e) => setBlacklistReason(e.target.value)}
+                placeholder="Özel neden belirtin..."
+                className="w-full px-3 py-2 rounded-lg vuexy-input"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end space-x-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isBlacklisting}
+                onClick={() => setIsBlacklistModalOpen(false)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={isBlacklisting}
+                onClick={handleConfirmBlacklist}
+                className="bg-[#FF9F43] hover:bg-[#E58A32] text-white font-bold space-x-1.5 shadow-md shadow-[#FF9F43]/30"
+              >
+                {isBlacklisting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Ekleniyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <ShieldAlert className="w-4 h-4" />
+                    <span>Kara Listeye Ekle</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* ADD NEW LEAD MODAL */}
+      {/* ========================================================================= */}
       {isAddModalOpen && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
@@ -718,7 +1164,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         </div>
       )}
 
-      {/* Quick Send Message Modal */}
+      {/* ========================================================================= */}
+      {/* QUICK SINGLE MESSAGE SEND MODAL */}
+      {/* ========================================================================= */}
       {isSendModalOpen && selectedLeadForSend && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in select-none"
