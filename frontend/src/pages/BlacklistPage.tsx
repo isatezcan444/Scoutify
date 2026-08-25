@@ -12,10 +12,10 @@ import {
   MapPin, 
   CheckCircle2, 
   Save,
-  Star,
-  Globe,
-  Filter,
-  Users
+  CheckSquare,
+  Square,
+  MinusSquare,
+  RotateCcw
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { BlacklistEntry, Lead } from '../types';
@@ -34,6 +34,10 @@ export const BlacklistPage: React.FC = () => {
   // Table Search & Filter State
   const [tableSearch, setTableSearch] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
+
+  // Multi-Selection State (Gmail-style)
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [isBulkRemoving, setIsBulkRemoving] = useState(false);
 
   // Form & Lead Search State
   const [newReason, setNewReason] = useState('USER_REQUEST');
@@ -75,6 +79,38 @@ export const BlacklistPage: React.FC = () => {
       return matchesSearch && matchesReason;
     });
   }, [blacklist, tableSearch, reasonFilter]);
+
+  // Clean selected IDs when filter changes
+  useEffect(() => {
+    setSelectedIds((prev) => prev.filter((id) => filteredBlacklist.some((item) => item.id === id)));
+  }, [tableSearch, reasonFilter]);
+
+  // Selection Checkbox Logic
+  const visibleIds = filteredBlacklist.map((item) => item.id);
+  const isAllCurrentPageSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+  const isSomeCurrentPageSelected =
+    visibleIds.some((id) => selectedIds.includes(id)) && !isAllCurrentPageSelected;
+
+  const handleToggleSelectAllPage = () => {
+    if (isAllCurrentPageSelected) {
+      // Unselect all visible
+      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+    } else {
+      // Select all visible
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  const handleToggleSingleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+  };
 
   // Debounced Lead Search in Modal
   useEffect(() => {
@@ -179,9 +215,35 @@ export const BlacklistPage: React.FC = () => {
     try {
       await ApiClient.removeFromBlacklist(id);
       toast.success('İşletme kara listeden çıkarıldı.', 'Engel Kaldırıldı');
+      setSelectedIds((prev) => prev.filter((x) => x !== id));
       fetchBlacklist();
     } catch (err: any) {
       toast.error(err.message || 'Engel kaldırılamadı', 'Hata');
+    }
+  };
+
+  const handleBulkRemove = async () => {
+    if (selectedIds.length === 0) return;
+
+    const ok = await toast.confirm({
+      title: 'Seçilen Numaraları Kara Listeden Kaldır',
+      message: `Seçilen ${selectedIds.length} adet işletmenin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
+      confirmText: `Evet, ${selectedIds.length} Engeli Kaldır`,
+      cancelText: 'Vazgeç',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    setIsBulkRemoving(true);
+    try {
+      const res = await ApiClient.bulkRemoveFromBlacklist(selectedIds);
+      toast.success(`${res.deleted_count} numara başarıyla kara listeden çıkarıldı.`, 'Engeller Kaldırıldı');
+      setSelectedIds([]);
+      fetchBlacklist();
+    } catch (err: any) {
+      toast.error(err.message || 'Toplu silme işlemi başarısız oldu', 'Hata');
+    } finally {
+      setIsBulkRemoving(false);
     }
   };
 
@@ -273,12 +335,74 @@ export const BlacklistPage: React.FC = () => {
         </div>
       </Card>
 
+      {/* Floating / Sticky Bulk Action Toolbar (Matching Lead CRM) */}
+      {selectedIds.length > 0 && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+          <div className="flex items-center space-x-2.5">
+            <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center font-bold text-xs">
+              {selectedIds.length}
+            </span>
+            <span className="text-xs font-extrabold tracking-wide">
+              {selectedIds.length} İşletme / Numara Seçildi
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Button
+              size="sm"
+              variant="destructive"
+              disabled={isBulkRemoving}
+              onClick={handleBulkRemove}
+              className="space-x-1.5 font-bold shadow-md bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
+            >
+              {isBulkRemoving ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Siliniyor...</span>
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Seçilenleri Kara Listeden Kaldır ({selectedIds.length})</span>
+                </>
+              )}
+            </Button>
+
+            <button
+              type="button"
+              onClick={handleClearSelection}
+              className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 hover:text-white transition-colors cursor-pointer"
+              title="Seçimi Temizle"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Blacklist Table Matching Lead CRM Architecture */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto min-w-full">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200/80 dark:border-white/[0.08] bg-slate-50/75 dark:bg-white/[0.02] text-slate-500 dark:text-[#7E7F96] font-bold uppercase tracking-wider text-[11px]">
+                {/* Checkbox Header */}
+                <th className="py-3.5 px-4 w-10 text-center">
+                  <button
+                    type="button"
+                    onClick={handleToggleSelectAllPage}
+                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
+                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Tümünü Seç'}
+                  >
+                    {isAllCurrentPageSelected ? (
+                      <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                    ) : isSomeCurrentPageSelected ? (
+                      <MinusSquare className="w-4 h-4 text-[#7367F0]" />
+                    ) : (
+                      <Square className="w-4 h-4 text-slate-400" />
+                    )}
+                  </button>
+                </th>
                 <th className="py-3.5 px-4">İşletme Profili</th>
                 <th className="py-3.5 px-4">İletişim</th>
                 <th className="py-3.5 px-4">Engelleme Nedeni</th>
@@ -289,14 +413,14 @@ export const BlacklistPage: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] text-slate-700 dark:text-slate-300 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#EA5455] mb-2" />
                     <span className="text-xs font-bold block">Kara liste yükleniyor...</span>
                   </td>
                 </tr>
               ) : filteredBlacklist.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400 font-semibold">
+                  <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
                     <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                     <p className="font-bold text-slate-700 dark:text-slate-200">
                       {blacklist.length === 0 ? 'Kara listede kayıtlı numara bulunmuyor.' : 'Arama kriterlerinize uygun kayıt bulunamadı.'}
@@ -304,57 +428,82 @@ export const BlacklistPage: React.FC = () => {
                   </td>
                 </tr>
               ) : (
-                filteredBlacklist.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors group">
-                    {/* 1. İşletme Profili */}
-                    <td className="py-3.5 px-4 max-w-[280px]">
-                      <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
-                        {entry.lead_name || 'Kayıtlı İşletme Adı Yok'}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                          {entry.lead_category || 'Genel'}
-                        </span>
-                        {(entry.lead_district || entry.lead_city) && (
-                          <span className="text-[10px] text-slate-400 font-medium">
-                            • {[entry.lead_district, entry.lead_city].filter(Boolean).join(', ')}
+                filteredBlacklist.map((entry) => {
+                  const isSelected = selectedIds.includes(entry.id);
+                  return (
+                    <tr 
+                      key={entry.id} 
+                      className={`transition-colors group ${
+                        isSelected 
+                          ? 'bg-[#7367F0]/10 dark:bg-[#7367F0]/15' 
+                          : 'hover:bg-slate-50/60 dark:hover:bg-white/[0.02]'
+                      }`}
+                    >
+                      {/* Checkbox Cell */}
+                      <td className="py-3.5 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleSingleSelect(entry.id)}
+                          className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-slate-400" />
+                          )}
+                        </button>
+                      </td>
+
+                      {/* 1. İşletme Profili */}
+                      <td className="py-3.5 px-4 max-w-[280px]">
+                        <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
+                          {entry.lead_name || 'Kayıtlı İşletme Adı Yok'}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
+                            {entry.lead_category || 'Genel'}
                           </span>
-                        )}
-                      </div>
-                    </td>
+                          {(entry.lead_district || entry.lead_city) && (
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              • {[entry.lead_district, entry.lead_city].filter(Boolean).join(', ')}
+                            </span>
+                          )}
+                        </div>
+                      </td>
 
-                    {/* 2. İletişim */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
-                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                        <span>{entry.phone_e164}</span>
-                      </div>
-                    </td>
+                      {/* 2. İletişim */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
+                          <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                          <span>{entry.phone_e164}</span>
+                        </div>
+                      </td>
 
-                    {/* 3. Engelleme Nedeni */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <Badge variant="danger" className="text-[11px] font-bold">
-                        {getReasonLabel(entry.reason)}
-                      </Badge>
-                    </td>
+                      {/* 3. Engelleme Nedeni */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <Badge variant="danger" className="text-[11px] font-bold">
+                          {getReasonLabel(entry.reason)}
+                        </Badge>
+                      </td>
 
-                    {/* 4. Eklenme Tarihi */}
-                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-[#7E7F96] font-sans">
-                      {new Date(entry.created_at).toLocaleString('tr-TR')}
-                    </td>
+                      {/* 4. Eklenme Tarihi */}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-[#7E7F96] font-sans">
+                        {new Date(entry.created_at).toLocaleString('tr-TR')}
+                      </td>
 
-                    {/* 5. İşlemler */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                      <button
-                        onClick={() => handleRemove(entry.id, entry.phone_e164, entry.lead_name)}
-                        className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-[#EA5455]/10 transition-colors cursor-pointer"
-                        title="Kara Listeden Çıkar"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                      {/* 5. İşlemler */}
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => handleRemove(entry.id, entry.phone_e164, entry.lead_name)}
+                          className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-[#EA5455]/10 transition-colors cursor-pointer"
+                          title="Kara Listeden Çıkar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

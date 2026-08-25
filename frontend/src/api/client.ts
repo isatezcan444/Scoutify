@@ -348,6 +348,16 @@ export class ApiClient {
     const res = await fetch(`${API_BASE}/blacklist/${id}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('Numara kara listeden silinemedi');
   }
+
+  static async bulkRemoveFromBlacklist(ids: number[]): Promise<{ deleted_count: number }> {
+    const res = await fetch(`${API_BASE}/blacklist/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids })
+    });
+    if (!res.ok) throw new Error('Toplu kara listeden silme işlemi başarısız oldu');
+    return res.json();
+  }
 }
 
 export function createWebSocket(onMessage: (data: any) => void) {

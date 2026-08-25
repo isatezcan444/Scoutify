@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from backend.app.core.database import get_db
 from backend.app.models.blacklist import Blacklist
@@ -10,6 +11,10 @@ from backend.app.schemas.scraper import BlacklistCreate, BlacklistResponse
 from backend.app.services.phone_service import PhoneService
 
 router = APIRouter()
+
+class BulkDeleteBlacklistRequest(BaseModel):
+    ids: Optional[List[int]] = None
+    delete_all: Optional[bool] = False
 
 @router.get("", response_model=List[BlacklistResponse])
 async def list_blacklist(db: AsyncSession = Depends(get_db)):
@@ -97,3 +102,18 @@ async def remove_from_blacklist(bl_id: int, db: AsyncSession = Depends(get_db)):
     await db.delete(bl)
     await db.commit()
     return {"message": "Numara kara listeden çıkarıldı", "id": bl_id}
+
+@router.post("/bulk-delete")
+async def bulk_delete_blacklist(payload: BulkDeleteBlacklistRequest, db: AsyncSession = Depends(get_db)):
+    if payload.delete_all:
+        stmt = delete(Blacklist)
+        res = await db.execute(stmt)
+        await db.commit()
+        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0}
+    elif payload.ids:
+        stmt = delete(Blacklist).where(Blacklist.id.in_(payload.ids))
+        res = await db.execute(stmt)
+        await db.commit()
+        return {"deleted_count": res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0}
+    else:
+        raise HTTPException(status_code=400, detail="Silinecek kara liste kaydı belirtilmedi")
