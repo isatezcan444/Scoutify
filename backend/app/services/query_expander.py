@@ -4,8 +4,17 @@ Generates controlled, highly relevant Turkish and international term variations,
 directory category slugs, and OSM query parameters without altering the geographic scope.
 """
 import re
+import logging
 from typing import List, Dict, Set
 from backend.app.data.turkey_locations import normalize_turkish
+
+logger = logging.getLogger(__name__)
+
+# Administrative suffixes riding along location names ('İstanbul İli', 'Ataşehir İlçesi').
+_LOCATION_SUFFIX_TOKENS = ("il", "ili", "ilce", "ilcesi")
+
+# Separators preserved while rebuilding sanitized keywords.
+_KEYWORD_SEPARATORS = r"([\s&+/,:;|-]+)"
 
 
 class QueryExpander:
@@ -194,6 +203,103 @@ class QueryExpander:
                 if kw in norm_kw:
                     return cat_key
         return "general"
+
+    @staticmethod
+    def _strip_admin_suffix(norm_token: str) -> str:
+        """Reduces 'atasehir ilcesi' to 'atasehir' for location-token matching."""
+        parts = norm_token.split()
+        if len(parts) >= 2 and parts[-1] in _LOCATION_SUFFIX_TOKENS:
+            return " ".join(parts[:-1])
+        return norm_token
+
+    @classmethod
+    def strip_location_tokens(cls, keyword: str, city: str, districts: List[str]) -> str:
+        """
+        Removes city/district names accidentally typed inside the sector keyword,
+        PRESERVING the original connectors between surviving terms so downstream
+        variant-splitting ('&', '+' ...) keeps working.
+
+        Users sometimes paste a full search string such as
+        'Diş Klinikleri & Ağız Sağlığı Merkezleri + istanbul + ataşehir' into the
+        sector field. Left in place, the connector-splitter would turn 'istanbul'
+        and 'ataşehir' into independent search TERMS, producing geo-garbage queries.
+        Location binding is re-added deterministically by the caller ({city} {district}).
+        """
+        if not keyword or not keyword.strip():
+            return ""
+
+        blocked = {normalize_turkish(city)} if city else set()
+        blocked.update(normalize_turkish(d) for d in districts if d)
+        blocked.discard("")
+
+        def is_location_token(token: str) -> bool:
+            norm = normalize_turkish(token)
+            if not norm:
+                return False
+            if norm in _LOCATION_SUFFIX_TOKENS:
+                return True  # orphaned 'İli' / 'İlçesi' left behind by a removed name
+            return cls._strip_admin_suffix(norm) in blocked
+
+        pieces = re.split(_KEYWORD_SEPARATORS, keyword)
+        token_sep_pairs = list(zip(pieces[0::2], pieces[1::2]))
+
+        kept_pairs: List[tuple] = []
+        skipped: List[str] = []
+        for token, separator in token_sep_pairs:
+            if not token:
+                continue
+            if is_location_token(token):
+                skipped.append(token)
+                continue
+            kept_pairs.append((token, separator))
+
+        if not skipped:
+            return keyword.strip()  # Untouched passthrough — zero semantic drift.
+
+        rebuilt = "".join(token + separator for token, separator in kept_pairs).strip(" \t&+/,:;|-")
+        logger.info(f"[QUERY_EXPANDER] Location tokens stripped from keyword: {skipped} -> '{rebuilt}'")
+        return rebuilt
+
+    @classmethod
+    def build_search_terms(cls, keyword: str, max_terms: int = 3) -> List[str]:
+        """
+        Builds a bounded, relevance-ordered list of geo-free search term variants
+        for map search engines (Google Maps etc.).
+
+        Order of precedence:
+        1. The raw keyword as entered by the user.
+        2. Segments split on connectors ('&', 've', '+', '/', ',') — combined labels
+           such as 'Diş Klinikleri & Ağız Sağlığı Merkezleri' otherwise narrow
+           recall when sent to the engine verbatim.
+        3. Taxonomy synonym terms for the identified category.
+
+        The result is deduplicated (diacritics-insensitive) and capped at max_terms.
+        Geographic binding ({city} {district}) is the caller's responsibility.
+        """
+        if not keyword or not keyword.strip():
+            return []
+
+        variants: List[str] = [keyword.strip()]
+
+        # 2. Connector-split segments of the user label
+        parts = re.split(r'\s*(?:&|ve|\+|\/|,)\s*', keyword)
+        variants.extend(p.strip() for p in parts if len(p.strip()) >= 3)
+
+        # 3. Taxonomy-driven synonyms
+        cat_key = cls.identify_category(keyword)
+        if cat_key in cls.CATEGORY_TAXONOMY:
+            variants.extend(cls.CATEGORY_TAXONOMY[cat_key]["text_terms"])
+
+        unique: List[str] = []
+        seen: Set[str] = set()
+        for v in variants:
+            norm = normalize_turkish(v)
+            if norm and norm not in seen:
+                seen.add(norm)
+                unique.append(v)
+                if len(unique) >= max_terms:
+                    break
+        return unique
 
     @classmethod
     def expand_queries(cls, keyword: str, district: str, city: str) -> List[str]:

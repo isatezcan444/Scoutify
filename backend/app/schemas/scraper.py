@@ -1,15 +1,19 @@
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from backend.app.models.blacklist import ScraperJobStatus
 
 
 class ScraperRunRequest(BaseModel):
-    """Structured search request with explicit city/districts — no opaque string parsing."""
+    """Structured search request with explicit city/districts — no opaque string parsing.
+
+    max_results semantics: 0 = UNLIMITED (config-driven per-district targets).
+    The UI 'Sınırsız' option sends 0 and must never be coerced to another number.
+    """
     keyword: str
     city: str
     districts: List[str] = []
-    max_results: int = 25
+    max_results: int = Field(default=0, ge=0, le=10000)
     source: str = "GOOGLE_MAPS"
 
 

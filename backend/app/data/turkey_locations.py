@@ -99,6 +99,110 @@ TURKEY_LOCATIONS = [
         "districts": [
             "Toroslar", "Akdeniz", "Yenişehir", "Mezitli", "Tarsus", "Erdemli", "Silifke", "Anamur", "Mut", "Bozyazı", "Aydıncık", "Gülnar", "Çamlıyayla"
         ]
+    },
+    {
+        "name": "Kayseri",
+        "districts": [
+            "Melikgazi", "Kocasinan", "Talas", "Akkışla", "Bünyan", "Develi", "Felahiye", "Hacılar",
+            "İncesu", "Özvatan", "Pınarbaşı", "Sarıoğlan", "Sarız", "Tomarza", "Yahyalı", "Yeşilhisar"
+        ]
+    },
+    {
+        "name": "Eskişehir",
+        "districts": [
+            "Odunpazarı", "Tepebaşı", "Alpu", "Beylikova", "Çifteler", "Günyüzü", "Han", "İnönü",
+            "Mahmudiye", "Mihalgazi", "Mihalıççık", "Sarıcakaya", "Seyitgazi", "Sivrihisar"
+        ]
+    },
+    {
+        "name": "Samsun",
+        "districts": [
+            "İlkadım", "Atakum", "Canik", "Alaçam", "Asarcık", "Ayvacık", "Bafra", "Çarşamba",
+            "Havza", "Kavak", "Ladik", "Ondokuzmayıs", "Salıpazarı", "Tekkeköy", "Terme",
+            "Vezirköprü", "Yakakent"
+        ]
+    },
+    {
+        "name": "Denizli",
+        "districts": [
+            "Merkezefendi", "Pamukkale", "Acıpayam", "Babadağ", "Baklan", "Bekilli", "Beyağaç",
+            "Bozkurt", "Buldan", "Çal", "Çameli", "Çardak", "Çivril", "Güney", "Honaz", "Kale",
+            "Sarayköy", "Serinhisar", "Tavas"
+        ]
+    },
+    {
+        "name": "Sakarya",
+        "districts": [
+            "Adapazarı", "Akyazı", "Arifiye", "Erenler", "Ferizli", "Geyve", "Hendek", "Karapürçek",
+            "Karasu", "Kaynarca", "Kocaali", "Pamukova", "Sapanca", "Serdivan", "Söğütlü", "Taraklı"
+        ]
+    },
+    {
+        "name": "Muğla",
+        "districts": [
+            "Menteşe", "Bodrum", "Dalaman", "Datça", "Fethiye", "Kavaklıdere", "Köyceğiz",
+            "Marmaris", "Milas", "Ortaca", "Seydikemer", "Ula", "Yatağan"
+        ]
+    },
+    {
+        "name": "Tekirdağ",
+        "districts": [
+            "Süleymanpaşa", "Çerkezköy", "Çorlu", "Ergene", "Hayrabolu", "Kapaklı", "Malkara",
+            "Marmaraereğlisi", "Muratlı", "Saray", "Şarköy"
+        ]
+    },
+    {
+        "name": "Balıkesir",
+        "districts": [
+            "Altıeylül", "Karesi", "Ayvalık", "Balya", "Bandırma", "Bigadiç", "Burhaniye",
+            "Dursunbey", "Edremit", "Erdek", "Gömeç", "Gönen", "Havran", "İvrindi", "Kepsut",
+            "Manyas", "Marmara", "Savaştepe", "Sındırgı", "Susurluk"
+        ]
+    },
+    {
+        "name": "Trabzon",
+        "districts": [
+            "Ortahisar", "Akçaabat", "Araklı", "Arsin", "Beşikdüzü", "Çarşıbaşı", "Çaykara",
+            "Dernekpazarı", "Düzköy", "Hayrat", "Köprübaşı", "Maçka", "Of", "Sürmene",
+            "Şalpazarı", "Tonya", "Vakfıkebir", "Yomra"
+        ]
+    },
+    {
+        "name": "Aydın",
+        "districts": [
+            "Efeler", "Bozdoğan", "Buharkent", "Çine", "Didim", "Germencik", "İncirliova",
+            "Karacasu", "Karpuzlu", "Koçarlı", "Köşk", "Kuşadası", "Kuyucak", "Nazilli",
+            "Söke", "Sultanhisar", "Yenipazar"
+        ]
+    },
+    {
+        "name": "Manisa",
+        "districts": [
+            "Şehzadeler", "Yunusemre", "Ahmetli", "Akhisar", "Alaşehir", "Demirci", "Gölmarmara",
+            "Gördes", "Kırkağaç", "Köprübaşı", "Kula", "Salihli", "Sarıgöl", "Saruhanlı",
+            "Selendi", "Soma", "Turgutlu"
+        ]
+    },
+    {
+        "name": "Diyarbakır",
+        "districts": [
+            "Bağlar", "Kayapınar", "Sur", "Yenişehir", "Bismil", "Çermik", "Çınar", "Çüngüş",
+            "Dicle", "Eğil", "Ergani", "Hani", "Hazro", "Kocaköy", "Kulp", "Lice", "Silvan"
+        ]
+    },
+    {
+        "name": "Hatay",
+        "districts": [
+            "Antakya", "Defne", "Altınözü", "Arsuz", "Belen", "Dörtyol", "Erzin", "Hassa",
+            "İskenderun", "Kırıkhan", "Kumlu", "Payas", "Reyhanlı", "Samandağ", "Yayladağı"
+        ]
+    },
+    {
+        "name": "Şanlıurfa",
+        "districts": [
+            "Haliliye", "Eyyübiye", "Karaköprü", "Akçakale", "Birecik", "Bozova", "Ceylanpınar",
+            "Halfeti", "Harran", "Hilvan", "Siverek", "Suruç", "Viranşehir"
+        ]
     }
 ]
 
@@ -110,6 +214,11 @@ def get_districts_for_city(city_name: str) -> List[str]:
         if normalize_turkish(c["name"]) == norm_city:
             return list(c["districts"])
     return []
+
+
+def get_supported_cities() -> List[str]:
+    """Returns the canonical list of supported city names."""
+    return [c["name"] for c in TURKEY_LOCATIONS]
 
 
 def is_valid_district(city_name: str, district_name: str) -> bool:

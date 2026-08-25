@@ -2,22 +2,39 @@
 Google Maps Discovery Engine & Lead Orchestrator for Scoutify.
 High-recall Google Maps Playwright extractor with real-time streaming,
 contact enrichment, and strict B2B lead validation.
+
+Orchestration invariants:
+- Search recall: sector labels containing connectors ('&', 've', ...) are expanded
+  into bounded relevance-ordered variants via QueryExpander instead of being sent
+  to the engine verbatim.
+- Target honesty: max_results=0 means truly unlimited (config-driven per-district
+  target); limited targets are distributed evenly across districts with no floor
+  that silently overshoots the user's request.
+- Dedup honesty: identical places are suppressed once; distinct businesses that
+  merely share a phone line are kept as separate leads with the shared number
+  flagged (phone_e164 withheld to respect the DB unique constraint and anti-spam).
+  Chain branches sharing a brand name but sitting at different addresses are
+  distinct businesses too — name-based suppression requires address agreement.
+- Metrics truthfulness: every reported metric reflects a value actually measured.
 """
-import re
 import enum
-import asyncio
 import hashlib
 import logging
-from typing import List, Dict, Any, Optional, Callable, Set
-import httpx
-from urllib.parse import urlparse
+import math
+import re
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
+import httpx
+
+from backend.app.core.config import settings
 from backend.app.scrapers.base_scraper import BaseScraper
 from backend.app.scrapers.google_maps_playwright_scraper import (
     GoogleMapsPlaywrightScraper,
-    clean_extracted_website
+    GoogleMapsBlockedError,
 )
 from backend.app.services.phone_service import PhoneService
+from backend.app.services.geo_scope_filter import GeoScopeFilter, GeoScopeDecision, GeoScopeVerdict
+from backend.app.services.query_expander import QueryExpander
 from backend.app.data.turkey_locations import (
     normalize_turkish,
     get_districts_for_city
@@ -33,18 +50,106 @@ class LocationConfidence(str, enum.Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class DedupDecision(str, enum.Enum):
+    """Outcome of evaluating a freshly inspected place against prior discoveries."""
+    ACCEPT = "ACCEPT"                      # New unique business — emit.
+    DUPLICATE_PLACE = "DUPLICATE_PLACE"    # Same physical place seen before — suppress.
+    DUPLICATE_NAME = "DUPLICATE_NAME"      # Identical name within the same district — suppress.
+    SHARED_PHONE = "SHARED_PHONE"          # Distinct business on an already-seen line — emit flagged.
+
+
+class LeadDiscoveryDeduplicator:
+    """
+    Stateful, in-memory dedup index for a single discovery run.
+
+    Suppression policy (aligned with LeadIngestService + WhatsApp anti-spam):
+    - Place identity (canonical Maps URL) is global across districts.
+    - Exact name within one district is treated as the same listing.
+    - A shared phone line never suppresses the business itself; it only flags the
+      lead so the shared number is displayed but withheld from outreach targeting.
+    """
+
+    def __init__(self) -> None:
+        self.seen_place_urls: Set[str] = set()
+        self.seen_names: Set[str] = set()
+        self.seen_phones: Set[str] = set()
+        # First-seen coarse address token per name key: chain branches with the
+        # same brand name must NOT suppress each other when addresses differ.
+        self.name_address_keys: Dict[str, Optional[str]] = {}
+
+    @staticmethod
+    def build_address_key(address: Optional[str]) -> Optional[str]:
+        """Coarse location token: normalized street/neighberhood segment of an address."""
+        segment = (address or "").split(",")[0].strip().strip(".").strip()
+        return normalize_turkish(segment).lower() or None
+
+    def _name_matches_address(self, name_key: str, address_key: Optional[str]) -> bool:
+        stored = self.name_address_keys.get(name_key)
+        # No address evidence on either side → fall back to legacy name-only policy.
+        return address_key is None or stored is None or address_key == stored
+
+    def evaluate(
+        self,
+        place_url: Optional[str],
+        name_key: str,
+        e164: Optional[str],
+        address_key: Optional[str] = None,
+    ) -> DedupDecision:
+        if place_url and place_url in self.seen_place_urls:
+            return DedupDecision.DUPLICATE_PLACE
+        if name_key in self.seen_names and self._name_matches_address(name_key, address_key):
+            return DedupDecision.DUPLICATE_NAME
+        if e164 and e164 in self.seen_phones:
+            return DedupDecision.SHARED_PHONE
+        return DedupDecision.ACCEPT
+
+    def register(
+        self,
+        place_url: Optional[str],
+        name_key: str,
+        e164: Optional[str],
+        address_key: Optional[str] = None,
+    ) -> None:
+        if place_url:
+            self.seen_place_urls.add(place_url)
+        self.seen_names.add(name_key)
+        self.name_address_keys.setdefault(name_key, address_key)
+        if e164:
+            self.seen_phones.add(e164)
+
+
+def compute_district_target(max_results: int, district_count: int) -> int:
+    """
+    Per-district discovery target.
+    - Limited mode: even distribution rounded up (no artificial floor that would
+      make '10 results' scrape 30+).
+    - Unlimited mode (max_results == 0): config-driven high target.
+    """
+    if max_results > 0:
+        return max(1, math.ceil(max_results / max(district_count, 1)))
+    return settings.SCRAPER_UNLIMITED_DISTRICT_TARGET
+
+
 class GoogleMapsScraper(BaseScraper):
     """
     Production-grade Google Maps Discovery Engine:
     - Primary Source: Direct Google Maps Place extraction via Playwright.
     - Real-Time Live Streaming: Streams each discovered place instantly to UI (Satellite Tuner Style).
     - Multi-District Support: Iterates all selected districts (or full city) sequentially.
+    - Query Variants: Expands sector labels into multiple bounded search terms per district.
     - Contact Enrichment: Resolves phone numbers from official websites when missing on card.
     """
 
-    def __init__(self, user_agent: Optional[str] = None):
+    def __init__(
+        self,
+        user_agent: Optional[str] = None,
+        geo_scope_filter: Optional[GeoScopeFilter] = None,
+    ):
         super().__init__(user_agent)
         self.playwright_scraper = GoogleMapsPlaywrightScraper()
+        # Geo fence collaborator (DI-friendly): keeps discovery results inside the
+        # requested city/district scope and resolves each place's TRUE district.
+        self.geo_scope_filter = geo_scope_filter or GeoScopeFilter.from_settings()
 
     @classmethod
     def validate_lead_location(
@@ -72,6 +177,31 @@ class GoogleMapsScraper(BaseScraper):
             return LocationConfidence.CITY_ONLY
         return LocationConfidence.UNKNOWN
 
+    # ------------------------------------------------------------------
+    # Website phone enrichment
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _select_enriched_phone(discovered: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Attribution priority for numbers scraped off a homepage:
+        mobile > fixed line > shared-cost hotline (0850). Hotlines are frequently
+        franchise/call-center numbers shared across unrelated branches, so they are
+        the last resort.
+        """
+        if not discovered:
+            return None
+        mobiles = [p for p in discovered if p.get("is_mobile")]
+        if mobiles:
+            return mobiles[0]
+        non_hotline = [
+            p for p in discovered
+            if not str(p.get("national_number", "")).startswith("850")
+        ]
+        if non_hotline:
+            return non_hotline[0]
+        return discovered[0]
+
     async def _enrich_phones_from_website(
         self,
         website_url: str
@@ -82,19 +212,18 @@ class GoogleMapsScraper(BaseScraper):
 
         try:
             async with httpx.AsyncClient(
-                verify=False,
-                timeout=3.5,
-                headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+                verify=True,
+                timeout=settings.SCRAPER_ENRICH_TIMEOUT_SECONDS,
+                headers={"User-Agent": settings.SCRAPER_USER_AGENT}
             ) as client:
                 resp = await client.get(website_url, follow_redirects=True)
                 if resp.status_code == 200:
-                    text = resp.text
                     phone_matches = re.findall(
                         r'(?:\+?90\s*|\b0\s*)?([2-5]\d{2})\s*[\s\.\-]?\s*(\d{3})\s*[\s\.\-]?\s*(\d{2})\s*[\s\.\-]?\s*(\d{2})\b|'
                         r'(?:\+?90\s*|\b0\s*)?(850)\s*[\s\.\-]?\s*(\d{3})\s*[\s\.\-]?\s*(\d{2})\s*[\s\.\-]?\s*(\d{2})\b',
-                        text
+                        resp.text
                     )
-                    seen_e164 = set()
+                    seen_e164: Set[str] = set()
                     for m in phone_matches:
                         raw_str = "".join([part for part in m if part])
                         norm = PhoneService.normalize_to_e164(raw_str)
@@ -105,6 +234,143 @@ class GoogleMapsScraper(BaseScraper):
             logger.debug(f"[WEBSITE_ENRICH] Error fetching {website_url}: {e}")
 
         return discovered
+
+    # ------------------------------------------------------------------
+    # Place → lead conversion
+    # ------------------------------------------------------------------
+
+    async def _resolve_place_phone(
+        self,
+        place: Dict[str, Any],
+    ) -> Tuple[Optional[Dict[str, Any]], bool]:
+        """
+        Normalizes the card phone; falls back to website enrichment when absent.
+        Returns (phone_data | None, enriched_from_website).
+        """
+        phone_data = PhoneService.normalize_to_e164(place["phone"]) if place.get("phone") else None
+        if phone_data:
+            return phone_data, False
+
+        if not place.get("website"):
+            return None, False
+
+        enriched = await self._enrich_phones_from_website(place["website"])
+        selected = self._select_enriched_phone(enriched)
+        if selected:
+            place["phone"] = selected["e164"]
+        return selected, bool(selected)
+
+    def _build_lead_record(
+        self,
+        place: Dict[str, Any],
+        proven_district: Optional[str],
+        clean_city: str,
+        clean_keyword: str,
+        phone_data: Optional[Dict[str, Any]],
+        shared_phone_line: bool,
+    ) -> Dict[str, Any]:
+        """
+        Converts an inspected place into a canonical lead record.
+
+        Truthful-labeling invariant: `district` carries ONLY the address-proven
+        district (None when the address proves nothing). The discovery feed's
+        requested district never masks where the business actually lives —
+        Google Maps spillover from neighboring districts must not be relabeled
+        as the target district.
+        """
+        is_phone_verified = bool(phone_data and phone_data.get("is_valid")) and not shared_phone_line
+
+        place_url = place.get("google_maps_url") or f"{clean_keyword}_{clean_city}_{proven_district or ''}_{place['name']}"
+        deterministic_place_id = place.get("place_id") or f"gmaps_{hashlib.sha256(place_url.encode()).hexdigest()[:16]}"
+
+        return {
+            "name": place["name"],
+            "category": place.get("category") or clean_keyword.title(),
+            "canonical_category": clean_keyword.lower(),
+            "category_score": 1.0,
+            "category_classification": "MATCH",
+            "entity_type": "CLINIC" if any(w in place["name"].lower() for w in ["klinik", "poliklinik", "hastane", "diş"]) else "BUSINESS",
+            "verification_status": "VERIFIED" if is_phone_verified else "UNVERIFIED",
+            "confidence_level": (
+                "HIGH" if (is_phone_verified and phone_data and phone_data.get("is_mobile"))
+                else ("MEDIUM" if is_phone_verified else "LOW")
+            ),
+            "confidence_score": (
+                95 if (is_phone_verified and phone_data and phone_data.get("is_mobile"))
+                else (80 if is_phone_verified else 40)
+            ),
+            "is_verified": is_phone_verified,
+            "discovered_from": "GOOGLE_MAPS",
+            "verified_by": "Google Maps Place Registry & Web Verification" if is_phone_verified else None,
+            # Shared lines keep their display value but are withheld from targeting.
+            "phone": phone_data["e164"] if phone_data else (place.get("phone") or "Belirtilmemiş"),
+            "phone_e164": None if shared_phone_line else (phone_data["e164"] if phone_data else None),
+            "phone_line_shared": shared_phone_line,
+            "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
+            "is_whatsapp_eligible": bool(
+                phone_data and phone_data.get("is_whatsapp_eligible") and not shared_phone_line
+            ),
+            "address": place.get("address") or ", ".join(x for x in (proven_district, clean_city) if x),
+            "city": clean_city,
+            "district": proven_district,
+            "latitude": place.get("latitude"),
+            "longitude": place.get("longitude"),
+            "website": place.get("website"),
+            "rating": place.get("rating"),
+            "reviews_count": place.get("reviews_count", 0),
+            "google_maps_url": place.get("google_maps_url"),
+            "maps_url": place.get("google_maps_url"),
+            "place_id": deterministic_place_id,
+            "source": "GOOGLE_MAPS",
+            "display_name": f"{place['name']}, {place.get('address') or proven_district or clean_city}"
+        }
+
+    async def _process_discovered_place(
+        self,
+        place: Dict[str, Any],
+        requested_district: str,
+        proven_district: Optional[str],
+        clean_city: str,
+        clean_keyword: str,
+        deduplicator: LeadDiscoveryDeduplicator,
+    ) -> Tuple[Optional[Dict[str, Any]], DedupDecision]:
+        """
+        Full ingestion pipeline for one inspected place:
+        phone resolution → dedup evaluation → lead construction → index registration.
+
+        `requested_district` names the discovery feed being iterated;
+        `proven_district` is the district actually verified from the place address
+        (None when unproven) and is what gets persisted on the lead.
+        Returns (lead_record, decision): lead_record is None for suppressed
+        duplicates; decision always explains the outcome (ACCEPT / SHARED_PHONE /
+        DUPLICATE_PLACE / DUPLICATE_NAME).
+        """
+        phone_data, _enriched = await self._resolve_place_phone(place)
+        e164 = phone_data["e164"] if phone_data else None
+
+        place_url = place.get("google_maps_url")
+        name_key = f"{normalize_turkish(place['name'])}_{(proven_district or requested_district).lower()}"
+        address_key = deduplicator.build_address_key(place.get("address"))
+
+        decision = deduplicator.evaluate(place_url, name_key, e164, address_key=address_key)
+        if decision in (DedupDecision.DUPLICATE_PLACE, DedupDecision.DUPLICATE_NAME):
+            return None, decision
+
+        lead_record = self._build_lead_record(
+            place=place,
+            proven_district=proven_district,
+            clean_city=clean_city,
+            clean_keyword=clean_keyword,
+            phone_data=phone_data,
+            shared_phone_line=(decision == DedupDecision.SHARED_PHONE),
+        )
+
+        deduplicator.register(place_url, name_key, e164, address_key=address_key)
+        return lead_record, decision
+
+    # ------------------------------------------------------------------
+    # Discovery orchestration
+    # ------------------------------------------------------------------
 
     async def scrape(
         self,
@@ -126,11 +392,26 @@ class GoogleMapsScraper(BaseScraper):
         if not target_districts:
             target_districts = get_districts_for_city(clean_city)
             if not target_districts:
-                target_districts = [clean_city]
+                raise ValueError(f"FAIL CLOSED: unknown city '{clean_city}' has no district registry")
+
+        # Defensive hygiene: drop city/district names typed inside the sector keyword
+        # ('Diş Klinikleri & Ağız Sağlığı Merkezleri + istanbul + ataşehir') so the
+        # connector-splitter never turns location words into search terms.
+        if settings.SCRAPER_GEO_FILTER_ENABLED:
+            clean_keyword = (
+                QueryExpander.strip_location_tokens(clean_keyword, clean_city, target_districts)
+                or clean_keyword  # Never collapse to an empty query.
+            )
+
+        search_terms = QueryExpander.build_search_terms(
+            clean_keyword, max_terms=settings.SCRAPER_MAX_QUERY_VARIANTS
+        )
+        target_per_district = compute_district_target(max_results, len(target_districts))
 
         logger.info(
             f"[GMAPS_ENGINE] Starting discovery: keyword='{clean_keyword}', "
-            f"city='{clean_city}', districts={target_districts}, max_results={max_results}"
+            f"city='{clean_city}', districts={len(target_districts)}, max_results={max_results}, "
+            f"terms={search_terms}, target_per_district={target_per_district}"
         )
 
         if progress_callback:
@@ -141,139 +422,174 @@ class GoogleMapsScraper(BaseScraper):
             })
 
         all_discovered_leads: List[Dict[str, Any]] = []
-        seen_phones: Set[str] = set()
-        seen_names: Set[str] = set()
-        total_raw_found = 0
+        deduplicator = LeadDiscoveryDeduplicator()
+        stats = {
+            "raw_found": 0,
+            "queries_executed": 0,
+            "geo_filtered": 0,
+            "dup_place": 0,
+            "dup_name": 0,
+        }
+        target_reached = False
 
-        target_per_district = max(30, max_results // max(len(target_districts), 1)) if max_results > 0 else 100
+        geo_filter_active = settings.SCRAPER_GEO_FILTER_ENABLED
 
         for dist_idx, district in enumerate(target_districts):
-            # District base percentage range
+            if target_reached:
+                break
+
             base_pct = int(10 + (dist_idx / len(target_districts)) * 80)
             district_span_pct = int(80 / len(target_districts))
 
-            async def handle_status(message: str, local_pct: int):
+            async def handle_status(message: str, local_pct: int, _b: int = base_pct, _span: int = district_span_pct) -> None:
                 if progress_callback:
-                    mapped_pct = min(95, base_pct + int((local_pct / 100.0) * district_span_pct))
-                    await progress_callback({
-                        "type": "log",
-                        "message": message,
-                        "progress": mapped_pct
-                    })
+                    mapped_pct = min(95, _b + int((local_pct / 100.0) * _span))
+                    await progress_callback({"type": "log", "message": message, "progress": mapped_pct})
 
-            async def handle_place_inspected(place: Dict[str, Any], current_idx: int, total_count: int):
-                nonlocal total_raw_found
-                total_raw_found += 1
+            async def handle_place_inspected(
+                place: Dict[str, Any],
+                current_idx: int,
+                total_count: int,
+                _d: str = district,
+                _b: int = base_pct,
+                _span: int = district_span_pct,
+            ) -> None:
+                stats["raw_found"] += 1
 
-                # Phone resolution
-                phone_data = PhoneService.normalize_to_e164(place.get("phone")) if place.get("phone") else None
+                # --- Geo fence gate (runs BEFORE phone enrichment to avoid wasted HTTP) ---
+                if geo_filter_active:
+                    verdict = self.geo_scope_filter.evaluate(
+                        target_city=clean_city,
+                        target_districts=target_districts,
+                        place_name=str(place.get("name") or ""),
+                        place_address=place.get("address"),
+                    )
+                    if verdict.decision == GeoScopeDecision.REJECT_OUTSIDE:
+                        stats["geo_filtered"] += 1
+                        if progress_callback:
+                            await progress_callback({
+                                "type": "log",
+                                "message": (
+                                    f"🚫 Hedef dışı konum elendi: {place.get('name')} "
+                                    f"— {verdict.reason}"
+                                ),
+                                "progress": min(95, _b),
+                            })
+                        return
+                else:
+                    verdict = GeoScopeVerdict(
+                        decision=GeoScopeDecision.ACCEPT_UNPROVEN,
+                        resolved_district=None,
+                    )
 
-                # If phone is missing from card, enrich from website
-                if not phone_data and place.get("website"):
-                    enriched_phones = await self._enrich_phones_from_website(place["website"])
-                    if enriched_phones:
-                        mobile_p = next((p for p in enriched_phones if p.get("is_mobile")), None)
-                        phone_data = mobile_p or enriched_phones[0]
-                        place["phone"] = phone_data["e164"]
-
-                e164 = phone_data["e164"] if phone_data else None
-                name_key = f"{normalize_turkish(place['name'])}_{district.lower()}"
-
-                if e164 and e164 in seen_phones:
+                processed_record, dup_decision = await self._process_discovered_place(
+                    place=place,
+                    requested_district=_d,
+                    proven_district=verdict.resolved_district,
+                    clean_city=clean_city,
+                    clean_keyword=clean_keyword,
+                    deduplicator=deduplicator,
+                )
+                if processed_record is None:
+                    # Suppression reasons are counted explicitly so the final
+                    # funnel report never has to guess where candidates went.
+                    if dup_decision == DedupDecision.DUPLICATE_PLACE:
+                        stats["dup_place"] += 1
+                    elif dup_decision == DedupDecision.DUPLICATE_NAME:
+                        stats["dup_name"] += 1
                     return
-                if name_key in seen_names:
-                    return
 
-                if e164:
-                    seen_phones.add(e164)
-                seen_names.add(name_key)
-
-                place_url = place.get("google_maps_url") or f"{clean_keyword}_{clean_city}_{district}_{place['name']}"
-                deterministic_place_id = place.get("place_id") or f"gmaps_{hashlib.sha256(place_url.encode()).hexdigest()[:16]}"
-                is_phone_verified = bool(phone_data and phone_data.get("is_valid"))
-
-                lead_record = {
-                    "name": place["name"],
-                    "category": place.get("category") or clean_keyword.title(),
-                    "canonical_category": clean_keyword.lower(),
-                    "category_score": 1.0,
-                    "category_classification": "MATCH",
-                    "entity_type": "CLINIC" if any(w in place["name"].lower() for w in ["klinik", "poliklinik", "hastane", "diş"]) else "BUSINESS",
-                    "verification_status": "VERIFIED" if is_phone_verified else "UNVERIFIED",
-                    "confidence_level": "HIGH" if (is_phone_verified and phone_data.get("is_mobile")) else ("MEDIUM" if is_phone_verified else "LOW"),
-                    "confidence_score": 95 if (is_phone_verified and phone_data.get("is_mobile")) else (80 if is_phone_verified else 50),
-                    "is_verified": is_phone_verified,
-                    "discovered_from": "GOOGLE_MAPS",
-                    "verified_by": "Google Maps Place Registry & Web Verification" if is_phone_verified else None,
-                    "phone": phone_data["e164"] if phone_data else (place.get("phone") or "Belirtilmemiş"),
-                    "phone_e164": e164,  # Nullable: never fake +90000 numbers
-                    "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
-                    "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
-                    "address": place.get("address") or f"{district}, {clean_city}",
-                    "city": clean_city,
-                    "district": district,
-                    "latitude": place.get("latitude"),
-                    "longitude": place.get("longitude"),
-                    "website": place.get("website"),
-                    "rating": place.get("rating"),
-                    "reviews_count": place.get("reviews_count", 0),
-                    "google_maps_url": place.get("google_maps_url"),
-                    "maps_url": place.get("google_maps_url"),
-                    "place_id": deterministic_place_id,
-                    "source": "GOOGLE_MAPS",
-                    "display_name": f"{place['name']}, {place.get('address') or district}"
-                }
-
+                lead_record = processed_record
+                decision = dup_decision
+                # Ingest FIRST: the lead must survive even when no progress
+                # callback is attached (headless runs) — never silently drop it.
                 all_discovered_leads.append(lead_record)
 
-                # Smooth satellite-tuner dynamic progress
-                intra_pct = int((current_idx / max(total_count, 1)) * district_span_pct)
-                current_live_pct = min(95, base_pct + intra_pct)
+                if not progress_callback:
+                    return
 
-                # Satellite channel style live tuner log
-                phone_display = phone_data["e164"] if phone_data else "Numara Yok"
-                tuner_msg = f"📡 Bulundu ({len(all_discovered_leads)}): {lead_record['name']} — {lead_record['address']} ({phone_display})"
+                # Live satellite-tuner stream: each accepted place is pushed to the
+                # UI the instant it is inspected (frontend renders its card on this).
+                await progress_callback({
+                    "type": "lead_found",
+                    "lead": lead_record
+                })
 
-                if progress_callback:
-                    # Stream the card immediately to the UI
-                    await progress_callback({
-                        "type": "lead_found",
-                        "lead": lead_record
-                    })
-                    # Stream the live log and increment progress
+                intra_pct = int((current_idx / max(total_count, 1)) * _span)
+                phone_display = lead_record.get("phone") or "Numara Yok"
+                suffix = " — paylaşımlı hat" if decision == DedupDecision.SHARED_PHONE else ""
+                tuner_msg = (
+                    f"📡 Bulundu ({len(all_discovered_leads)}): {lead_record['name']} — "
+                    f"{lead_record['address']} ({phone_display}{suffix})"
+                )
+                await progress_callback({
+                    "type": "log",
+                    "message": tuner_msg,
+                    "progress": min(95, _b + intra_pct)
+                })
+
+            for term_idx, term in enumerate(search_terms):
+                remaining = self._remaining_budget(max_results, len(all_discovered_leads))
+                if remaining is not None and remaining <= 0:
+                    target_reached = True
+                    break
+
+                effective_max = target_per_district if remaining is None else min(target_per_district, remaining)
+
+                stats["queries_executed"] += 1
+                try:
+                    await self.playwright_scraper.scrape_district_places(
+                        keyword=term,
+                        city=clean_city,
+                        district=district,
+                        max_results=effective_max,
+                        on_place_inspected=handle_place_inspected,
+                        on_progress_status=handle_status,
+                    )
+                except GoogleMapsBlockedError:
+                    # Anti-bot interstitial: fail loud so the job is reported as failed
+                    # (never silently as zero results).
+                    raise
+                except Exception as term_err:
+                    # One failing variant must not abort the whole district run.
+                    logger.warning(
+                        f"[GMAPS_ENGINE] Query variant '{term}' failed for {clean_city} > {district}: {term_err}"
+                    )
+
+                if progress_callback and len(search_terms) > 1:
+                    term_pct = min(
+                        95,
+                        base_pct + int(((term_idx + 1) / len(search_terms)) * district_span_pct * 0.5),
+                    )
                     await progress_callback({
                         "type": "log",
-                        "message": tuner_msg,
-                        "progress": current_live_pct
+                        "message": f"🔎 '{term}' varyantı tamamlandı ({district}).",
+                        "progress": term_pct
                     })
 
-            await self.playwright_scraper.scrape_district_places(
-                keyword=clean_keyword,
-                city=clean_city,
-                district=district,
-                max_results=target_per_district,
-                on_place_inspected=handle_place_inspected,
-                on_progress_status=handle_status
-            )
+                if max_results > 0 and len(all_discovered_leads) >= max_results:
+                    target_reached = True
+                    break
 
-            if progress_callback:
+            if progress_callback and not target_reached:
                 await progress_callback({
                     "type": "log",
                     "message": f"✅ {district} tamamlandı. Toplam {len(all_discovered_leads)} işletme keşfedildi.",
                     "progress": min(95, base_pct + district_span_pct)
                 })
 
-            if max_results > 0 and len(all_discovered_leads) >= max_results:
-                logger.info(f"[GMAPS_ENGINE] Target max_results {max_results} reached.")
-                break
-
         metrics = {
-            "queries_executed": len(target_districts),
-            "pages_visited": len(target_districts) * 5,
-            "raw_results_found": total_raw_found,
+            "queries_executed": stats["queries_executed"],
+            "pages_visited": stats["queries_executed"],  # One Maps results page per query session.
+            "raw_results_found": stats["raw_found"],
             "unique_candidates": len(all_discovered_leads),
-            "verified_commercial_leads": len(all_discovered_leads),
-            "duplicate_merged": max(0, total_raw_found - len(all_discovered_leads))
+            "verified_commercial_leads": sum(1 for l in all_discovered_leads if l.get("is_verified")),
+            # Funnel transparency: every suppressed candidate is accounted for.
+            "duplicate_merged": stats["dup_place"] + stats["dup_name"],
+            "duplicates_by_place": stats["dup_place"],
+            "duplicates_by_name": stats["dup_name"],
+            "geo_filtered_out": stats["geo_filtered"],
+            "shared_phone_lines": sum(1 for l in all_discovered_leads if l.get("phone_line_shared")),
         }
 
         if progress_callback:
@@ -284,8 +600,16 @@ class GoogleMapsScraper(BaseScraper):
             })
 
         logger.info(
-            f"[GMAPS_ENGINE] Discovery Complete: {len(all_discovered_leads)} unique verified leads "
-            f"across {len(target_districts)} districts."
+            f"[GMAPS_ENGINE] Discovery Complete: {len(all_discovered_leads)} unique leads "
+            f"across {len(target_districts)} districts, {stats['queries_executed']} query sessions, "
+            f"{stats['geo_filtered']} out-of-scope places filtered."
         )
 
         return all_discovered_leads
+
+    @staticmethod
+    def _remaining_budget(max_results: int, discovered_so_far: int) -> Optional[int]:
+        """Returns how many more leads may still be emitted, or None when unlimited."""
+        if max_results <= 0:
+            return None
+        return max(0, max_results - discovered_so_far)

@@ -2,8 +2,8 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -11,11 +11,10 @@ from backend.app.core.database import get_db, AsyncSessionLocal
 from backend.app.core.config import settings
 from backend.app.models.blacklist import ScraperJob, ScraperJobStatus
 from backend.app.schemas.scraper import ScraperRunRequest, ScraperJobResponse
-from backend.app.schemas.lead import LeadResponse
 from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
 from backend.app.services.lead_ingest_service import LeadIngestService
 from backend.app.api.v1.websocket import ws_manager
-from backend.app.data.turkey_locations import get_districts_for_city
+from backend.app.data.turkey_locations import get_districts_for_city, get_supported_cities
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +103,7 @@ async def run_scraper_task(
                     "id": l.id,
                     "name": l.name,
                     "category": l.category,
+                    "entity_type": l.entity_type,
                     "phone": l.phone,
                     "phone_e164": l.phone_e164,
                     "is_mobile": l.is_mobile,
@@ -111,10 +111,14 @@ async def run_scraper_task(
                     "address": l.address,
                     "city": l.city,
                     "district": l.district,
+                    "latitude": l.latitude,
+                    "longitude": l.longitude,
                     "website": l.website,
                     "rating": l.rating,
                     "reviews_count": l.reviews_count,
-                    "maps_url": l.custom_data.get("maps_url") if l.custom_data else None,
+                    "is_verified": l.is_verified,
+                    "place_id": l.place_id,
+                    "maps_url": (l.custom_data or {}).get("maps_url"),
                     "status": l.status.value if hasattr(l.status, 'value') else str(l.status),
                     "created_at": str(l.created_at)
                 }
@@ -166,7 +170,6 @@ async def run_scraper_task(
 @router.post("/start", response_model=ScraperJobResponse)
 async def start_scraper(
     req: ScraperRunRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     keyword = req.keyword.strip()
@@ -179,7 +182,12 @@ async def start_scraper(
     if not districts:
         districts = get_districts_for_city(city)
         if not districts:
-            districts = [f"{city} Merkez"]
+            # FAIL CLOSED: fabricating a pseudo-district would corrupt the search query.
+            supported = ", ".join(get_supported_cities())
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{city}' için ilçe kaydı bulunamadı. Desteklenen şehirler: {supported}"
+            )
 
     location_display = f"{city} {', '.join(districts)}" if districts else city
 
@@ -199,13 +207,14 @@ async def start_scraper(
     await db.commit()
     await db.refresh(job)
 
+    # max_results passes through verbatim: 0 means UNLIMITED (schema-validated ≥ 0).
     task = asyncio.create_task(
         run_scraper_task(
             job_id=job.id,
             keyword=keyword,
             city=city,
             districts=districts,
-            max_results=req.max_results or 50,
+            max_results=req.max_results,
         )
     )
     active_tasks[job.id] = task

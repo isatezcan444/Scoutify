@@ -84,6 +84,25 @@ class Settings(BaseSettings):
     )
     SCRAPER_MAX_CONCURRENT_TASKS: int = 3
     SCRAPER_REQUEST_TIMEOUT: int = 30
+    # Page navigation timeout for Google Maps sessions (ms)
+    SCRAPER_PAGE_TIMEOUT_MS: int = 30000
+    # "Sınırsız" modda ilçe başına hedef işletme sayısı
+    SCRAPER_UNLIMITED_DISTRICT_TARGET: int = 200
+    # "Sınırsız" modda ilçe başına maksimum scroll iterasyonu
+    SCRAPER_MAX_SCROLL_ITERATIONS: int = 40
+    # Scroll sonrası yeni kartların yüklenmesi için beklenen üst sınır (ms)
+    SCROLLER_SETTLE_TIMEOUT_MS: int = 6000
+    # Zaman bazlı stagnasyon eşiği: bu süre boyunca hiç yeni kart görülmezse
+    # sonuç listesinin bittiği kabul edilir (saniye)
+    SCRAPER_STAGNATION_TIMEOUT_SECONDS: float = 12.0
+    # Website telefon zenginleştirme HTTP timeout'u (saniye)
+    SCRAPER_ENRICH_TIMEOUT_SECONDS: float = 4.0
+    # Sektör etiketinden türetilecek maksimum arama varyantı sayısı
+    SCRAPER_MAX_QUERY_VARIANTS: int = 3
+    # Coğrafi çit: adresi hedef ilçe dışını kanıtlayan işletmeleri ele
+    SCRAPER_GEO_FILTER_ENABLED: bool = True
+    # İlçe kanıtı taşımayan (CITY_ONLY/UNKNOWN) adresleri de ele (en katı mod)
+    SCRAPER_REJECT_UNPROVEN_LOCATION: bool = False
 
 
 settings = Settings()
