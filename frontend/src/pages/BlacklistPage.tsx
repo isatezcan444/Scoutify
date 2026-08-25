@@ -11,11 +11,7 @@ import {
   Building2, 
   MapPin, 
   CheckCircle2, 
-  Save, 
-  User, 
-  RotateCcw,
-  Sparkles,
-  Check
+  Save
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { BlacklistEntry, Lead } from '../types';
@@ -31,12 +27,8 @@ export const BlacklistPage: React.FC = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form State
-  const [newPhone, setNewPhone] = useState('');
+  // Form & Lead Search State
   const [newReason, setNewReason] = useState('USER_REQUEST');
-  const [newNotes, setNewNotes] = useState('');
-
-  // Lead Autocomplete / Search State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Lead[]>([]);
   const [isSearchingLeads, setIsSearchingLeads] = useState(false);
@@ -72,7 +64,7 @@ export const BlacklistPage: React.FC = () => {
       try {
         const res = await ApiClient.getLeads({
           search: searchQuery.trim(),
-          size: 6
+          size: 8
         });
         setSearchResults(res.items || []);
         setShowSuggestions(true);
@@ -100,14 +92,12 @@ export const BlacklistPage: React.FC = () => {
   const handleSelectLead = (lead: Lead) => {
     setSelectedLead(lead);
     setSearchQuery(lead.name);
-    setNewPhone(lead.phone_e164 || lead.phone || '');
     setShowSuggestions(false);
   };
 
   const handleClearSelectedLead = () => {
     setSelectedLead(null);
     setSearchQuery('');
-    setNewPhone('');
     setSearchResults([]);
     setShowSuggestions(false);
   };
@@ -115,9 +105,7 @@ export const BlacklistPage: React.FC = () => {
   const handleOpenAddModal = () => {
     setSelectedLead(null);
     setSearchQuery('');
-    setNewPhone('');
     setNewReason('USER_REQUEST');
-    setNewNotes('');
     setSearchResults([]);
     setShowSuggestions(false);
     setIsAddOpen(true);
@@ -125,9 +113,14 @@ export const BlacklistPage: React.FC = () => {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    const phoneToSubmit = newPhone.trim();
+    if (!selectedLead) {
+      toast.error('Lütfen kara listeye eklemek için bir müşteri adayı arayıp seçin.', 'Müşteri Adayı Seçilmedi');
+      return;
+    }
+
+    const phoneToSubmit = (selectedLead.phone_e164 || selectedLead.phone || '').trim();
     if (!phoneToSubmit) {
-      toast.error('Lütfen engellenecek bir telefon numarası girin veya listeden işletme seçin.', 'Eksik Bilgi');
+      toast.error('Seçilen işletmenin kayıtlı bir telefon numarası bulunmuyor.', 'Telefon Numarası Eksik');
       return;
     }
 
@@ -135,9 +128,7 @@ export const BlacklistPage: React.FC = () => {
     try {
       await ApiClient.addToBlacklist(phoneToSubmit, newReason);
       toast.success(
-        selectedLead 
-          ? `${selectedLead.name} (${phoneToSubmit}) başarıyla kara listeye eklendi.` 
-          : `${phoneToSubmit} numarası başarıyla kara listeye eklendi.`,
+        `${selectedLead.name} (${phoneToSubmit}) başarıyla kara listeye eklendi.`,
         'Numara Engellendi'
       );
       setIsAddOpen(false);
@@ -270,7 +261,7 @@ export const BlacklistPage: React.FC = () => {
         </div>
       </Card>
 
-      {/* Numara Ekle Modal with Predictive Lead Autocomplete */}
+      {/* Numara Ekle Modal with Mandatory Lead Search */}
       {isAddOpen && typeof document !== 'undefined' && createPortal(
         <div 
           className="fixed inset-0 z-[99999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in select-none"
@@ -292,7 +283,7 @@ export const BlacklistPage: React.FC = () => {
                     Kara Listeye Numara Ekle
                   </h3>
                   <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-                    Müşteri adayı arayarak veya doğrudan telefon girerek engelleyin
+                    Kara listeye almak istediğiniz müşteri adayını seçin
                   </p>
                 </div>
               </div>
@@ -307,46 +298,79 @@ export const BlacklistPage: React.FC = () => {
 
             {/* Modal Body */}
             <div className="space-y-4 text-xs">
-              {/* Predictive Lead Search Box */}
+              {/* Mandatory Lead Search Field */}
               <div ref={searchContainerRef} className="relative">
                 <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1 flex items-center justify-between">
-                  <span>Müşteri Adayı Ara (Opsiyonel)</span>
+                  <span>Müşteri Adayı Ara *</span>
                   {selectedLead && (
                     <button
                       type="button"
                       onClick={handleClearSelectedLead}
-                      className="text-[10px] text-[#7367F0] hover:underline font-bold"
+                      className="text-[10px] text-[#7367F0] hover:underline font-bold cursor-pointer"
                     >
-                      Seçimi Temizle
+                      Değiştir
                     </button>
                   )}
                 </label>
 
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    {isSearchingLeads ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-[#7367F0]" />
-                    ) : (
-                      <Search className="w-3.5 h-3.5" />
-                    )}
+                {!selectedLead ? (
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                      {isSearchingLeads ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#7367F0]" />
+                      ) : (
+                        <Search className="w-3.5 h-3.5" />
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onFocus={() => {
+                        if (searchResults.length > 0) setShowSuggestions(true);
+                      }}
+                      placeholder="İşletme adı veya anahtar kelime..."
+                      className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
+                      autoFocus
+                    />
                   </div>
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (selectedLead) setSelectedLead(null);
-                    }}
-                    onFocus={() => {
-                      if (searchResults.length > 0) setShowSuggestions(true);
-                    }}
-                    placeholder="İşletme adı (örn: 7Dent) veya anahtar kelime..."
-                    className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
-                  />
-                </div>
+                ) : (
+                  /* Selected Lead Summary Card */
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-[#7367F0]/30 flex items-center justify-between animate-fade-in shadow-sm">
+                    <div className="space-y-1">
+                      <div className="font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5 text-xs">
+                        <Building2 className="w-3.5 h-3.5 text-[#7367F0]" />
+                        <span>{selectedLead.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-[#EA5455] font-mono font-bold">
+                        <Phone className="w-3 h-3" />
+                        <span>{selectedLead.phone_e164 || selectedLead.phone || 'Numara Yok'}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-400">
+                        {selectedLead.category && <span>{selectedLead.category}</span>}
+                        {(selectedLead.district || selectedLead.city) && (
+                          <span>• {[selectedLead.district, selectedLead.city].filter(Boolean).join(', ')}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1.5">
+                      <Badge variant="success" className="text-[9px] font-bold">
+                        Seçildi
+                      </Badge>
+                      <button
+                        type="button"
+                        onClick={handleClearSelectedLead}
+                        className="text-[10px] text-[#7367F0] hover:underline font-bold cursor-pointer"
+                      >
+                        Değiştir
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {/* Suggestions Dropdown */}
-                {showSuggestions && searchResults.length > 0 && (
+                {showSuggestions && searchResults.length > 0 && !selectedLead && (
                   <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#25293C] rounded-xl shadow-xl border border-slate-200 dark:border-white/[0.1] max-h-56 overflow-y-auto z-50 divide-y divide-slate-100 dark:divide-white/[0.05] animate-scale-in">
                     {searchResults.map((lead) => (
                       <button
@@ -385,50 +409,7 @@ export const BlacklistPage: React.FC = () => {
                 )}
               </div>
 
-              {/* Selected Lead Badge Card */}
-              {selectedLead && (
-                <div className="p-3 rounded-xl bg-[#7367F0]/10 border border-[#7367F0]/20 flex items-center justify-between animate-fade-in">
-                  <div className="flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#7367F0] shrink-0" />
-                    <div>
-                      <span className="text-xs font-extrabold text-slate-800 dark:text-white block">
-                        {selectedLead.name}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {[selectedLead.category, selectedLead.district, selectedLead.city].filter(Boolean).join(' • ')}
-                      </span>
-                    </div>
-                  </div>
-                  <Badge variant="primary" className="text-[10px] font-mono">
-                    CRM Kayıtlı
-                  </Badge>
-                </div>
-              )}
-
-              {/* Direct Phone Number Input */}
-              <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
-                  Telefon Numarası *
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Phone className="w-3.5 h-3.5" />
-                  </div>
-                  <input
-                    type="text"
-                    value={newPhone}
-                    onChange={(e) => setNewPhone(e.target.value)}
-                    placeholder="0532 123 45 67 veya +90532..."
-                    className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-mono font-bold"
-                    required
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Girilen numara otomatik olarak E.164 formatına (+90...) dönüştürülür.
-                </p>
-              </div>
-
-              {/* Reason Selection without parenthesis */}
+              {/* Reason Selection */}
               <div>
                 <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
                   Engelleme Nedeni
@@ -460,7 +441,7 @@ export const BlacklistPage: React.FC = () => {
               <Button
                 type="submit"
                 variant="destructive"
-                disabled={submitting}
+                disabled={submitting || !selectedLead}
                 className="w-1/2 font-bold shadow-md shadow-[#EA5455]/30 cursor-pointer space-x-1.5"
               >
                 {submitting ? (
