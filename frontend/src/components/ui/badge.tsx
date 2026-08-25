@@ -19,6 +19,8 @@ const badgeVariants = cva(
           "bg-[#FF9F43]/15 text-[#FF9F43] dark:bg-[#FF9F43]/25 dark:text-[#FFBD7A]",
         info:
           "bg-[#00CFE8]/15 text-[#00CFE8] dark:bg-[#00CFE8]/25 dark:text-[#4DE2F5]",
+        secondary:
+          "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
         outline:
           "border border-slate-300 text-slate-600 dark:border-white/[0.12] dark:text-slate-300",
       },

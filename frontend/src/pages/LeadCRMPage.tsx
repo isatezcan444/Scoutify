@@ -17,20 +17,24 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  Eye,
+  Building2
 } from 'lucide-react';
-import {
-  Button,
-  Badge,
-  Card,
-  PageHeader,
-  BulkActionToolbar,
-  ToolbarActionButton,
-  Modal,
-  EmptyState,
+import { 
+  Button, 
+  IconButton,
+  Badge, 
+  Avatar,
+  Card, 
+  PageHeader, 
+  BulkActionToolbar, 
+  Modal, 
+  EmptyState, 
   Pagination,
   WhatsAppIcon,
   GoogleMapsIcon
 } from '../components/ui';
+import { LeadDetailDrawer } from '../components/domain/LeadDetailDrawer';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { CategoryMultiSelect } from '../components/LeadFinder/CategoryMultiSelect';
 import { ApiClient } from '../api/client';
@@ -59,6 +63,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const [statusFilter, setStatusFilter] = useState('');
   const [waOnly, setWaOnly] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Detail Drawer State
+  const [selectedLeadForDrawer, setSelectedLeadForDrawer] = useState<Lead | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   // Debounce search input (300ms)
   useEffect(() => {
@@ -175,6 +183,12 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const handleClearSelection = () => {
     setSelectedIds([]);
     setSelectAllMatching(false);
+  };
+
+  // --- Drawer Opener ---
+  const handleOpenLeadDrawer = (lead: Lead) => {
+    setSelectedLeadForDrawer(lead);
+    setIsDrawerOpen(true);
   };
 
   // --- Delete Modal Handlers ---
@@ -303,6 +317,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     try {
       await ApiClient.updateLead(leadId, { status: newStatus });
       setLeads(leads.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l)));
+      if (selectedLeadForDrawer && selectedLeadForDrawer.id === leadId) {
+        setSelectedLeadForDrawer({ ...selectedLeadForDrawer, status: newStatus });
+      }
       toast.success(`${t('common.status')}: "${getStatusLabel(newStatus)}"`, t('common.status'));
       onRefreshStats();
     } catch (err: any) {
@@ -610,18 +627,23 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         onClearSelection={handleClearSelection}
         actions={
           <>
-            <ToolbarActionButton onClick={handleOpenBulkBlacklist}>
+            <button
+              type="button"
+              onClick={handleOpenBulkBlacklist}
+              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+            >
               <ShieldAlert className="w-3.5 h-3.5 text-[#FF9F43]" />
               <span>{t('leads.bulkBlacklist')}</span>
-            </ToolbarActionButton>
+            </button>
 
-            <ToolbarActionButton
-              tone="danger"
+            <button
+              type="button"
               onClick={handleOpenBulkDelete}
+              className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{selectAllMatching ? t('leads.bulkDeleteAll', { total }) : t('leads.bulkDelete', { count: selectedCount })}</span>
-            </ToolbarActionButton>
+            </button>
           </>
         }
       />
@@ -702,20 +724,29 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </button>
                       </td>
 
-                      {/* Name & Category */}
-                      <td className="py-3.5 px-4 max-w-[240px]">
-                        <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
-                          {lead.name}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                            {lead.category || t('common.general')}
-                          </span>
-                          {lead.entity_type && (
-                            <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
-                              {lead.entity_type}
-                            </span>
-                          )}
+                      {/* Name & Avatar & Category */}
+                      <td className="py-3.5 px-4 max-w-[260px]">
+                        <div className="flex items-center space-x-2.5">
+                          <Avatar name={lead.name} size="sm" shape="rounded" />
+                          <div className="min-w-0 flex-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenLeadDrawer(lead)}
+                              className="font-bold text-slate-800 dark:text-white text-xs truncate hover:text-[#7367F0] dark:hover:text-[#A59DF8] transition-colors cursor-pointer text-left block w-full"
+                            >
+                              {lead.name}
+                            </button>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
+                                {lead.category || t('common.general')}
+                              </span>
+                              {lead.entity_type && (
+                                <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
+                                  {lead.entity_type}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
                       </td>
 
@@ -783,16 +814,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                             lead.status === 'NEW'
-                              ? 'bg-vuexy-info/15 text-vuexy-info border-vuexy-info/30 dark:bg-vuexy-info/10 dark:text-[#4DE2F5] dark:border-vuexy-info/20'
+                              ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
                               : lead.status === 'CONTACTED'
-                              ? 'bg-vuexy-warning/15 text-vuexy-warning border-vuexy-warning/30 dark:bg-vuexy-warning/10 dark:text-[#FFBD7A] dark:border-vuexy-warning/20'
+                              ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
                               : lead.status === 'REPLIED'
-                              ? 'bg-vuexy-success/15 text-vuexy-success border-vuexy-success/30 dark:bg-vuexy-success/10 dark:text-[#5BE49B] dark:border-vuexy-success/20'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
                               : lead.status === 'INTERESTED'
-                              ? 'bg-vuexy-primary/15 text-vuexy-primary border-vuexy-primary/30 dark:bg-vuexy-primary/10 dark:text-[#A59DF8] dark:border-vuexy-primary/20'
+                              ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20'
                               : lead.status === 'INVALID_NUMBER'
                               ? 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                              : 'bg-vuexy-danger/15 text-vuexy-danger border-vuexy-danger/30 dark:bg-vuexy-danger/10 dark:text-[#FF7F80] dark:border-vuexy-danger/20'
+                              : 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
                           }`}
                         >
                           <option value="NEW">{t('leads.statusNew')}</option>
@@ -804,17 +835,23 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </select>
                       </td>
 
-                      {/* Actions: 1. Send, 2. Google Maps, 3. Blacklist, 4. Delete */}
+                      {/* Actions: View Details, Send, Google Maps, Blacklist, Delete */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end space-x-1.5">
-                          <button
-                            type="button"
+                        <div className="flex items-center justify-end space-x-1">
+                          <IconButton
+                            icon={Eye}
+                            variant="ghost"
+                            size="sm"
+                            tooltip={t('common.details')}
+                            onClick={() => handleOpenLeadDrawer(lead)}
+                          />
+                          <IconButton
+                            icon={Send}
+                            variant="success"
+                            size="sm"
+                            tooltip={t('leads.quickSendTitle')}
                             onClick={() => handleOpenSendModal(lead)}
-                            title={t('leads.quickSendTitle')}
-                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors cursor-pointer"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
+                          />
                           <a
                             href={getGoogleMapsUrl(lead)}
                             target="_blank"
@@ -824,22 +861,20 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           >
                             <GoogleMapsIcon className="w-4 h-4" />
                           </a>
-                          <button
-                            type="button"
+                          <IconButton
+                            icon={ShieldAlert}
+                            variant="warning"
+                            size="sm"
+                            tooltip={t('blacklist.addNumber')}
                             onClick={() => handleOpenSingleBlacklist(lead)}
-                            title={t('blacklist.addNumber')}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-vuexy-warning/10 transition-colors cursor-pointer"
-                          >
-                            <ShieldAlert className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <IconButton
+                            icon={Trash2}
+                            variant="danger"
+                            size="sm"
+                            tooltip={t('common.delete')}
                             onClick={() => handleOpenSingleDelete(lead)}
-                            title={t('common.delete')}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-vuexy-danger/10 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>
@@ -864,6 +899,17 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           />
         )}
       </Card>
+
+      {/* Offcanvas Slide-over Lead Details Drawer */}
+      <LeadDetailDrawer
+        lead={selectedLeadForDrawer}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onSendMessage={handleOpenSendModal}
+        onBlacklist={handleOpenSingleBlacklist}
+        onDelete={handleOpenSingleDelete}
+        onStatusChange={handleStatusChange}
+      />
 
       {/* Centralized Delete Confirmation Modal */}
       <Modal
@@ -892,11 +938,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </Button>
             <Button
               type="button"
-              variant="destructive"
               size="sm"
               disabled={isDeleting}
               onClick={handleConfirmDelete}
-              className="font-bold space-x-1.5 cursor-pointer"
+              className="bg-[#EA5455] hover:bg-[#D43B3C] text-white font-bold space-x-1.5 shadow-md shadow-[#EA5455]/30 cursor-pointer"
             >
               {isDeleting ? (
                 <>
@@ -936,7 +981,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </label>
 
               {total > leads.length && (
-                <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-vuexy-danger/30 bg-vuexy-danger/5 dark:bg-vuexy-danger/10 cursor-pointer hover:bg-vuexy-danger/10 dark:hover:bg-vuexy-danger/20 transition-colors">
+                <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/10 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors">
                   <input
                     type="radio"
                     name="deleteScope"
@@ -979,11 +1024,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </Button>
             <Button
               type="button"
-              variant="warning"
               size="sm"
               disabled={isBlacklisting}
               onClick={handleConfirmBlacklist}
-              className="font-bold space-x-1.5 cursor-pointer"
+              className="bg-[#FF9F43] hover:bg-[#E58A32] text-white font-bold space-x-1.5 shadow-md shadow-[#FF9F43]/30 cursor-pointer"
             >
               {isBlacklisting ? (
                 <>
@@ -1051,7 +1095,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         maxWidth="md"
       >
         {formError && (
-          <div className="mb-4 p-3 rounded-lg bg-vuexy-danger/10 text-vuexy-danger text-xs font-bold border border-vuexy-danger/20">
+          <div className="mb-4 p-3 rounded-lg bg-rose-50 text-[#EA5455] text-xs font-bold border border-rose-200">
             {formError}
           </div>
         )}
@@ -1153,7 +1197,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           </div>
 
           {sendSuccessMsg && (
-            <div className="mb-3 p-2.5 rounded-lg bg-vuexy-success/10 text-vuexy-success text-xs font-bold border border-vuexy-success/20 animate-fade-in">
+            <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 text-[#28C76F] text-xs font-bold border border-emerald-200 animate-fade-in">
               {sendSuccessMsg}
             </div>
           )}

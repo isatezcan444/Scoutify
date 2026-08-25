@@ -7,18 +7,24 @@ import {
   Phone, 
   Star, 
   Globe, 
-  Loader2,
-  Sparkles,
-  MapPin
+  Loader2, 
+  Sparkles, 
+  MapPin, 
+  Search 
 } from 'lucide-react';
 import { ApiClient, createWebSocket } from '../api/client';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { Card } from '../components/ui/card';
+import { 
+  Button, 
+  Badge, 
+  Card, 
+  PageHeader, 
+  Progress, 
+  Avatar, 
+  WhatsAppIcon, 
+  GoogleMapsIcon 
+} from '../components/ui';
 import { SectorAutocomplete } from '../components/LeadFinder/SectorAutocomplete';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
-import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
-import { GoogleMapsIcon } from '../components/ui/google-maps-icon';
 import { useI18n } from '../context/I18nContext';
 
 interface LeadFinderPageProps {
@@ -41,7 +47,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   const resultsSectionRef = useRef<HTMLDivElement>(null);
   const activeJobIdRef = useRef<number | null>(null);
 
-  // Auto-scroll ONLY inside the terminal container without moving the browser viewport
+  // Auto-scroll inside terminal without scrolling the entire window
   useEffect(() => {
     if (terminalContainerRef.current) {
       terminalContainerRef.current.scrollTop = terminalContainerRef.current.scrollHeight;
@@ -79,7 +85,6 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         `[${new Date().toLocaleTimeString()}] 📡 Job #${job.id} active. Searching in ${locationDisplay}...`,
       ]);
 
-      // Connect to WebSocket to stream live results — filter by job_id
       const ws = createWebSocket((eventData) => {
         if (eventData.job_id !== undefined && eventData.job_id !== activeJobIdRef.current) {
           return;
@@ -142,20 +147,15 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   return (
     <div className="space-y-4 sm:space-y-6 pb-16 select-none animate-fade-in">
       {/* Search Filter Card */}
-      <Card className="p-4 sm:p-6 lg:p-7 relative overflow-visible z-20">
-        <div className="flex items-center space-x-1.5 text-xs font-bold text-[#7367F0] uppercase tracking-wider mb-2">
-          <Sparkles className="w-4 h-4" />
-          <span>{t('nav.leadFinder')}</span>
-        </div>
-        <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-slate-800 dark:text-white tracking-tight">
-          {t('leadFinder.googleMapsSource')}
-        </h2>
-        <p className="text-xs lg:text-sm text-slate-500 dark:text-[#7E7F96] mt-1 max-w-3xl leading-relaxed font-medium">
-          {t('titles.leadFinderSub')}
-        </p>
+      <Card className="p-4 sm:p-6 lg:p-7 relative overflow-visible z-20 space-y-4">
+        <PageHeader
+          title={t('leadFinder.googleMapsSource')}
+          subtitle={t('titles.leadFinderSub')}
+          icon={Sparkles}
+        />
 
         {/* Form Controls Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 mt-5 sm:mt-6 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-2 items-end">
           {/* Sector Autocomplete Input */}
           <div className="md:col-span-5 relative">
             <SectorAutocomplete
@@ -266,12 +266,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             <Badge variant="primary" className="font-mono">%{progress}</Badge>
           </div>
 
-          <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
-            <div 
-              className="h-full bg-gradient-to-r from-[#7367F0] to-[#9E95F5] rounded-full transition-all duration-500 shadow-sm"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
+          <Progress value={progress} variant="gradient" size="md" />
 
           <div 
             ref={terminalContainerRef}
@@ -317,9 +312,12 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                 <div>
                   {/* Full Business Name & Entity Badges */}
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-snug break-words">
-                      {lead.name}
-                    </h4>
+                    <div className="flex items-center space-x-2.5 min-w-0">
+                      <Avatar name={lead.name} size="sm" shape="rounded" />
+                      <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-snug break-words truncate">
+                        {lead.name}
+                      </h4>
+                    </div>
                     {lead.is_verified ? (
                       <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/20">
                         <Check className="w-2.5 h-2.5" />
@@ -333,7 +331,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                   </div>
                   
                   {/* Category & Entity Type placed below the title */}
-                  <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                  <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                     <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
                       {lead.category || keyword}
                     </span>
@@ -348,84 +346,60 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                     {/* Phone Box with WhatsApp Brand Icon */}
                     <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05]">
                       <div className="flex items-center space-x-2 text-[#7367F0] font-mono font-bold text-xs">
-                        <Phone className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">
-                          {lead.phone_e164 && !lead.phone_e164.startsWith('+90000')
-                            ? lead.phone_e164
-                            : (lead.phone && !lead.phone.startsWith('+90000') && lead.phone !== 'Belirtilmemiş' ? lead.phone : t('leads.noPhone'))}
-                        </span>
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{lead.phone_e164 || lead.phone || t('leads.noPhone')}</span>
                       </div>
-
-                      {lead.is_whatsapp_eligible ? (
-                        <div 
-                          className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[11px] shadow-sm shrink-0"
-                          title={t('leads.whatsappActive')}
-                        >
-                          <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
-                          <span>WhatsApp</span>
-                        </div>
-                      ) : lead.phone_e164 && !lead.phone_e164.startsWith('+90000') ? (
-                        <Badge variant="default" className="text-[9px] px-1.5 py-0 font-sans shrink-0">
-                          Landline
-                        </Badge>
-                      ) : (
-                        <span className="text-[9px] font-sans px-1.5 py-0.5 rounded bg-slate-200/60 dark:bg-white/[0.06] text-slate-500 shrink-0">
-                          {t('leads.noPhone')}
-                        </span>
+                      {lead.is_whatsapp_eligible && (
+                        <WhatsAppIcon className="w-4 h-4 text-[#25D366]" />
                       )}
                     </div>
 
-                    {/* Address & District */}
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span className="line-clamp-2 text-slate-600 dark:text-slate-300">
-                        {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city}`}
+                    {/* Address Line */}
+                    <div className="flex items-start space-x-2 text-[11px] leading-tight">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <span className="line-clamp-2">
+                        {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
                       </span>
                     </div>
 
-                    {/* Rating & Reviews */}
+                    {/* Rating & Review Counter */}
                     {lead.rating ? (
-                      <div className="flex items-center space-x-2">
-                        <Star className="w-3.5 h-3.5 text-[#FF9F43] fill-[#FF9F43] shrink-0" />
-                        <span className="text-slate-800 dark:text-white font-bold">{lead.rating}</span>
+                      <div className="flex items-center space-x-1.5 text-xs text-slate-700 dark:text-slate-300 pt-1">
+                        <Star className="w-3.5 h-3.5 text-[#FF9F43] fill-[#FF9F43]" />
+                        <span className="font-bold">{lead.rating}</span>
                         {lead.reviews_count ? (
-                          <span className="text-slate-400">({lead.reviews_count})</span>
+                          <span className="text-slate-400 text-[10px]">({lead.reviews_count} {t('leads.colRatingWeb')})</span>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
                 </div>
 
-                {/* Card Action Footer with Google Maps & Clean Website Links */}
-                <div className="pt-3 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 text-xs">
-                  {/* Google Maps Button */}
-                  <a
-                    href={getGoogleMapsUrl(lead)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-white/[0.06] hover:bg-slate-200 dark:hover:bg-white/[0.1] text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-white/[0.08] font-bold transition-all active:scale-95 text-[11px] group"
-                  >
-                    <GoogleMapsIcon className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
-                    <span>Google Maps</span>
-                    <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                  </a>
-
-                  {/* Clean Website Link: Only render if valid website exists */}
+                {/* Footer Action Links */}
+                <div className="pt-3 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between text-xs">
                   {lead.website ? (
                     <a
-                      href={lead.website}
+                      href={lead.website.startsWith('http') ? lead.website : `https://${lead.website}`}
                       target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-slate-500 hover:text-[#7367F0] font-medium transition-colors text-[11px] truncate max-w-[140px]"
-                      title={lead.website}
+                      rel="noreferrer"
+                      className="text-[#7367F0] hover:underline flex items-center space-x-1 font-bold truncate max-w-[150px]"
                     >
                       <Globe className="w-3.5 h-3.5 shrink-0" />
                       <span className="truncate">{lead.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
-                      <ExternalLink className="w-2.5 h-2.5 shrink-0" />
                     </a>
                   ) : (
-                    <span className="text-[10px] text-slate-400 italic">{t('leads.noAddress')}</span>
+                    <span className="text-slate-400 text-[11px] italic">{t('leads.noPhone')}</span>
                   )}
+
+                  <a
+                    href={getGoogleMapsUrl(lead)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="p-1 rounded-md text-slate-400 hover:text-[#7367F0] hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
+                    title="Google Maps"
+                  >
+                    <GoogleMapsIcon className="w-4 h-4" />
+                  </a>
                 </div>
               </Card>
             ))}
