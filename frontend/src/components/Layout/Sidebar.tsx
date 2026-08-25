@@ -121,6 +121,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               return (
                 <button
                   key={item.id}
+                  data-tab-id={item.id}
                   onClick={() => handleTabClick(item.id)}
                   className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 group cursor-pointer ${
                     isActive

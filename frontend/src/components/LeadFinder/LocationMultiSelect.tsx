@@ -4,6 +4,7 @@ import { MapPin, Search, Check, ChevronDown, X } from 'lucide-react';
 import { TURKEY_LOCATIONS, CityData } from '../../data/turkeyLocations';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import { useI18n } from '../../context/I18nContext';
 
 interface LocationMultiSelectProps {
   selectedCity: string;
@@ -22,6 +23,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
   onDistrictsChange,
   disabled = false,
 }) => {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [activeCityName, setActiveCityName] = useState(selectedCity || 'İstanbul');
   const [localDistricts, setLocalDistricts] = useState<string[]>(selectedDistricts || []);
@@ -80,11 +82,11 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
   };
 
   const getSummaryLabel = () => {
-    if (!selectedCity) return "İl ve İlçe Seçiniz...";
+    if (!selectedCity) return t('leadFinder.cityPlaceholder');
     const districts = selectedDistricts || [];
-    if (districts.length === 0) return `${selectedCity} (Tüm İl Geneli)`;
+    if (districts.length === 0) return `${selectedCity} (${t('leadFinder.allDistricts')})`;
     if (districts.length === 1) return `${selectedCity} > ${districts[0]}`;
-    return `${selectedCity} (${districts.length} İlçe: ${districts.slice(0, 2).join(', ')}...)`;
+    return `${selectedCity} (${districts.length} ${t('common.location')}: ${districts.slice(0, 2).join(', ')}${districts.length > 2 ? '...' : ''})`;
   };
 
   const modalContent = isOpen && mounted ? (
@@ -104,17 +106,17 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white leading-tight">
-                Lokasyon Seçimi (İl & Çoklu İlçe)
+                {t('leadFinder.locationLabel')}
               </h3>
               <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium">
-                İl seçin, ardından sağ panelden hedefleyeceğiniz ilçeleri işaretleyin.
+                {t('leadFinder.districtsPlaceholder')}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setIsOpen(false)}
-            className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors"
+            className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -123,12 +125,12 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
         {/* Selected Badges Preview Bar */}
         <div className="px-3.5 sm:px-5 py-2 sm:py-2.5 bg-slate-50 dark:bg-[#25293C] border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center space-x-1.5 flex-wrap gap-y-1 overflow-x-auto max-h-14 sm:max-h-16 py-0.5">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-[#7E7F96] mr-1 shrink-0">Seçilen:</span>
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-[#7E7F96] mr-1 shrink-0">{t('common.selected') || 'Selected'}:</span>
             <Badge variant="primary" className="text-[10px] sm:text-[11px] font-bold shrink-0">
               {activeCityName}
             </Badge>
             {localDistricts.length === 0 ? (
-              <span className="text-[10px] sm:text-[11px] text-slate-400 italic shrink-0">(Tüm İl Geneli Taranacak)</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-400 italic shrink-0">({t('leadFinder.allDistricts')})</span>
             ) : (
               localDistricts.map((dist) => (
                 <span
@@ -139,7 +141,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                   <button
                     type="button"
                     onClick={() => handleToggleDistrict(dist)}
-                    className="hover:text-[#EA5455] p-0.5"
+                    className="hover:text-[#EA5455] p-0.5 cursor-pointer"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -149,7 +151,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
           </div>
 
           <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0 font-mono pl-2">
-            {localDistricts.length} / {activeCity.districts.length} İlçe
+            {localDistricts.length} / {activeCity.districts.length}
           </span>
         </div>
 
@@ -163,7 +165,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                 type="text"
                 value={citySearch}
                 onChange={(e) => setCitySearch(e.target.value)}
-                placeholder="İl ara (Örn: İstanbul)..."
+                placeholder={t('leadFinder.cityPlaceholder')}
                 className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
               />
             </div>
@@ -176,7 +178,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                     key={city.name}
                     type="button"
                     onClick={() => handleCitySelect(city.name)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-between cursor-pointer ${
                       isCityActive
                         ? 'bg-[#7367F0] text-white shadow-sm'
                         : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.05]'
@@ -184,7 +186,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                   >
                     <span>{city.name}</span>
                     <span className={`text-[10px] ${isCityActive ? 'text-white/80' : 'text-slate-400'}`}>
-                      {city.districts.length} İlçe
+                      {city.districts.length}
                     </span>
                   </button>
                 );
@@ -201,7 +203,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                   type="text"
                   value={districtSearch}
                   onChange={(e) => setDistrictSearch(e.target.value)}
-                  placeholder={`${activeCityName} ilçelerinde ara...`}
+                  placeholder={`${activeCityName}...`}
                   className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
                 />
               </div>
@@ -209,17 +211,17 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
                 <button
                   type="button"
                   onClick={handleSelectAllDistricts}
-                  className="text-[11px] font-bold text-[#7367F0] hover:underline px-1 py-0.5"
+                  className="text-[11px] font-bold text-[#7367F0] hover:underline px-1 py-0.5 cursor-pointer"
                 >
-                  Tümünü Seç
+                  {t('common.selectAll') || 'Select All'}
                 </button>
                 <span className="text-slate-300 dark:text-slate-600">|</span>
                 <button
                   type="button"
                   onClick={handleClearDistricts}
-                  className="text-[11px] font-bold text-slate-400 hover:text-[#EA5455] px-1 py-0.5"
+                  className="text-[11px] font-bold text-slate-400 hover:text-[#EA5455] px-1 py-0.5 cursor-pointer"
                 >
-                  Temizle
+                  {t('common.clear') || 'Clear'}
                 </button>
               </div>
             </div>
@@ -255,8 +257,8 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
         <div className="p-4 border-t border-slate-100 dark:border-white/[0.08] flex items-center justify-between shrink-0 bg-white dark:bg-[#2F3349]">
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] font-medium hidden sm:block">
             {localDistricts.length > 0
-              ? `Seçilen ${localDistricts.length} ilçe sırayla taranacaktır.`
-              : `${activeCityName} ilinin tüm genelinde arama yapılacaktır.`}
+              ? `${localDistricts.length} ${t('common.location')}`
+              : `${activeCityName} (${t('leadFinder.allDistricts')})`}
           </p>
 
           <div className="flex items-center space-x-2.5 ml-auto">
@@ -266,7 +268,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
               size="sm"
               onClick={() => setIsOpen(false)}
             >
-              Kapat
+              {t('common.close')}
             </Button>
             <Button
               type="button"
@@ -275,7 +277,7 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
               className="font-bold shadow-md shadow-[#7367F0]/30 space-x-1.5"
             >
               <Check className="w-4 h-4" />
-              <span>Seçimi Onayla</span>
+              <span>{t('common.apply')}</span>
             </Button>
           </div>
         </div>

@@ -26,6 +26,7 @@ import {
   EmptyState,
   Pagination
 } from '../components/ui';
+import { SearchInput, Select } from '../components/forms';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
 
@@ -326,35 +327,33 @@ export const BlacklistPage: React.FC = () => {
       {/* Filter & Search Bar */}
       <Card className="p-4">
         <div className="flex flex-col md:flex-row items-center gap-3">
-          <div className="relative flex-1 w-full">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <Search className="w-4 h-4" />
-            </div>
-            <input
-              type="text"
+          <div className="flex-1 w-full">
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(val) => {
+                setSearch(val);
+                setPage(1);
+              }}
               placeholder={t('blacklist.searchPlaceholder')}
-              className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
             />
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="relative w-full md:w-56">
-              <select
+            <div className="w-full md:w-56">
+              <Select
                 value={reasonFilter}
                 onChange={(e) => {
                   setReasonFilter(e.target.value);
                   setPage(1);
                 }}
-                className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
-              >
-                <option value="">{t('blacklist.filterAllReasons')}</option>
-                <option value="USER_REQUEST">{t('blacklist.reasonUserRequest')}</option>
-                <option value="BOUNCED">{t('blacklist.reasonBounced')}</option>
-                <option value="SPAM_COMPLAINT">{t('blacklist.reasonSpamComplaint')}</option>
-                <option value="MANUAL_BLACKLIST">{t('blacklist.reasonManual')}</option>
-              </select>
+                options={[
+                  { value: '', label: t('blacklist.filterAllReasons') },
+                  { value: 'USER_REQUEST', label: t('blacklist.reasonUserRequest') },
+                  { value: 'BOUNCED', label: t('blacklist.reasonBounced') },
+                  { value: 'SPAM_COMPLAINT', label: t('blacklist.reasonSpamComplaint') },
+                  { value: 'MANUAL_BLACKLIST', label: t('blacklist.reasonManual') },
+                ]}
+              />
             </div>
 
             {(search || reasonFilter) && (

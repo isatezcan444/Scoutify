@@ -23,6 +23,7 @@ import {
   WhatsAppIcon, 
   GoogleMapsIcon 
 } from '../components/ui';
+import { Select } from '../components/forms';
 import { SectorAutocomplete } from '../components/LeadFinder/SectorAutocomplete';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { useI18n } from '../context/I18nContext';
@@ -154,10 +155,14 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           icon={Sparkles}
         />
 
-        {/* Form Controls Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-2 items-end">
-          {/* Sector Autocomplete Input */}
-          <div className="md:col-span-5 relative">
+        {/* Form Controls Grid - Responsive across Mobile, Tablet, and Desktop */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 lg:grid-cols-12 gap-3.5 pt-2 items-end">
+          {/* Sector Autocomplete Input: 4 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
+          <div className="sm:col-span-6 lg:col-span-4 space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-[#7367F0]" />
+              <span>{t('leadFinder.keywordLabel')}</span>
+            </label>
             <SectorAutocomplete
               value={keyword}
               onChange={setKeyword}
@@ -165,8 +170,12 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             />
           </div>
 
-          {/* Location Multi-Select (City + Districts) */}
-          <div className="md:col-span-4 relative">
+          {/* Location Multi-Select (City + Districts): 4 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
+          <div className="sm:col-span-6 lg:col-span-4 space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-[#00CFE8]" />
+              <span>{t('leadFinder.locationLabel')}</span>
+            </label>
             <LocationMultiSelect
               selectedCity={selectedCity}
               selectedDistricts={selectedDistricts}
@@ -180,26 +189,29 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             />
           </div>
 
-          {/* Target Limit Selector */}
-          <div className="md:col-span-1 space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-200">{t('leadFinder.searchScope')}</label>
-            <select
+          {/* Target Limit Selector: 2 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
+          <div className="sm:col-span-6 lg:col-span-2 space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 truncate">
+              <Sparkles className="w-3.5 h-3.5 text-[#FF9F43]" />
+              <span>{t('leadFinder.searchScope')}</span>
+            </label>
+            <Select
               value={maxResults}
               onChange={(e) => setMaxResults(Number(e.target.value))}
-              className="w-full h-11 px-2.5 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
               disabled={isScraping}
-            >
-              <option value={0}>{t('common.all')}</option>
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={35}>35</option>
-              <option value={50}>50</option>
-              <option value={100}>100</option>
-            </select>
+              sizeVariant="lg"
+              options={[
+                { value: 0, label: `${t('common.all')} (Limitsiz)` },
+                { value: 10, label: '10 İşletme' },
+                { value: 25, label: '25 İşletme' },
+                { value: 50, label: '50 İşletme' },
+                { value: 100, label: '100 İşletme' },
+              ]}
+            />
           </div>
 
-          {/* Search Button */}
-          <div className="md:col-span-2">
+          {/* Search Button: 2 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
+          <div className="sm:col-span-6 lg:col-span-2">
             <Button
               onClick={handleStartScrape}
               disabled={isScraping || !keyword || !selectedCity}

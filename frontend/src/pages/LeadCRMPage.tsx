@@ -35,7 +35,7 @@ import {
   WhatsAppIcon,
   GoogleMapsIcon
 } from '../components/ui';
-import { SearchInput } from '../components/forms';
+import { SearchInput, Select } from '../components/forms';
 import { BusinessCell } from '../components/data-display';
 import { LeadDetailDrawer } from '../components/domain/LeadDetailDrawer';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
@@ -519,22 +519,22 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
           {/* Status Filter: 2 cols */}
           <div className="lg:col-span-2">
-            <select
+            <Select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 rounded-lg vuexy-input text-xs font-semibold h-10 cursor-pointer"
-            >
-              <option value="">{t('leads.filterByStatus')}</option>
-              <option value="NEW">{t('leads.statusNew')}</option>
-              <option value="CONTACTED">{t('leads.statusContacted')}</option>
-              <option value="REPLIED">{t('leads.statusReplied')}</option>
-              <option value="INTERESTED">{t('leads.statusInterested')}</option>
-              <option value="UNSUBSCRIBED">{t('leads.statusUnsubscribed')}</option>
-              <option value="INVALID_NUMBER">{t('leads.statusInvalid')}</option>
-            </select>
+              options={[
+                { value: '', label: t('leads.filterByStatus') },
+                { value: 'NEW', label: t('leads.statusNew') },
+                { value: 'CONTACTED', label: t('leads.statusContacted') },
+                { value: 'REPLIED', label: t('leads.statusReplied') },
+                { value: 'INTERESTED', label: t('leads.statusInterested') },
+                { value: 'UNSUBSCRIBED', label: t('leads.statusUnsubscribed') },
+                { value: 'INVALID_NUMBER', label: t('leads.statusInvalid') },
+              ]}
+            />
           </div>
         </div>
 

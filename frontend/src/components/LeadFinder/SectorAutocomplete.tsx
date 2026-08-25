@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Sparkles, Check, X } from 'lucide-react';
 import { SECTORS } from '../../data/sectors';
+import { useI18n } from '../../context/I18nContext';
 
 interface SectorAutocompleteProps {
   value: string;
@@ -13,6 +14,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
   onChange,
   disabled = false,
 }) => {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -61,9 +63,9 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
   };
 
   return (
-    <div ref={wrapperRef} className="relative z-50">
-      <div className="relative">
-        <Search className="w-4 h-4 text-[#7367F0] absolute left-3.5 top-3.5 pointer-events-none" />
+    <div ref={wrapperRef} className="relative z-50 w-full">
+      <div className="relative flex items-center w-full">
+        <Search className="w-4 h-4 text-[#7367F0] absolute left-3.5 pointer-events-none" />
         <input
           type="text"
           value={value}
@@ -76,7 +78,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
             if (value.trim().length > 0) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Sektör yazın (Örn: Diş Klinikleri, Güzellik Merkezleri)..."
+          placeholder={t('leadFinder.keywordPlaceholder')}
           disabled={disabled}
           className="w-full h-11 pl-10 pr-9 rounded-lg vuexy-input text-xs font-semibold transition-all border border-slate-300 dark:border-white/[0.12] focus:border-[#7367F0]"
         />
@@ -87,7 +89,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
               onChange('');
               setIsOpen(false);
             }}
-            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5"
+            className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5"
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -98,7 +100,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
       {isOpen && filteredSectors.length > 0 && (
         <div className="absolute left-0 right-0 top-full mt-1.5 z-[100] rounded-xl bg-white dark:bg-[#2F3349] border border-slate-200 dark:border-white/[0.12] shadow-2xl overflow-hidden max-h-60 overflow-y-auto animate-fade-in">
           <div className="px-3 pt-2.5 pb-1 text-[10px] font-bold text-slate-400 dark:text-[#7E7F96] uppercase tracking-wider border-b border-slate-100 dark:border-white/[0.06]">
-            Eşleşen Sektörler ({filteredSectors.length})
+            {t('leadFinder.keywordLabel')} ({filteredSectors.length})
           </div>
           <div className="p-1.5 space-y-0.5">
             {filteredSectors.map((sector, idx) => {
