@@ -83,7 +83,7 @@ const AppContent: React.FC = () => {
       case 'whatsapp':
         return 'WhatsApp Oturumları & Anti-Ban Kalkanı';
       case 'blacklist':
-        return 'Kara Liste & Opt-Out Filtresi';
+        return 'Kara Liste';
       case 'settings':
         return 'Ayarlar';
       default:

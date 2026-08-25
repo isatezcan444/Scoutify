@@ -47,7 +47,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'campaigns', label: 'Kampanyalar & Spintax', icon: Send, badge: activeCampaignsCount > 0 ? `${activeCampaignsCount} Aktif` : null, badgeVariant: 'warning' as const },
         { id: 'whatsapp', label: 'WhatsApp & Anti-Ban Hub', icon: Smartphone, badge: null },
-        { id: 'blacklist', label: 'Kara Liste & Opt-Out', icon: ShieldAlert, badge: null },
+        { id: 'blacklist', label: 'Kara Liste', icon: ShieldAlert, badge: null },
       ]
     },
     {
