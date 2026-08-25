@@ -359,7 +359,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                       {lead.is_whatsapp_eligible ? (
                         <div 
                           className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[11px] shadow-sm shrink-0"
-                          title="Verified WhatsApp"
+                          title={t('leads.whatsappActive')}
                         >
                           <WhatsAppIcon className="w-3.5 h-3.5 fill-current" />
                           <span>WhatsApp</span>

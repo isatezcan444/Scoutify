@@ -33,8 +33,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const { t } = useI18n();
 
+  // Danger confirms a destructive action; every other tone confirms a neutral one.
+  const defaultConfirmLabel =
+    variant === 'danger' ? t('common.delete') : t('common.confirm');
   const confirmBtnVariant =
-    variant === 'danger' ? 'destructive' : variant === 'warning' ? 'default' : 'default';
+    variant === 'danger' ? 'destructive' : variant === 'warning' ? 'warning' : 'default';
 
   return (
     <Modal
@@ -64,11 +67,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             size="sm"
             disabled={loading}
             onClick={onConfirm}
-            className={`font-bold space-x-1.5 cursor-pointer ${
-              variant === 'warning'
-                ? 'bg-[#FF9F43] hover:bg-[#E58A32] text-white shadow-md shadow-[#FF9F43]/30'
-                : ''
-            }`}
+            className="font-bold space-x-1.5 cursor-pointer"
           >
             {loading ? (
               <>
@@ -76,7 +75,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 <span>{t('common.loading')}</span>
               </>
             ) : (
-              <span>{confirmText || t('common.delete')}</span>
+              <span>{confirmText || defaultConfirmLabel}</span>
             )}
           </Button>
         </>

@@ -49,7 +49,26 @@ export default {
       },
       borderRadius: {
         'vuexy': '0.625rem', // 10px Vuexy card border radius
-      }
+      },
+      keyframes: {
+        'fade-in': {
+          '0%': { opacity: '0', transform: 'translateY(4px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'scale-up': {
+          '0%': { opacity: '0', transform: 'scale(0.96)' },
+          '100%': { opacity: '1', transform: 'scale(1)' },
+        },
+        'scale-in': {
+          '0%': { opacity: '0', transform: 'scale(0.95) translateY(-4px)' },
+          '100%': { opacity: '1', transform: 'scale(1) translateY(0)' },
+        },
+      },
+      animation: {
+        'fade-in': 'fade-in 0.25s ease-out',
+        'scale-up': 'scale-up 0.2s ease-out',
+        'scale-in': 'scale-in 0.18s ease-out',
+      },
     },
   },
   plugins: [],

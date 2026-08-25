@@ -1,6 +1,7 @@
 export * from './button';
 export * from './card';
 export * from './badge';
+export * from './IconTile';
 export * from './PageHeader';
 export * from './StatsCard';
 export * from './HeroBanner';

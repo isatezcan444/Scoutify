@@ -13,6 +13,45 @@ export interface BulkActionToolbarProps {
   className?: string;
 }
 
+type ActionTone = 'glass' | 'danger';
+
+const actionToneClasses: Record<ActionTone, string> = {
+  // Translucent button that sits on the gradient surface.
+  glass:
+    'bg-white/15 hover:bg-white/25 text-white shadow-sm',
+  // Destructive action — Vuexy danger, identical on both CRM and Blacklist.
+  danger:
+    'bg-[#EA5455] hover:bg-[#D43D3E] text-white shadow-md shadow-[#EA5455]/40',
+};
+
+export interface ToolbarActionButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  tone?: ActionTone;
+}
+
+/**
+ * Compound component so every page renders toolbar actions identically
+ * instead of hand-rolling one-off translucent/rose buttons.
+ */
+export const ToolbarActionButton: React.FC<ToolbarActionButtonProps> = ({
+  tone = 'glass',
+  className,
+  children,
+  ...props
+}) => (
+  <button
+    type="button"
+    className={cn(
+      'px-3 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer disabled:opacity-50 disabled:pointer-events-none',
+      actionToneClasses[tone],
+      className
+    )}
+    {...props}
+  >
+    {children}
+  </button>
+);
+
 export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   selectedCount,
   totalCount,
@@ -29,7 +68,7 @@ export const BulkActionToolbar: React.FC<BulkActionToolbarProps> = ({
   return (
     <div
       className={cn(
-        'p-3.5 rounded-xl bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-lg shadow-[#7367F0]/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in select-none',
+        'sticky bottom-4 z-30 p-3.5 rounded-xl bg-gradient-to-r from-vuexy-primary to-[#867BFF] text-white shadow-lg shadow-vuexy-primary/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in select-none',
         className
       )}
     >

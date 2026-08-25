@@ -70,7 +70,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             text: `${stats.whatsapp_eligible_leads} ${t('dashboard.whatsappEligible')}`,
             variant: 'success',
           }}
-          subText="CRM"
+          subText={t('dashboard.crmRegistry')}
           onClick={() => onNavigate('leads')}
         />
 

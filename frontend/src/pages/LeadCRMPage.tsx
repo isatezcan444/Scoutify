@@ -18,14 +18,15 @@ import {
   Square,
   MinusSquare,
 } from 'lucide-react';
-import { 
-  Button, 
-  Badge, 
-  Card, 
-  PageHeader, 
-  BulkActionToolbar, 
-  Modal, 
-  EmptyState, 
+import {
+  Button,
+  Badge,
+  Card,
+  PageHeader,
+  BulkActionToolbar,
+  ToolbarActionButton,
+  Modal,
+  EmptyState,
   Pagination,
   WhatsAppIcon,
   GoogleMapsIcon
@@ -609,23 +610,18 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         onClearSelection={handleClearSelection}
         actions={
           <>
-            <button
-              type="button"
-              onClick={handleOpenBulkBlacklist}
-              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
-            >
+            <ToolbarActionButton onClick={handleOpenBulkBlacklist}>
               <ShieldAlert className="w-3.5 h-3.5 text-[#FF9F43]" />
               <span>{t('leads.bulkBlacklist')}</span>
-            </button>
+            </ToolbarActionButton>
 
-            <button
-              type="button"
+            <ToolbarActionButton
+              tone="danger"
               onClick={handleOpenBulkDelete}
-              className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span>{selectAllMatching ? t('leads.bulkDeleteAll', { total }) : t('leads.bulkDelete', { count: selectedCount })}</span>
-            </button>
+            </ToolbarActionButton>
           </>
         }
       />
@@ -787,16 +783,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           onChange={(e) => handleStatusChange(lead.id, e.target.value as LeadStatus)}
                           className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-colors cursor-pointer ${
                             lead.status === 'NEW'
-                              ? 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20'
+                              ? 'bg-vuexy-info/15 text-vuexy-info border-vuexy-info/30 dark:bg-vuexy-info/10 dark:text-[#4DE2F5] dark:border-vuexy-info/20'
                               : lead.status === 'CONTACTED'
-                              ? 'bg-amber-50 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20'
+                              ? 'bg-vuexy-warning/15 text-vuexy-warning border-vuexy-warning/30 dark:bg-vuexy-warning/10 dark:text-[#FFBD7A] dark:border-vuexy-warning/20'
                               : lead.status === 'REPLIED'
-                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
+                              ? 'bg-vuexy-success/15 text-vuexy-success border-vuexy-success/30 dark:bg-vuexy-success/10 dark:text-[#5BE49B] dark:border-vuexy-success/20'
                               : lead.status === 'INTERESTED'
-                              ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20'
+                              ? 'bg-vuexy-primary/15 text-vuexy-primary border-vuexy-primary/30 dark:bg-vuexy-primary/10 dark:text-[#A59DF8] dark:border-vuexy-primary/20'
                               : lead.status === 'INVALID_NUMBER'
                               ? 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                              : 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
+                              : 'bg-vuexy-danger/15 text-vuexy-danger border-vuexy-danger/30 dark:bg-vuexy-danger/10 dark:text-[#FF7F80] dark:border-vuexy-danger/20'
                           }`}
                         >
                           <option value="NEW">{t('leads.statusNew')}</option>
@@ -832,7 +828,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             type="button"
                             onClick={() => handleOpenSingleBlacklist(lead)}
                             title={t('blacklist.addNumber')}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-vuexy-warning/10 transition-colors cursor-pointer"
                           >
                             <ShieldAlert className="w-4 h-4" />
                           </button>
@@ -840,7 +836,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             type="button"
                             onClick={() => handleOpenSingleDelete(lead)}
                             title={t('common.delete')}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-vuexy-danger/10 transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -896,10 +892,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </Button>
             <Button
               type="button"
+              variant="destructive"
               size="sm"
               disabled={isDeleting}
               onClick={handleConfirmDelete}
-              className="bg-[#EA5455] hover:bg-[#D43B3C] text-white font-bold space-x-1.5 shadow-md shadow-[#EA5455]/30 cursor-pointer"
+              className="font-bold space-x-1.5 cursor-pointer"
             >
               {isDeleting ? (
                 <>
@@ -939,7 +936,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </label>
 
               {total > leads.length && (
-                <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50/50 dark:bg-rose-500/10 cursor-pointer hover:bg-rose-50 dark:hover:bg-rose-500/20 transition-colors">
+                <label className="flex items-start space-x-2.5 p-2 rounded-lg border border-vuexy-danger/30 bg-vuexy-danger/5 dark:bg-vuexy-danger/10 cursor-pointer hover:bg-vuexy-danger/10 dark:hover:bg-vuexy-danger/20 transition-colors">
                   <input
                     type="radio"
                     name="deleteScope"
@@ -982,10 +979,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </Button>
             <Button
               type="button"
+              variant="warning"
               size="sm"
               disabled={isBlacklisting}
               onClick={handleConfirmBlacklist}
-              className="bg-[#FF9F43] hover:bg-[#E58A32] text-white font-bold space-x-1.5 shadow-md shadow-[#FF9F43]/30 cursor-pointer"
+              className="font-bold space-x-1.5 cursor-pointer"
             >
               {isBlacklisting ? (
                 <>
@@ -1053,7 +1051,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         maxWidth="md"
       >
         {formError && (
-          <div className="mb-4 p-3 rounded-lg bg-rose-50 text-[#EA5455] text-xs font-bold border border-rose-200">
+          <div className="mb-4 p-3 rounded-lg bg-vuexy-danger/10 text-vuexy-danger text-xs font-bold border border-vuexy-danger/20">
             {formError}
           </div>
         )}
@@ -1155,7 +1153,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           </div>
 
           {sendSuccessMsg && (
-            <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 text-[#28C76F] text-xs font-bold border border-emerald-200 animate-fade-in">
+            <div className="mb-3 p-2.5 rounded-lg bg-vuexy-success/10 text-vuexy-success text-xs font-bold border border-vuexy-success/20 animate-fade-in">
               {sendSuccessMsg}
             </div>
           )}

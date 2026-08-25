@@ -15,15 +15,16 @@ import {
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { BlacklistEntry, Lead } from '../types';
-import { 
-  Button, 
-  Badge, 
-  Card, 
-  PageHeader, 
-  BulkActionToolbar, 
-  Modal, 
-  EmptyState, 
-  Pagination 
+import {
+  Button,
+  Badge,
+  Card,
+  PageHeader,
+  BulkActionToolbar,
+  ToolbarActionButton,
+  Modal,
+  EmptyState,
+  Pagination
 } from '../components/ui';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
@@ -383,12 +384,10 @@ export const BlacklistPage: React.FC = () => {
         onSelectAllMatching={handleSelectAllAcrossPages}
         onClearSelection={handleClearSelection}
         actions={
-          <Button
-            size="sm"
-            variant="destructive"
+          <ToolbarActionButton
+            tone="danger"
             disabled={isBulkRemoving}
             onClick={handleBulkRemove}
-            className="space-x-1.5 font-bold shadow-md bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
           >
             {isBulkRemoving ? (
               <>
@@ -405,7 +404,7 @@ export const BlacklistPage: React.FC = () => {
                 </span>
               </>
             )}
-          </Button>
+          </ToolbarActionButton>
         }
       />
 

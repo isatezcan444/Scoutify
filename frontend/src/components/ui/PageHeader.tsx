@@ -1,5 +1,6 @@
 import React from 'react';
 import { LucideIcon } from 'lucide-react';
+import { IconTile } from './IconTile';
 import { cn } from '../../lib/utils';
 
 export interface PageHeaderProps {
@@ -23,18 +24,14 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
     <div className={cn('flex flex-col lg:flex-row lg:items-center justify-between gap-4 select-none', className)}>
       <div className="space-y-0.5">
         <div className="flex items-center gap-2 flex-wrap">
-          {Icon && (
-            <div className="w-9 h-9 rounded-lg bg-[#7367F0]/10 text-[#7367F0] flex items-center justify-center shrink-0">
-              <Icon className="w-5 h-5" />
-            </div>
-          )}
+          {Icon && <IconTile icon={Icon} size="sm" tone="primary" />}
           <h2 className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-white tracking-tight">
             {title}
           </h2>
           {badge}
         </div>
         {subtitle && (
-          <p className="text-xs text-slate-500 dark:text-[#7E7F96] font-medium leading-relaxed">
+          <p className="text-xs text-slate-500 dark:text-vuexy-dark-muted font-medium leading-relaxed">
             {subtitle}
           </p>
         )}

@@ -50,20 +50,20 @@ export const Pagination: React.FC<PaginationProps> = ({
   return (
     <div
       className={cn(
-        'p-4 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#7E7F96] select-none',
+        'p-4 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-vuexy-dark-muted select-none',
         className
       )}
     >
       {/* Entry Count Summary & Optional Page Size */}
       <div className="flex items-center gap-3">
         <span>
-          {t('leads.showing', { start: startItem, end: endItem, total: totalItems }) ||
-            `Showing ${startItem} to ${endItem} of ${totalItems} entries`}
+          {t('common.showing')} {startItem} {t('common.to')} {endItem} {t('common.of')}{' '}
+          {totalItems} {t('common.entries')}
         </span>
 
         {onPageSizeChange && (
           <div className="flex items-center space-x-1.5 pl-2 border-l border-slate-200 dark:border-white/[0.08]">
-            <span className="text-[11px]">Show:</span>
+            <span className="text-[11px]">{t('common.perPage')}</span>
             <select
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
@@ -87,7 +87,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage <= 1}
           className="p-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
-          title="Previous Page"
+          title={t('common.previous')}
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -125,7 +125,7 @@ export const Pagination: React.FC<PaginationProps> = ({
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
           className="p-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-100 dark:hover:bg-white/[0.06] text-slate-600 dark:text-slate-300 disabled:opacity-40 disabled:pointer-events-none transition-colors cursor-pointer"
-          title="Next Page"
+          title={t('common.next')}
         >
           <ChevronRight className="w-4 h-4" />
         </button>

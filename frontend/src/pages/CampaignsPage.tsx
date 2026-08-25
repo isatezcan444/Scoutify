@@ -167,8 +167,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
             <Card className="p-8 text-center">
               <EmptyState
                 icon={Send}
-                title="No Campaigns Yet"
-                description="Create your first Spintax-powered WhatsApp outreach campaign with randomized jitter delays."
+                title={t('campaigns.emptyTitle')}
+                description={t('campaigns.emptyDescription')}
                 action={{
                   label: t('campaigns.createCampaign'),
                   onClick: () => setActiveTab('builder'),
