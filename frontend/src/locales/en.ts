@@ -132,8 +132,8 @@ export const en = {
     cooldownPolicyDesc: 'Gaussian Jitter & Working Hours fail-closed enforcement active.',
   },
   leadFinder: {
-    keywordLabel: 'Business Category / Keyword',
-    keywordPlaceholder: 'e.g. Dental Clinic, Beauty Salon, Real Estate...',
+    keywordLabel: 'Business Sector',
+    keywordPlaceholder: 'Enter sector (e.g. Dental Clinics, Beauty Salons)...',
     locationLabel: 'City & Districts',
     cityPlaceholder: 'Select City...',
     districtsPlaceholder: 'Select Districts (Multiple)...',
@@ -142,6 +142,7 @@ export const en = {
     searching: 'Extracting Leads...',
     stopSearch: 'Stop Search',
     searchScope: 'Target Scope',
+    scopeAll: 'All Businesses',
     googleMapsSource: 'Google Maps Places & Local Directory',
     liveStream: 'Real-Time Stream',
     businessesFound: 'Businesses Found',

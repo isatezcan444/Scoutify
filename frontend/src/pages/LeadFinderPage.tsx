@@ -156,13 +156,9 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         />
 
         {/* Form Controls Grid - Responsive across Mobile, Tablet, and Desktop */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 lg:grid-cols-12 gap-3.5 pt-2 items-end">
+        <div className="grid grid-cols-1 sm:grid-cols-12 lg:grid-cols-12 gap-3 pt-1 items-center">
           {/* Sector Autocomplete Input: 4 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
-          <div className="sm:col-span-6 lg:col-span-4 space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-              <Search className="w-3.5 h-3.5 text-[#7367F0]" />
-              <span>{t('leadFinder.keywordLabel')}</span>
-            </label>
+          <div className="sm:col-span-6 lg:col-span-4">
             <SectorAutocomplete
               value={keyword}
               onChange={setKeyword}
@@ -171,11 +167,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           </div>
 
           {/* Location Multi-Select (City + Districts): 4 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
-          <div className="sm:col-span-6 lg:col-span-4 space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-[#00CFE8]" />
-              <span>{t('leadFinder.locationLabel')}</span>
-            </label>
+          <div className="sm:col-span-6 lg:col-span-4">
             <LocationMultiSelect
               selectedCity={selectedCity}
               selectedDistricts={selectedDistricts}
@@ -190,22 +182,19 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           </div>
 
           {/* Target Limit Selector: 2 cols on desktop, 6 cols on tablet, 12 cols on mobile */}
-          <div className="sm:col-span-6 lg:col-span-2 space-y-1.5">
-            <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 truncate">
-              <Sparkles className="w-3.5 h-3.5 text-[#FF9F43]" />
-              <span>{t('leadFinder.searchScope')}</span>
-            </label>
+          <div className="sm:col-span-6 lg:col-span-2">
             <Select
               value={maxResults}
               onChange={(e) => setMaxResults(Number(e.target.value))}
               disabled={isScraping}
               sizeVariant="lg"
+              leftIcon={<Sparkles className="w-3.5 h-3.5 text-[#FF9F43]" />}
               options={[
-                { value: 0, label: `${t('common.all')} (Limitsiz)` },
-                { value: 10, label: '10 İşletme' },
-                { value: 25, label: '25 İşletme' },
-                { value: 50, label: '50 İşletme' },
-                { value: 100, label: '100 İşletme' },
+                { value: 0, label: t('leadFinder.scopeAll') },
+                { value: 10, label: `10 ${t('common.entries')}` },
+                { value: 25, label: `25 ${t('common.entries')}` },
+                { value: 50, label: `50 ${t('common.entries')}` },
+                { value: 100, label: `100 ${t('common.entries')}` },
               ]}
             />
           </div>

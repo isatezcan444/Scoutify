@@ -20,22 +20,22 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     const sizeClasses = {
       sm: 'h-8 text-[11px] py-1',
       md: 'h-10 text-xs py-2',
-      lg: 'h-11 text-sm py-2.5',
+      lg: 'h-11 text-xs py-2.5',
     };
 
     return (
       <div className="relative flex items-center w-full">
         {LeftIcon && (
-          <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center justify-center">
-            {renderIcon(LeftIcon, 'w-4 h-4')}
+          <div className="absolute left-3.5 text-slate-400 pointer-events-none flex items-center justify-center">
+            {renderIcon(LeftIcon, 'w-3.5 h-3.5')}
           </div>
         )}
 
         <select
           ref={ref}
           className={cn(
-            'w-full font-bold rounded-lg vuexy-input cursor-pointer appearance-none transition-all pr-8',
-            LeftIcon ? 'pl-9' : 'pl-3',
+            'w-full font-semibold rounded-lg vuexy-input cursor-pointer appearance-none transition-all pr-8 text-slate-700 dark:text-slate-200',
+            LeftIcon ? 'pl-9' : 'pl-3.5',
             sizeClasses[sizeVariant],
             error && 'border-[#EA5455] focus:border-[#EA5455] focus:ring-[#EA5455]/20',
             className

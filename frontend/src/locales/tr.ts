@@ -132,8 +132,8 @@ export const tr = {
     cooldownPolicyDesc: 'Her mesaj rastgele 45-120 saniye aralıkla gönderilir.',
   },
   leadFinder: {
-    keywordLabel: 'İşletme Kategorisi / Anahtar Kelime',
-    keywordPlaceholder: 'örn. Diş Kliniği, Güzellik Merkezi, Gayrimenkul...',
+    keywordLabel: 'İşletme Sektörü',
+    keywordPlaceholder: 'Sektör yazın (Örn: Diş Klinikleri, Güzellik Merkezleri)...',
     locationLabel: 'Şehir ve İlçeler',
     cityPlaceholder: 'İl Seçin...',
     districtsPlaceholder: 'İlçeleri Seçin (Çoklu)...',
@@ -142,6 +142,7 @@ export const tr = {
     searching: 'İşletmeler Toplanıyor...',
     stopSearch: 'Aramayı Durdur',
     searchScope: 'Arama Kapsamı',
+    scopeAll: 'Tüm İşletmeler',
     googleMapsSource: 'Google Haritalar & Yerel Dizin',
     liveStream: 'Canlı Akış',
     businessesFound: 'Bulunan İşletme',

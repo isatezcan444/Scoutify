@@ -82,3 +82,21 @@ All components must adhere to the Vuexy color palette and glassmorphism design t
 - All labels, tooltips, placeholders, and error messages **MUST** be resolved via `useI18n()` (`t('domain.key')`).
 - Natural language strings hardcoded in TSX/JSX components are strictly forbidden.
 - Synchronize both `frontend/src/locales/en.ts` and `frontend/src/locales/tr.ts`.
+
+---
+
+## RULE 8 — CENTRALIZED TYPOGRAPHY & FORM CONTROL SIZING CONTRACT
+All typography and input styling across pages and components must follow standard Vuexy design scale without ad-hoc variations:
+
+- **Page Titles**: `text-xl sm:text-2xl font-extrabold tracking-tight text-slate-800 dark:text-white`
+- **Card & Modal Titles**: `text-base font-extrabold text-slate-800 dark:text-white`
+- **Sub-headers & Card Descriptions**: `text-xs text-slate-400 dark:text-[#7E7F96] font-medium`
+- **Form Labels**: `text-xs font-bold text-slate-700 dark:text-slate-200`
+- **Form Controls (Inputs, Autocomplete, Selects, Dropdowns)**:
+  - Font Size: Strictly `text-xs` (12px)
+  - Font Weight: `font-semibold` (active values), `font-normal text-slate-400` (placeholders)
+  - Heights: `h-11` (primary action / search bar), `h-10` (standard form / filter row), `h-8` (compact)
+- **Table Headers**: `text-[10px] sm:text-[11px] font-extrabold text-slate-400 dark:text-[#7E7F96] uppercase tracking-wider`
+- **Table Cell Text**: `text-xs font-semibold text-slate-800 dark:text-white`
+- **Badges & Tags**: `text-[10px] sm:text-[11px] font-bold`
+
