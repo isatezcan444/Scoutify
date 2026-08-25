@@ -49,5 +49,13 @@ class BlacklistResponse(BaseModel):
     reason: str
     notes: Optional[str] = None
     created_at: datetime
+    lead_name: Optional[str] = None
+    lead_category: Optional[str] = None
+    lead_city: Optional[str] = None
+    lead_district: Optional[str] = None
+    lead_address: Optional[str] = None
+    lead_rating: Optional[float] = None
+    lead_reviews_count: Optional[int] = None
+    lead_website: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

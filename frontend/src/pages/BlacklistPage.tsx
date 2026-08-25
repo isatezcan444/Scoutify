@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   ShieldAlert, 
@@ -11,7 +11,11 @@ import {
   Building2, 
   MapPin, 
   CheckCircle2, 
-  Save
+  Save,
+  Star,
+  Globe,
+  Filter,
+  Users
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { BlacklistEntry, Lead } from '../types';
@@ -26,6 +30,10 @@ export const BlacklistPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Table Search & Filter State
+  const [tableSearch, setTableSearch] = useState('');
+  const [reasonFilter, setReasonFilter] = useState('');
 
   // Form & Lead Search State
   const [newReason, setNewReason] = useState('USER_REQUEST');
@@ -52,7 +60,23 @@ export const BlacklistPage: React.FC = () => {
     fetchBlacklist();
   }, []);
 
-  // Debounced Lead Search
+  // Filtered blacklist rows
+  const filteredBlacklist = useMemo(() => {
+    return blacklist.filter((item) => {
+      const q = tableSearch.toLowerCase().trim();
+      const matchesSearch = !q || (
+        item.phone_e164.toLowerCase().includes(q) ||
+        (item.lead_name && item.lead_name.toLowerCase().includes(q)) ||
+        (item.lead_category && item.lead_category.toLowerCase().includes(q)) ||
+        (item.lead_city && item.lead_city.toLowerCase().includes(q)) ||
+        (item.lead_district && item.lead_district.toLowerCase().includes(q))
+      );
+      const matchesReason = !reasonFilter || item.reason === reasonFilter;
+      return matchesSearch && matchesReason;
+    });
+  }, [blacklist, tableSearch, reasonFilter]);
+
+  // Debounced Lead Search in Modal
   useEffect(() => {
     if (!searchQuery.trim() || selectedLead) {
       setSearchResults([]);
@@ -69,7 +93,7 @@ export const BlacklistPage: React.FC = () => {
         setSearchResults(res.items || []);
         setShowSuggestions(true);
       } catch (err) {
-        console.error('Lead search error in blacklist:', err);
+        console.error('Lead search error in blacklist modal:', err);
       } finally {
         setIsSearchingLeads(false);
       }
@@ -141,10 +165,11 @@ export const BlacklistPage: React.FC = () => {
     }
   };
 
-  const handleRemove = async (id: number, phone: string) => {
+  const handleRemove = async (id: number, phone: string, leadName?: string) => {
+    const displayName = leadName ? `${leadName} (${phone})` : phone;
     const ok = await toast.confirm({
       title: 'Numarayı Kara Listeden Kaldır',
-      message: `${phone} numarasının engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
+      message: `${displayName} işletmesinin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
       confirmText: 'Evet, Engeli Kaldır',
       cancelText: 'Vazgeç',
       variant: 'warning',
@@ -153,7 +178,7 @@ export const BlacklistPage: React.FC = () => {
 
     try {
       await ApiClient.removeFromBlacklist(id);
-      toast.success('Numara kara listeden çıkarıldı.', 'Engel Kaldırıldı');
+      toast.success('İşletme kara listeden çıkarıldı.', 'Engel Kaldırıldı');
       fetchBlacklist();
     } catch (err: any) {
       toast.error(err.message || 'Engel kaldırılamadı', 'Hata');
@@ -177,7 +202,7 @@ export const BlacklistPage: React.FC = () => {
 
   return (
     <div className="space-y-6 pb-16 select-none animate-fade-in">
-      {/* Page Header */}
+      {/* Page Header & Top Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
@@ -185,7 +210,7 @@ export const BlacklistPage: React.FC = () => {
             Kara Liste ({blacklist.length} Numara)
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            İletişim kurulması engellenen işletmeler ve mesajlaşma dışı tutulan numaralar
+            İletişim kurulması engellenen işletmeler ve mesajlaşma dışı tutulan profiller
           </p>
         </div>
 
@@ -200,53 +225,177 @@ export const BlacklistPage: React.FC = () => {
         </Button>
       </div>
 
-      {/* Blacklist Table */}
+      {/* Filter & Search Bar */}
+      <Card className="p-4">
+        <div className="flex flex-col md:flex-row items-center gap-3">
+          <div className="relative flex-1 w-full">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <Search className="w-4 h-4" />
+            </div>
+            <input
+              type="text"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              placeholder="Kara listede ara (İşletme adı, kategori, ilçe veya telefon)..."
+              className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="relative w-full md:w-52">
+              <select
+                value={reasonFilter}
+                onChange={(e) => setReasonFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
+              >
+                <option value="">Tüm Engelleme Nedenleri</option>
+                <option value="USER_REQUEST">Müşteri Talebi</option>
+                <option value="BOUNCED">Ulaşılamayan / Geçersiz Numara</option>
+                <option value="SPAM_COMPLAINT">Şikayet Riski Önleme</option>
+                <option value="MANUAL_BLACKLIST">Manuel Yönetici Engeli</option>
+              </select>
+            </div>
+
+            {(tableSearch || reasonFilter) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTableSearch('');
+                  setReasonFilter('');
+                }}
+                className="text-xs font-bold shrink-0"
+              >
+                Temizle
+              </Button>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* Blacklist Table Matching Lead CRM Architecture */}
       <Card className="overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50/80 dark:bg-white/[0.02] text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200/80 dark:border-white/[0.08]">
-              <tr>
-                <th className="py-3.5 px-4">Telefon Numarası</th>
+        <div className="overflow-x-auto min-w-full">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-200/80 dark:border-white/[0.08] bg-slate-50/75 dark:bg-white/[0.02] text-slate-500 dark:text-[#7E7F96] font-bold uppercase tracking-wider text-[11px]">
+                <th className="py-3.5 px-4">İşletme Profili</th>
+                <th className="py-3.5 px-4">İletişim & WhatsApp</th>
+                <th className="py-3.5 px-4">Lokasyon</th>
+                <th className="py-3.5 px-4">Puan & Web</th>
                 <th className="py-3.5 px-4">Engelleme Nedeni</th>
                 <th className="py-3.5 px-4">Eklenme Tarihi</th>
                 <th className="py-3.5 px-4 text-right">İşlemler</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-white/[0.05] text-slate-700 dark:text-slate-300 font-medium">
+            <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] text-slate-700 dark:text-slate-300 font-medium">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#EA5455]" />
-                    <span className="text-xs font-bold block mt-2">Kara liste yükleniyor...</span>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#EA5455] mb-2" />
+                    <span className="text-xs font-bold block">Kara liste yükleniyor...</span>
                   </td>
                 </tr>
-              ) : blacklist.length === 0 ? (
+              ) : filteredBlacklist.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="py-12 text-center text-slate-400 font-semibold">
+                  <td colSpan={7} className="py-12 text-center text-slate-400 font-semibold">
                     <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-                    Kara listede kayıtlı numara bulunmuyor.
+                    <p className="font-bold text-slate-700 dark:text-slate-200">
+                      {blacklist.length === 0 ? 'Kara listede kayıtlı numara bulunmuyor.' : 'Arama kriterlerinize uygun kayıt bulunamadı.'}
+                    </p>
                   </td>
                 </tr>
               ) : (
-                blacklist.map((entry) => (
-                  <tr key={entry.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors">
-                    <td className="py-3.5 px-4 font-mono font-bold text-[#EA5455]">
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5" />
-                        <span>{entry.phone_e164}</span>
+                filteredBlacklist.map((entry) => (
+                  <tr key={entry.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors group">
+                    {/* 1. İşletme Profili (Matching Lead CRM) */}
+                    <td className="py-3.5 px-4 max-w-[240px]">
+                      <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
+                        {entry.lead_name || 'Kayıtlı İşletme Adı Yok'}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
+                          {entry.lead_category || 'Genel'}
+                        </span>
+                        {entry.lead_name && (
+                          <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
+                            CRM
+                          </span>
+                        )}
                       </div>
                     </td>
-                    <td className="py-3.5 px-4">
+
+                    {/* 2. İletişim & WhatsApp */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2 font-mono font-bold text-xs text-[#EA5455]">
+                        <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <span>{entry.phone_e164}</span>
+                      </div>
+                      <div className="mt-1">
+                        <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-rose-500/10 text-[#EA5455] font-bold text-[10px]">
+                          <ShieldAlert className="w-3 h-3" />
+                          <span>Engellendi</span>
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* 3. Lokasyon */}
+                    <td className="py-3.5 px-4 max-w-[220px]">
+                      {entry.lead_address || entry.lead_district || entry.lead_city ? (
+                        <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <span className="line-clamp-2 leading-tight">
+                            {entry.lead_address || `${entry.lead_district ? `${entry.lead_district}, ` : ''}${entry.lead_city || ''}`}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[11px]">-</span>
+                      )}
+                    </td>
+
+                    {/* 4. Puan & Web */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
+                      {entry.lead_rating ? (
+                        <div className="flex items-center space-x-1 text-xs">
+                          <Star className="w-3.5 h-3.5 text-[#FF9F43] fill-[#FF9F43]" />
+                          <span className="font-bold text-slate-800 dark:text-white">{entry.lead_rating}</span>
+                          {entry.lead_reviews_count ? (
+                            <span className="text-slate-400 text-[10px]">({entry.lead_reviews_count})</span>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px]">Puan Yok</span>
+                      )}
+
+                      {entry.lead_website ? (
+                        <a
+                          href={entry.lead_website.startsWith('http') ? entry.lead_website : `https://${entry.lead_website}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center space-x-1 text-[11px] text-[#7367F0] hover:underline truncate max-w-[140px]"
+                        >
+                          <Globe className="w-3 h-3 shrink-0" />
+                          <span className="truncate">{entry.lead_website.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                        </a>
+                      ) : null}
+                    </td>
+
+                    {/* 5. Engelleme Nedeni */}
+                    <td className="py-3.5 px-4 whitespace-nowrap">
                       <Badge variant="danger" className="text-[11px] font-bold">
                         {getReasonLabel(entry.reason)}
                       </Badge>
                     </td>
-                    <td className="py-3.5 px-4 text-slate-500 dark:text-[#7E7F96] font-sans">
+
+                    {/* 6. Eklenme Tarihi */}
+                    <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-[#7E7F96] font-sans">
                       {new Date(entry.created_at).toLocaleString('tr-TR')}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
+
+                    {/* 7. İşlemler */}
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <button
-                        onClick={() => handleRemove(entry.id, entry.phone_e164)}
+                        onClick={() => handleRemove(entry.id, entry.phone_e164, entry.lead_name)}
                         className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-[#EA5455]/10 transition-colors cursor-pointer"
                         title="Kara Listeden Çıkar"
                       >

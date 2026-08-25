@@ -13,9 +13,34 @@ router = APIRouter()
 
 @router.get("", response_model=List[BlacklistResponse])
 async def list_blacklist(db: AsyncSession = Depends(get_db)):
-    stmt = select(Blacklist).order_by(Blacklist.id.desc())
+    stmt = (
+        select(Blacklist, Lead)
+        .outerjoin(Lead, Blacklist.phone_e164 == Lead.phone_e164)
+        .order_by(Blacklist.id.desc())
+    )
     res = await db.execute(stmt)
-    return res.scalars().all()
+    rows = res.all()
+    
+    result = []
+    for bl, lead in rows:
+        result.append(
+            BlacklistResponse(
+                id=bl.id,
+                phone_e164=bl.phone_e164,
+                reason=bl.reason,
+                notes=bl.notes,
+                created_at=bl.created_at,
+                lead_name=lead.name if lead else None,
+                lead_category=lead.category if lead else None,
+                lead_city=lead.city if lead else None,
+                lead_district=lead.district if lead else None,
+                lead_address=lead.address if lead else None,
+                lead_rating=lead.rating if lead else None,
+                lead_reviews_count=lead.reviews_count if lead else None,
+                lead_website=lead.website if lead else None,
+            )
+        )
+    return result
 
 @router.post("", response_model=BlacklistResponse, status_code=201)
 async def add_to_blacklist(bl_in: BlacklistCreate, db: AsyncSession = Depends(get_db)):
@@ -47,7 +72,22 @@ async def add_to_blacklist(bl_in: BlacklistCreate, db: AsyncSession = Depends(ge
         
     await db.commit()
     await db.refresh(bl)
-    return bl
+
+    return BlacklistResponse(
+        id=bl.id,
+        phone_e164=bl.phone_e164,
+        reason=bl.reason,
+        notes=bl.notes,
+        created_at=bl.created_at,
+        lead_name=lead.name if lead else None,
+        lead_category=lead.category if lead else None,
+        lead_city=lead.city if lead else None,
+        lead_district=lead.district if lead else None,
+        lead_address=lead.address if lead else None,
+        lead_rating=lead.rating if lead else None,
+        lead_reviews_count=lead.reviews_count if lead else None,
+        lead_website=lead.website if lead else None,
+    )
 
 @router.delete("/{bl_id}")
 async def remove_from_blacklist(bl_id: int, db: AsyncSession = Depends(get_db)):

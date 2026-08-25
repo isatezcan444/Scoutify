@@ -161,4 +161,12 @@ export interface BlacklistEntry {
   reason: string;
   notes?: string;
   created_at: string;
+  lead_name?: string;
+  lead_category?: string;
+  lead_city?: string;
+  lead_district?: string;
+  lead_address?: string;
+  lead_rating?: number;
+  lead_reviews_count?: number;
+  lead_website?: string;
 }
