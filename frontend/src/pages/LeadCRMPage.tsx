@@ -284,15 +284,27 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     }
   };
 
+  const getStatusLabel = (status: LeadStatus) => {
+    switch (status) {
+      case 'NEW': return t('leads.statusNew');
+      case 'CONTACTED': return t('leads.statusContacted');
+      case 'REPLIED': return t('leads.statusReplied');
+      case 'INTERESTED': return t('leads.statusInterested');
+      case 'UNSUBSCRIBED': return t('leads.statusUnsubscribed');
+      case 'INVALID_NUMBER': return t('leads.statusInvalid');
+      default: return status;
+    }
+  };
+
   // --- Status & Add Lead Handlers ---
   const handleStatusChange = async (leadId: number, newStatus: LeadStatus) => {
     try {
       await ApiClient.updateLead(leadId, { status: newStatus });
       setLeads(leads.map((l) => (l.id === leadId ? { ...l, status: newStatus } : l)));
-      toast.success(`Durum "${newStatus}" olarak güncellendi.`, 'Durum Güncellendi');
+      toast.success(`${t('common.status')}: "${getStatusLabel(newStatus)}"`, t('common.status'));
       onRefreshStats();
     } catch (err: any) {
-      toast.error(err.message || 'Durum güncellenemedi', 'Hata');
+      toast.error(err.message || t('common.error'), t('common.error'));
     }
   };
 
@@ -502,11 +514,12 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               className="w-full px-3 rounded-lg vuexy-input text-xs font-semibold h-10 cursor-pointer"
             >
               <option value="">{t('leads.filterByStatus')}</option>
-              <option value="NEW">NEW</option>
-              <option value="CONTACTED">CONTACTED</option>
-              <option value="REPLIED">REPLIED</option>
-              <option value="INTERESTED">INTERESTED</option>
-              <option value="UNSUBSCRIBED">UNSUBSCRIBED</option>
+              <option value="NEW">{t('leads.statusNew')}</option>
+              <option value="CONTACTED">{t('leads.statusContacted')}</option>
+              <option value="REPLIED">{t('leads.statusReplied')}</option>
+              <option value="INTERESTED">{t('leads.statusInterested')}</option>
+              <option value="UNSUBSCRIBED">{t('leads.statusUnsubscribed')}</option>
+              <option value="INVALID_NUMBER">{t('leads.statusInvalid')}</option>
             </select>
           </div>
         </div>
@@ -809,14 +822,17 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                               ? 'bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20'
                               : lead.status === 'INTERESTED'
                               ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20'
+                              : lead.status === 'INVALID_NUMBER'
+                              ? 'bg-slate-100 text-slate-600 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                               : 'bg-rose-50 text-rose-600 border-rose-200 dark:bg-rose-500/10 dark:text-rose-400 dark:border-rose-500/20'
                           }`}
                         >
-                          <option value="NEW">NEW</option>
-                          <option value="CONTACTED">CONTACTED</option>
-                          <option value="REPLIED">REPLIED</option>
-                          <option value="INTERESTED">INTERESTED</option>
-                          <option value="UNSUBSCRIBED">UNSUBSCRIBED</option>
+                          <option value="NEW">{t('leads.statusNew')}</option>
+                          <option value="CONTACTED">{t('leads.statusContacted')}</option>
+                          <option value="REPLIED">{t('leads.statusReplied')}</option>
+                          <option value="INTERESTED">{t('leads.statusInterested')}</option>
+                          <option value="UNSUBSCRIBED">{t('leads.statusUnsubscribed')}</option>
+                          <option value="INVALID_NUMBER">{t('leads.statusInvalid')}</option>
                         </select>
                       </td>
 
