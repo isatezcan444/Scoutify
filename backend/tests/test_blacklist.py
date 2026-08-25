@@ -23,10 +23,14 @@ async def test_blacklist_add_list_and_bulk_delete():
         assert res2.status_code == 201
         bl2_id = res2.json()["id"]
 
-        # List blacklist
-        list_res = await client.get("/api/v1/blacklist")
+        # List blacklist (paginated response)
+        list_res = await client.get("/api/v1/blacklist?page=1&size=20")
         assert list_res.status_code == 200
-        items = list_res.json()
+        data = list_res.json()
+        assert "items" in data
+        assert "total" in data
+        assert "pages" in data
+        items = data["items"]
         ids = [i["id"] for i in items]
         assert bl1_id in ids
         assert bl2_id in ids
@@ -42,6 +46,6 @@ async def test_blacklist_add_list_and_bulk_delete():
         # Verify removal
         post_list_res = await client.get("/api/v1/blacklist")
         assert post_list_res.status_code == 200
-        post_ids = [i["id"] for i in post_list_res.json()]
+        post_ids = [i["id"] for i in post_list_res.json()["items"]]
         assert bl1_id not in post_ids
         assert bl2_id not in post_ids

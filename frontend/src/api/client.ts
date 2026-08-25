@@ -1,4 +1,4 @@
-import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry, AntiBanConfig } from '../types';
+import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry, BlacklistPaginationResponse, AntiBanConfig } from '../types';
 
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const defaultApiPort = '8000';
@@ -321,9 +321,22 @@ export class ApiClient {
   }
 
   // --- Blacklist ---
-  static async getBlacklist(): Promise<BlacklistEntry[]> {
-    const res = await fetch(`${API_BASE}/blacklist`);
-    if (!res.ok) throw new Error('Failed to fetch blacklist');
+  static async getBlacklist(params?: {
+    page?: number;
+    size?: number;
+    search?: string;
+    reason?: string;
+  }): Promise<BlacklistPaginationResponse> {
+    const query = new URLSearchParams();
+    if (params?.page) query.append('page', params.page.toString());
+    if (params?.size) query.append('size', params.size.toString());
+    if (params?.search) query.append('search', params.search);
+    if (params?.reason) query.append('reason', params.reason);
+
+    const qs = query.toString();
+    const url = qs ? `${API_BASE}/blacklist?${qs}` : `${API_BASE}/blacklist`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Kara liste yüklenirken hata oluştu');
     return res.json();
   }
 
@@ -349,11 +362,17 @@ export class ApiClient {
     if (!res.ok) throw new Error('Numara kara listeden silinemedi');
   }
 
-  static async bulkRemoveFromBlacklist(ids: number[]): Promise<{ deleted_count: number }> {
+  static async bulkRemoveFromBlacklist(payload: {
+    ids?: number[];
+    delete_all_matching?: boolean;
+    search?: string;
+    reason?: string;
+  } | number[]): Promise<{ deleted_count: number }> {
+    const body = Array.isArray(payload) ? { ids: payload } : payload;
     const res = await fetch(`${API_BASE}/blacklist/bulk-delete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids })
+      body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error('Toplu kara listeden silme işlemi başarısız oldu');
     return res.json();

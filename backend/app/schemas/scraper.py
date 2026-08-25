@@ -59,3 +59,13 @@ class BlacklistResponse(BaseModel):
     lead_website: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BlacklistPaginationResponse(BaseModel):
+    items: List[BlacklistResponse]
+    total: int
+    page: int
+    size: int
+    pages: int
+
+    model_config = ConfigDict(from_attributes=True)

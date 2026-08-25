@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   ShieldAlert, 
@@ -9,8 +9,6 @@ import {
   Phone, 
   Search, 
   Building2, 
-  MapPin, 
-  CheckCircle2, 
   Save,
   CheckSquare,
   Square,
@@ -27,16 +25,21 @@ import { useToast } from '../context/ToastContext';
 export const BlacklistPage: React.FC = () => {
   const toast = useToast();
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Table Search & Filter State
-  const [tableSearch, setTableSearch] = useState('');
+  // Table Search & Filter State (Debounced 300ms)
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
 
   // Multi-Selection State (Gmail-style)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [isBulkRemoving, setIsBulkRemoving] = useState(false);
 
   // Form & Lead Search State
@@ -48,11 +51,27 @@ export const BlacklistPage: React.FC = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  // Debounce search input (300ms)
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [search]);
+
+  // Fetch paginated blacklist from server
   const fetchBlacklist = async () => {
     setLoading(true);
     try {
-      const data = await ApiClient.getBlacklist();
-      setBlacklist(data);
+      const data = await ApiClient.getBlacklist({
+        page,
+        size: pageSize,
+        search: debouncedSearch.trim() || undefined,
+        reason: reasonFilter || undefined,
+      });
+      setBlacklist(data.items || []);
+      setTotal(data.total || 0);
     } catch (err: any) {
       toast.error(err.message || 'Kara liste yüklenirken hata oluştu', 'Kara Liste Yüklenemedi');
     } finally {
@@ -62,55 +81,61 @@ export const BlacklistPage: React.FC = () => {
 
   useEffect(() => {
     fetchBlacklist();
-  }, []);
+  }, [page, pageSize, debouncedSearch, reasonFilter]);
 
-  // Filtered blacklist rows
-  const filteredBlacklist = useMemo(() => {
-    return blacklist.filter((item) => {
-      const q = tableSearch.toLowerCase().trim();
-      const matchesSearch = !q || (
-        item.phone_e164.toLowerCase().includes(q) ||
-        (item.lead_name && item.lead_name.toLowerCase().includes(q)) ||
-        (item.lead_category && item.lead_category.toLowerCase().includes(q)) ||
-        (item.lead_city && item.lead_city.toLowerCase().includes(q)) ||
-        (item.lead_district && item.lead_district.toLowerCase().includes(q))
-      );
-      const matchesReason = !reasonFilter || item.reason === reasonFilter;
-      return matchesSearch && matchesReason;
-    });
-  }, [blacklist, tableSearch, reasonFilter]);
-
-  // Clean selected IDs when filter changes
+  // Clear selection on page/filter change unless all-matching is active
   useEffect(() => {
-    setSelectedIds((prev) => prev.filter((id) => filteredBlacklist.some((item) => item.id === id)));
-  }, [tableSearch, reasonFilter]);
+    if (!selectAllMatching) {
+      setSelectedIds([]);
+    }
+  }, [page, pageSize, debouncedSearch, reasonFilter]);
 
   // Selection Checkbox Logic
-  const visibleIds = filteredBlacklist.map((item) => item.id);
+  const currentPageIds = blacklist.map((item) => item.id);
   const isAllCurrentPageSelected =
-    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+    blacklist.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
   const isSomeCurrentPageSelected =
-    visibleIds.some((id) => selectedIds.includes(id)) && !isAllCurrentPageSelected;
+    currentPageIds.some((id) => selectedIds.includes(id)) && !isAllCurrentPageSelected;
 
   const handleToggleSelectAllPage = () => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedIds([]);
+      return;
+    }
+
     if (isAllCurrentPageSelected) {
-      // Unselect all visible
-      setSelectedIds((prev) => prev.filter((id) => !visibleIds.includes(id)));
+      // Unselect current page
+      setSelectedIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
     } else {
-      // Select all visible
-      setSelectedIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+      // Select all on current page
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentPageIds])));
     }
   };
 
   const handleToggleSingleSelect = (id: number) => {
+    if (selectAllMatching) {
+      setSelectAllMatching(false);
+      setSelectedIds(currentPageIds.filter((x) => x !== id));
+      return;
+    }
+
     setSelectedIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
   };
 
+  const handleSelectAllAcrossPages = () => {
+    setSelectAllMatching(true);
+    setSelectedIds(currentPageIds);
+  };
+
   const handleClearSelection = () => {
     setSelectedIds([]);
+    setSelectAllMatching(false);
   };
+
+  const selectedCount = selectAllMatching ? total : selectedIds.length;
 
   // Debounced Lead Search in Modal
   useEffect(() => {
@@ -223,12 +248,14 @@ export const BlacklistPage: React.FC = () => {
   };
 
   const handleBulkRemove = async () => {
-    if (selectedIds.length === 0) return;
+    if (selectedCount === 0) return;
 
     const ok = await toast.confirm({
-      title: 'Seçilen Numaraları Kara Listeden Kaldır',
-      message: `Seçilen ${selectedIds.length} adet işletmenin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
-      confirmText: `Evet, ${selectedIds.length} Engeli Kaldır`,
+      title: selectAllMatching ? 'Tüm Kara Listeyi Temizle' : 'Seçilen Numaraları Kara Listeden Kaldır',
+      message: selectAllMatching
+        ? `Kara listedeki toplam ${total} adet işletmenin tamamı listeden çıkarılacak ve kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`
+        : `Seçilen ${selectedCount} adet işletmenin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
+      confirmText: selectAllMatching ? `Evet, Tümünü (${total}) Kaldır` : `Evet, ${selectedCount} Engeli Kaldır`,
       cancelText: 'Vazgeç',
       variant: 'warning',
     });
@@ -236,9 +263,17 @@ export const BlacklistPage: React.FC = () => {
 
     setIsBulkRemoving(true);
     try {
-      const res = await ApiClient.bulkRemoveFromBlacklist(selectedIds);
+      const res = await ApiClient.bulkRemoveFromBlacklist(
+        selectAllMatching
+          ? {
+              delete_all_matching: true,
+              search: debouncedSearch || undefined,
+              reason: reasonFilter || undefined,
+            }
+          : { ids: selectedIds }
+      );
       toast.success(`${res.deleted_count} numara başarıyla kara listeden çıkarıldı.`, 'Engeller Kaldırıldı');
-      setSelectedIds([]);
+      handleClearSelection();
       fetchBlacklist();
     } catch (err: any) {
       toast.error(err.message || 'Toplu silme işlemi başarısız oldu', 'Hata');
@@ -262,6 +297,8 @@ export const BlacklistPage: React.FC = () => {
     }
   };
 
+  const totalPages = Math.ceil(total / pageSize) || 1;
+
   return (
     <div className="space-y-6 pb-16 select-none animate-fade-in">
       {/* Page Header & Top Actions */}
@@ -269,7 +306,7 @@ export const BlacklistPage: React.FC = () => {
         <div>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-[#EA5455]" />
-            Kara Liste ({blacklist.length} Numara)
+            Kara Liste ({total} Numara)
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
             İletişim kurulması engellenen işletmeler ve mesajlaşma dışı tutulan profiller
@@ -296,18 +333,21 @@ export const BlacklistPage: React.FC = () => {
             </div>
             <input
               type="text"
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Kara listede ara (İşletme adı veya telefon)..."
-              className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs"
+              className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
             />
           </div>
 
           <div className="flex items-center gap-2 w-full md:w-auto">
-            <div className="relative w-full md:w-52">
+            <div className="relative w-full md:w-56">
               <select
                 value={reasonFilter}
-                onChange={(e) => setReasonFilter(e.target.value)}
+                onChange={(e) => {
+                  setReasonFilter(e.target.value);
+                  setPage(1);
+                }}
                 className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
               >
                 <option value="">Tüm Engelleme Nedenleri</option>
@@ -318,17 +358,19 @@ export const BlacklistPage: React.FC = () => {
               </select>
             </div>
 
-            {(tableSearch || reasonFilter) && (
+            {(search || reasonFilter) && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  setTableSearch('');
+                  setSearch('');
                   setReasonFilter('');
+                  setPage(1);
                 }}
-                className="text-xs font-bold shrink-0"
+                className="text-xs font-bold shrink-0 space-x-1"
               >
-                Temizle
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Temizle</span>
               </Button>
             )}
           </div>
@@ -336,15 +378,28 @@ export const BlacklistPage: React.FC = () => {
       </Card>
 
       {/* Floating / Sticky Bulk Action Toolbar (Matching Lead CRM) */}
-      {selectedIds.length > 0 && (
+      {selectedCount > 0 && (
         <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
-          <div className="flex items-center space-x-2.5">
+          <div className="flex items-center space-x-2.5 flex-wrap">
             <span className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center font-bold text-xs">
-              {selectedIds.length}
+              {selectedCount}
             </span>
             <span className="text-xs font-extrabold tracking-wide">
-              {selectedIds.length} İşletme / Numara Seçildi
+              {selectAllMatching
+                ? `Tüm ${total} İşletme / Numara Seçildi`
+                : `${selectedCount} İşletme / Numara Seçildi`}
             </span>
+
+            {/* Quick Button to Select All across all pages if not already done */}
+            {!selectAllMatching && total > blacklist.length && (
+              <button
+                type="button"
+                onClick={handleSelectAllAcrossPages}
+                className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] underline underline-offset-2 transition-all cursor-pointer"
+              >
+                Tüm {total} Kaydı Seç
+              </button>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -363,7 +418,11 @@ export const BlacklistPage: React.FC = () => {
               ) : (
                 <>
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Seçilenleri Kara Listeden Kaldır ({selectedIds.length})</span>
+                  <span>
+                    {selectAllMatching
+                      ? `Tümünü Sil (${total})`
+                      : `Seçilenleri Sil (${selectedCount})`}
+                  </span>
                 </>
               )}
             </Button>
@@ -392,9 +451,9 @@ export const BlacklistPage: React.FC = () => {
                     type="button"
                     onClick={handleToggleSelectAllPage}
                     className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
-                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Tümünü Seç'}
+                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Bu Sayfadaki Tümünü Seç'}
                   >
-                    {isAllCurrentPageSelected ? (
+                    {selectAllMatching || isAllCurrentPageSelected ? (
                       <CheckSquare className="w-4 h-4 text-[#7367F0]" />
                     ) : isSomeCurrentPageSelected ? (
                       <MinusSquare className="w-4 h-4 text-[#7367F0]" />
@@ -418,18 +477,18 @@ export const BlacklistPage: React.FC = () => {
                     <span className="text-xs font-bold block">Kara liste yükleniyor...</span>
                   </td>
                 </tr>
-              ) : filteredBlacklist.length === 0 ? (
+              ) : blacklist.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
                     <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                     <p className="font-bold text-slate-700 dark:text-slate-200">
-                      {blacklist.length === 0 ? 'Kara listede kayıtlı numara bulunmuyor.' : 'Arama kriterlerinize uygun kayıt bulunamadı.'}
+                      {total === 0 ? 'Kara listede kayıtlı numara bulunmuyor.' : 'Arama kriterlerinize uygun kayıt bulunamadı.'}
                     </p>
                   </td>
                 </tr>
               ) : (
-                filteredBlacklist.map((entry) => {
-                  const isSelected = selectedIds.includes(entry.id);
+                blacklist.map((entry) => {
+                  const isSelected = selectedIds.includes(entry.id) || selectAllMatching;
                   return (
                     <tr 
                       key={entry.id} 
@@ -508,6 +567,60 @@ export const BlacklistPage: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar (Matching Lead CRM Architecture) */}
+        {total > 0 && (
+          <div className="p-4 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#7E7F96]">
+            <span>
+              Toplam <strong>{total}</strong> kayıttan <strong>{(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)}</strong> arası gösteriliyor
+            </span>
+
+            <div className="flex items-center space-x-3">
+              {/* Page size selector */}
+              <div className="flex items-center space-x-1.5">
+                <span className="text-[11px]">Sayfa Başına:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
+                  className="px-2 py-1 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+
+              {/* Prev / Next Page navigation */}
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                  className="cursor-pointer"
+                >
+                  Önceki
+                </Button>
+                <span className="font-bold text-slate-700 dark:text-slate-200">
+                  Sayfa {page} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+                  className="cursor-pointer"
+                >
+                  Sonraki
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Numara Ekle Modal with Mandatory Lead Search */}
@@ -636,8 +749,7 @@ export const BlacklistPage: React.FC = () => {
                           <div className="flex items-center gap-2 text-[10px] text-slate-400">
                             {lead.category && <span>{lead.category}</span>}
                             {(lead.district || lead.city) && (
-                              <span className="flex items-center gap-0.5">
-                                <MapPin className="w-2.5 h-2.5" />
+                              <span>
                                 {[lead.district, lead.city].filter(Boolean).join(', ')}
                               </span>
                             )}

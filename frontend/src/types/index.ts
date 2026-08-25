@@ -170,3 +170,11 @@ export interface BlacklistEntry {
   lead_reviews_count?: number;
   lead_website?: string;
 }
+
+export interface BlacklistPaginationResponse {
+  items: BlacklistEntry[];
+  total: number;
+  page: number;
+  size: number;
+  pages: number;
+}
