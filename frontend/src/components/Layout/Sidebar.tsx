@@ -38,7 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const sections = [
     {
-      title: t('nav.leads').toUpperCase() + " & CRM",
+      title: t('nav.sectionCrm'),
       items: [
         { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, badge: null },
         { id: 'lead-finder', label: t('nav.leadFinder'), icon: Search, badge: 'Live', badgeVariant: 'success' as const },
@@ -46,7 +46,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ]
     },
     {
-      title: "OUTREACH & AUTOMATION",
+      title: t('nav.sectionOutreach'),
       items: [
         { id: 'campaigns', label: t('nav.campaigns'), icon: Send, badge: activeCampaignsCount > 0 ? `${activeCampaignsCount}` : null, badgeVariant: 'warning' as const },
         { id: 'whatsapp', label: t('nav.whatsappHub'), icon: Smartphone, badge: null },
@@ -54,7 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       ]
     },
     {
-      title: "CONFIGURATION",
+      title: t('nav.sectionConfig'),
       items: [
         { id: 'settings', label: t('nav.settings'), icon: Settings, badge: null },
       ]
@@ -158,14 +158,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] font-bold text-[#28C76F] flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Anti-Ban Shield
+              {t('nav.antiBanShield')}
             </span>
             <Badge variant="success" className="text-[9px] px-1.5 py-0">
               {t('common.active')}
             </Badge>
           </div>
           <p className="text-[10px] text-slate-500 dark:text-[#7E7F96] leading-tight font-medium">
-            Gaussian Jitter & Spintax active.
+            {t('nav.antiBanDesc')}
           </p>
         </div>
       </div>

@@ -40,13 +40,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-md bg-white/20 text-white text-xs font-bold mb-3 backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Scoutify B2B Automation Engine</span>
+            <span>{t('dashboard.heroBadge')}</span>
           </div>
           <h2 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white tracking-tight">
-            Discover Targets, Personalize with Spintax, Scale Outreach!
+            {t('dashboard.heroTitle')}
           </h2>
           <p className="mt-2 text-xs md:text-sm text-white/90 leading-relaxed font-medium">
-            Extract business contacts from Google Maps & directories with verified WhatsApp eligibility. Dispatch humanized campaigns with anti-ban safeguards.
+            {t('dashboard.heroSubtitle')}
           </p>
           <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
             <Button
@@ -116,9 +116,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             </div>
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <Badge variant="info" className="text-[10px]">
-                +{stats.messages_sent_today} Today
+                +{stats.messages_sent_today} {t('dashboard.today')}
               </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">Queue</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">{t('dashboard.queue')}</span>
             </div>
           </CardContent>
         </Card>
@@ -143,7 +143,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <Badge variant="success" className="text-[10px]">
                 {stats.replied_leads} {t('dashboard.repliedLeads')}
               </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">Inbound</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">{t('dashboard.inbound')}</span>
             </div>
           </CardContent>
         </Card>
@@ -166,7 +166,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             </div>
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <span className="w-2 h-2 rounded-full bg-[#28C76F] live-dot" />
-              <span className="text-[#28C76F] font-bold">Online</span>
+              <span className="text-[#28C76F] font-bold">{t('dashboard.online')}</span>
               <span className="text-slate-400 dark:text-[#7E7F96]">({stats.active_campaigns} {t('dashboard.activeCampaigns')})</span>
             </div>
           </CardContent>
@@ -188,7 +188,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
                   {t('titles.dashboardSub')}
                 </p>
               </div>
-              <Badge variant="primary">Realtime</Badge>
+              <Badge variant="primary">{t('dashboard.realtime')}</Badge>
             </div>
 
             <div className="space-y-4">
@@ -259,9 +259,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <div className="flex items-center space-x-3">
                 <ShieldCheck className="w-5 h-5 text-[#28C76F]" />
                 <div>
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Anti-Ban & Cooldown Policy</p>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">{t('dashboard.cooldownPolicyTitle')}</p>
                   <p className="text-[11px] text-slate-500 dark:text-[#7E7F96] font-medium">
-                    Gaussian Jitter & Working Hours fail-closed enforcement active.
+                    {t('dashboard.cooldownPolicyDesc')}
                   </p>
                 </div>
               </div>
@@ -287,7 +287,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
                   <Clock className="w-4 h-4 text-[#7367F0]" />
                   {t('campaigns.logsTitle')}
                 </h3>
-                <Badge variant="primary" className="font-mono text-[9px]">LIVE</Badge>
+                <Badge variant="primary" className="font-mono text-[9px]">{t('dashboard.live')}</Badge>
               </div>
 
               <div className="space-y-3">

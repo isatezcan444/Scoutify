@@ -20,7 +20,6 @@ import {
   AlertTriangle,
   Shield,
   Building2,
-  Sparkles,
   Save,
   Undo2
 } from 'lucide-react';
@@ -49,8 +48,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const toast = useToast();
   const { t } = useI18n();
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
-  const [logs, setLogs] = useState<MessageLog[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [, setLogs] = useState<MessageLog[]>([]);
+  const [, setLoading] = useState(false);
 
   // Anti-Ban Timing & Change-Tracking State
   const [savedConfig, setSavedConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
@@ -60,14 +59,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   // New Line / QR Pairing Modal
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
-  const [newSessionName, setNewSessionName] = useState('Satış Hattı 2');
+  const [newSessionName] = useState('Line 1');
   const [pairingSessionId, setPairingSessionId] = useState<number | null>(null);
   const [isPairingSuccess, setIsPairingSuccess] = useState(false);
 
   // Test Sandbox State
   const [testPhone, setTestPhone] = useState('0532 100 20 30');
-  const [testMsg, setTestMsg] = useState('Scoutify WhatsApp Gateway bağlantı test mesajıdır.');
-  const [selectedSessionForTest, setSelectedSessionForTest] = useState<number | undefined>(undefined);
+  const [testMsg, setTestMsg] = useState('Scoutify WhatsApp Gateway test message.');
+  const [selectedSessionForTest] = useState<number | undefined>(undefined);
   const [testSending, setTestSending] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -81,7 +80,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setSessions(sessData);
       setLogs(logsData);
     } catch (err: any) {
-      toast.error(err.message, 'Veriler Yüklenemedi');
+      toast.error(err.message, t('common.error'));
     } finally {
       setLoading(false);
     }
@@ -99,7 +98,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
         }
       })
       .catch((e) => {
-        console.warn('Anti-ban ayarları backendden alınamadı, yerel önbellek devrede:', e);
+        console.warn('Anti-ban config failed to load from backend, using local storage:', e);
       });
   }, []);
 
@@ -146,10 +145,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setConfig(updated);
       saveAntiBanConfig(updated);
       setSaveSuccess(true);
-      toast.success('Anti-Ban ve gecikme parametreleri veritabanına kalıcı olarak kaydedildi.', 'Yapılandırma Kaydedildi');
+      toast.success(t('whatsapp.policySavedSuccess'), t('toast.policySavedTitle'));
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
-      toast.error(err.message || 'Ayar kaydetme işlemi başarısız oldu', 'Kaydetme Hatası');
+      toast.error(err.message || t('common.error'), t('toast.errorTitle'));
     } finally {
       setIsSavingAntiBan(false);
     }
@@ -157,15 +156,15 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   const handleRevertChanges = () => {
     setConfig(savedConfig);
-    toast.info('Değişiklikler geri alındı ve kayıtlı ayarlara dönüldü.', 'Geri Alındı');
+    toast.info(t('whatsapp.discardChanges'), t('common.info'));
   };
 
   const handleResetDefaults = async () => {
     const confirmed = await toast.confirm({
-      title: 'Güvenli Varsayılanlara Dön?',
-      message: 'Tüm özel gecikme ve mesai saati ayarları önerilen altın denge (Dengeli Standart) değerlerine sıfırlanacak ve veritabanına kaydedilecektir.',
-      confirmText: 'Sıfırla ve Kaydet',
-      cancelText: 'Vazgeç',
+      title: t('whatsapp.resetDefaults') + '?',
+      message: t('whatsapp.presetBalancedDesc'),
+      confirmText: t('common.save'),
+      cancelText: t('common.cancel'),
       variant: 'warning'
     });
     if (!confirmed) return;
@@ -177,10 +176,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setConfig(updated);
       saveAntiBanConfig(updated);
       setSaveSuccess(true);
-      toast.success('Anti-Ban parametreleri varsayılan altın denge değerlerine sıfırlandı ve kaydedildi.', 'Varsayılanlara Sıfırlandı');
+      toast.success(t('whatsapp.policySavedSuccess'), t('toast.policySavedTitle'));
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
-      toast.error(err.message || 'Varsayılana dönme hatası', 'Hata');
+      toast.error(err.message || t('common.error'), t('common.error'));
     } finally {
       setIsSavingAntiBan(false);
     }
@@ -198,7 +197,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setIsPairingSuccess(false);
       fetchSessionsAndLogs();
     } catch (err: any) {
-      toast.error(err.message, 'Oturum Oluşturulamadı');
+      toast.error(err.message, t('common.error'));
     }
   };
 
@@ -207,44 +206,44 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     try {
       await ApiClient.simulateConnectSession(pairingSessionId);
       setIsPairingSuccess(true);
-      toast.success('WhatsApp hattı başarıyla eşlendi ve aktif edildi!', 'Oturum Bağlandı');
+      toast.success(t('whatsapp.qrPairSuccess'), t('common.success'));
       setTimeout(() => {
         setIsQRModalOpen(false);
         fetchSessionsAndLogs();
         onRefreshStats();
       }, 1500);
     } catch (err: any) {
-      toast.error(err.message, 'QR Eşleme Hatası');
+      toast.error(err.message, t('common.error'));
     }
   };
 
   const handleDisconnect = async (sessionId: number) => {
     try {
       await ApiClient.disconnectSession(sessionId);
-      toast.info('WhatsApp oturum bağlantısı kesildi.', 'Bağlantı Sonlandırıldı');
+      toast.info(t('whatsapp.statusDisconnected'), t('common.info'));
       fetchSessionsAndLogs();
       onRefreshStats();
     } catch (err: any) {
-      toast.error(err.message || 'Bağlantı kesilemedi', 'Hata');
+      toast.error(err.message || t('common.error'), t('common.error'));
     }
   };
 
   const handleDelete = async (sessionId: number) => {
     const ok = await toast.confirm({
-      title: 'WhatsApp Oturumunu Sil',
-      message: 'Bu WhatsApp oturumunu silmek istediğinize emin misiniz?',
-      confirmText: 'Evet, Sil',
-      cancelText: 'Vazgeç',
+      title: t('whatsapp.deleteSession'),
+      message: t('leads.deleteConfirmMsg'),
+      confirmText: t('common.delete'),
+      cancelText: t('common.cancel'),
       variant: 'danger',
     });
     if (!ok) return;
     try {
       await ApiClient.deleteSession(sessionId);
-      toast.success('WhatsApp oturumu başarıyla silindi.', 'Oturum Silindi');
+      toast.success(t('common.success'), t('whatsapp.deleteSession'));
       fetchSessionsAndLogs();
       onRefreshStats();
     } catch (err: any) {
-      toast.error(err.message || 'Oturum silinemedi', 'Hata');
+      toast.error(err.message || t('common.error'), t('common.error'));
     }
   };
 
@@ -260,7 +259,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       fetchSessionsAndLogs();
       onRefreshStats();
     } catch (err: any) {
-      setTestResult(`Hata: ${err.message}`);
+      setTestResult(`${t('common.error')}: ${err.message}`);
     } finally {
       setTestSending(false);
     }
@@ -273,10 +272,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
         <div>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
             <Smartphone className="w-5 h-5 text-[#28C76F]" />
-            WhatsApp Oturumları & Anti-Ban Hub
+            {t('whatsapp.sessionsTitle')}
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            Çoklu hat yönetimi, QR eşleme, Gaussian Jitter bekleme süreleri ve anti-ban koruma parametreleri
+            {t('whatsapp.sessionsSubtitle')}
           </p>
         </div>
 
@@ -286,7 +285,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
           className="space-x-2 font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
         >
           <QrCode className="w-4 h-4" />
-          <span>Yeni WhatsApp Hattı Bağla (QR)</span>
+          <span>{t('whatsapp.addSession')}</span>
         </Button>
       </div>
 
@@ -305,7 +304,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                     <div>
                       <h3 className="text-sm font-bold text-slate-800 dark:text-white">{sess.session_name}</h3>
                       <p className="text-xs font-mono text-[#28C76F] font-bold">
-                        {sess.phone_number || 'Numara Bekleniyor'}
+                        {sess.phone_number || t('whatsapp.waitingNumber')}
                       </p>
                     </div>
                   </div>
@@ -332,16 +331,16 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-500 dark:text-[#7E7F96] flex items-center gap-1 font-semibold">
                       <Flame className="w-3.5 h-3.5 text-[#FF9F43]" />
-                      Hesap Isınma (Warm-Up):
+                      {t('whatsapp.warmUpDay', { day: sess.warm_up_day })}:
                     </span>
-                    <span className="font-bold text-[#FF9F43] font-mono">Gün #{sess.warm_up_day}</span>
+                    <span className="font-bold text-[#FF9F43] font-mono">#{sess.warm_up_day}</span>
                   </div>
 
                   <div>
                     <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      <span>Günlük Gönderim Kotası</span>
+                      <span>{t('whatsapp.dailyLimit')}</span>
                       <span className="font-mono text-[#7367F0]">
-                        {sess.daily_sent_count} / {sess.max_daily_limit} Mesaj
+                        {sess.daily_sent_count} / {sess.max_daily_limit}
                       </span>
                     </div>
                     <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
@@ -355,9 +354,9 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 font-semibold">
                     <span className="flex items-center gap-1">
                       <BatteryCharging className="w-3 h-3 text-[#28C76F]" />
-                      Pil: %{sess.battery_level || 90}
+                      {t('whatsapp.battery')}: %{sess.battery_level || 90}
                     </span>
-                    <span>Durum: Güvenli & Sağlıklı</span>
+                    <span>{t('whatsapp.batteryHealthy')}</span>
                   </div>
                 </div>
               </div>
@@ -370,7 +369,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                     className="text-slate-500 hover:text-[#FF9F43] flex items-center gap-1 font-bold transition-colors text-xs cursor-pointer"
                   >
                     <PowerOff className="w-3.5 h-3.5" />
-                    <span>Bağlantıyı Kes</span>
+                    <span>{t('whatsapp.disconnect')}</span>
                   </button>
                 ) : (
                   <button
@@ -381,14 +380,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                     className="text-[#7367F0] hover:text-[#685DD8] flex items-center gap-1 font-bold text-xs cursor-pointer"
                   >
                     <QrCode className="w-3.5 h-3.5" />
-                    <span>QR Kodu Tara</span>
+                    <span>{t('whatsapp.scanQrToConnect')}</span>
                   </button>
                 )}
 
                 <button
                   onClick={() => handleDelete(sess.id)}
                   className="text-slate-400 hover:text-[#EA5455] p-1 transition-colors cursor-pointer"
-                  title="Oturumu Sil"
+                  title={t('whatsapp.deleteSession')}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -410,20 +409,20 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
-                  WhatsApp Anti-Ban Yapılandırması
+                  {t('whatsapp.antiBanTitle')}
                 </h3>
                 {hasUnsavedChanges ? (
                   <Badge variant="warning" className="text-[10px] animate-pulse">
-                    ⚠️ Kaydedilmemiş Değişiklikler
+                    ⚠️ {t('whatsapp.unsavedChanges')}
                   </Badge>
                 ) : (
                   <Badge variant="success" className="text-[10px]">
-                    ✅ Veritabanı ile Senkronize
+                    ✅ {t('whatsapp.synchronized')}
                   </Badge>
                 )}
               </div>
               <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium">
-                Mesajlar arası bekleme süreleri (Gaussian Jitter), insan taklidi ve kurumsal mesai saatleri koruması
+                {t('whatsapp.antiBanSubtitle')}
               </p>
             </div>
           </div>
@@ -434,10 +433,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 type="button"
                 onClick={handleRevertChanges}
                 className="text-xs font-bold text-slate-500 hover:text-[#7367F0] dark:text-[#7E7F96] dark:hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all cursor-pointer"
-                title="Yaptığınız değişiklikleri geri alıp kayıtlı ayarlara dönün"
+                title={t('whatsapp.discardChanges')}
               >
                 <Undo2 className="w-3.5 h-3.5" />
-                <span>Değişiklikleri Geri Al</span>
+                <span>{t('whatsapp.revertChanges')}</span>
               </button>
             )}
 
@@ -445,10 +444,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               type="button"
               onClick={handleResetDefaults}
               className="text-xs font-bold text-slate-500 hover:text-[#7367F0] dark:text-[#7E7F96] dark:hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all cursor-pointer"
-              title="WhatsApp için ban yemeyen önerilen standart ayarlara dön"
+              title={t('whatsapp.resetDefaults')}
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Güvenli Varsayılanlara Dön</span>
+              <span>{t('whatsapp.resetDefaults')}</span>
             </button>
           </div>
         </div>
@@ -456,7 +455,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
         {/* Preset Selector Tabs */}
         <div>
           <label className="text-xs font-bold text-slate-700 dark:text-slate-200 block mb-2">
-            Güvenlik Ön Ayar Modu (Preset)
+            {t('whatsapp.antiBanPresetLabel')}
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {/* Preset 1: Ultra Safe */}
@@ -472,14 +471,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-[#28C76F]" />
-                  Ultra Güvenli
+                  {t('whatsapp.presetUltraSafe')}
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#28C76F]/15 text-[#28C76F]">
-                  Yeni Hatlar
+                  {t('whatsapp.presetUltraSafeTag')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
-                60 - 150 sn bekleme, 35 mesaj/gün. Sıfır risk.
+                {t('whatsapp.presetUltraSafeDesc')}
               </p>
             </button>
 
@@ -496,14 +495,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#7367F0]" />
-                  Dengeli Standart
+                  {t('whatsapp.presetBalanced')}
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/15 text-[#7367F0]">
-                  Varsayılan ⭐
+                  {t('whatsapp.presetBalancedTag')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
-                45 - 120 sn bekleme, 50 mesaj/gün. Önerilen altın denge.
+                {t('whatsapp.presetBalancedDesc')}
               </p>
             </button>
 
@@ -520,32 +519,30 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-extrabold text-slate-800 dark:text-white flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-[#FF9F43]" />
-                  Hızlı & Isınmış
+                  {t('whatsapp.presetFast')}
                 </span>
                 <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#FF9F43]/15 text-[#FF9F43]">
-                  Eski Hatlar
+                  {t('whatsapp.presetFastTag')}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
-                20 - 60 sn bekleme, 100 mesaj/gün. Isınmış numaralar.
+                {t('whatsapp.presetFastDesc')}
               </p>
             </button>
           </div>
         </div>
 
-        {/* ===================================================================== */}
-        {/* DETAILED SLIDER CONTROLS - UNIFIED HARMONIOUS BACKGROUNDS */}
-        {/* ===================================================================== */}
+        {/* Detailed Sliders */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
           {/* Slider 1: Min Delay */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5 shadow-sm hover:border-[#7367F0]/30 transition-all">
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
-                Minimum Bekleme Süresi
+                {t('whatsapp.minDelay')}
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.min_delay_seconds} saniye
+                {config.min_delay_seconds}s
               </span>
             </div>
             <input
@@ -564,7 +561,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              İki mesaj arasında beklenecek en az süre (WhatsApp bot tespitini engeller).
+              {t('whatsapp.minDelayHelp')}
             </p>
           </div>
 
@@ -573,10 +570,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
-                Maksimum Bekleme Süresi
+                {t('whatsapp.maxDelay')}
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.max_delay_seconds} saniye
+                {config.max_delay_seconds}s
               </span>
             </div>
             <input
@@ -589,7 +586,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              İki mesaj arasında beklenecek en fazla süre (Gaussian Jitter rastgele aralığı).
+              {t('whatsapp.maxDelayHelp')}
             </p>
           </div>
 
@@ -598,10 +595,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-[#7367F0]" />
-                "Yazıyor..." İnsan Taklidi Süresi
+                {t('whatsapp.typingDelay')}
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.typing_delay_seconds} saniye
+                {config.typing_delay_seconds}s
               </span>
             </div>
             <input
@@ -614,7 +611,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              Mesaj gönderilmeden önce WhatsApp soketinde aktif insan gibi yazıyor gösterilir.
+              {t('whatsapp.typingDelayHelp')}
             </p>
           </div>
 
@@ -623,10 +620,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div className="flex items-center justify-between">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Shield className="w-3.5 h-3.5 text-[#7367F0]" />
-                Hat Başına Günlük Mesaj Limiti
+                {t('whatsapp.dailyLimitSlider')}
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.daily_message_limit} mesaj / gün
+                {config.daily_message_limit}
               </span>
             </div>
             <input
@@ -639,25 +636,23 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              Günlük limit dolduğunda kampanya güvenli şekilde bir sonraki güne ertelenir.
+              {t('whatsapp.dailyLimitHelp')}
             </p>
           </div>
         </div>
 
-        {/* ===================================================================== */}
-        {/* WORKING HOURS PROTECTION & SMOOTH DYNAMIC RISK GAUGE */}
-        {/* ===================================================================== */}
+        {/* Working Hours Protection & Smooth Risk Gauge */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {/* Working Hours Box with Corporate Presets */}
+          {/* Working Hours Box */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-3 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Building2 className="w-4 h-4 text-[#7367F0]" />
                 <div>
                   <span className="text-xs font-extrabold text-slate-800 dark:text-white block">
-                    Güvenli Çalışma Saatleri Koruması
+                    {t('whatsapp.workingHoursTitle')}
                   </span>
-                  <span className="text-[10px] text-slate-400">Kurumsal mesai saatleri otomatik aktif</span>
+                  <span className="text-[10px] text-slate-400">{t('whatsapp.workingHoursSubtitle')}</span>
                 </div>
               </div>
 
@@ -674,7 +669,6 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
             {config.working_hours_enabled !== false && (
               <div className="space-y-2.5 pt-1 animate-fade-in">
-                {/* Quick Corporate Time Presets */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
@@ -688,7 +682,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
                   >
-                    🏢 Standart (09:00 - 18:00)
+                    {t('whatsapp.presetStandardHours')}
                   </button>
 
                   <button
@@ -703,7 +697,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
                   >
-                    💼 Kurumsal Ortalama (09:00 - 18:30)
+                    {t('whatsapp.presetCorporateHours')}
                   </button>
 
                   <button
@@ -718,15 +712,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
                   >
-                    🌙 Esnek (09:00 - 20:00)
+                    {t('whatsapp.presetFlexibleHours')}
                   </button>
                 </div>
 
-                {/* Custom Time Inputs */}
                 <div className="grid grid-cols-2 gap-2 text-xs pt-1">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 dark:text-[#7E7F96] block mb-1">
-                      Başlangıç Saati
+                      {t('whatsapp.startTime')}
                     </label>
                     <input
                       type="time"
@@ -737,7 +730,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 dark:text-[#7E7F96] block mb-1">
-                      Bitiş Saati
+                      {t('whatsapp.endTime')}
                     </label>
                     <input
                       type="time"
@@ -750,19 +743,17 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               </div>
             )}
             <p className="text-[10px] text-slate-400">
-              Mesai saatleri dışında (gece/hafta sonu) spam şikayetlerini ve ban riskini sıfırlar.
+              {t('whatsapp.workingHoursHelp')}
             </p>
           </div>
 
-          {/* =================================================================== */}
-          {/* SMOOTH ANIMATED RISK METER SLIDER / GAUGE */}
-          {/* =================================================================== */}
+          {/* Smooth Animated Risk Meter */}
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] flex flex-col justify-between space-y-3 shadow-sm">
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                   <AlertTriangle className={`w-4 h-4 ${riskInfo.color}`} />
-                  Anlık Ban Riski Seviyesi
+                  {t('whatsapp.riskTitle')}
                 </span>
                 <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-lg border font-mono uppercase transition-all duration-300 ${riskInfo.badgeBg} ${riskInfo.badgeText}`}>
                   {riskInfo.title} (%{riskInfo.score})
@@ -773,14 +764,11 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               </p>
             </div>
 
-            {/* Smooth Risk Slider Track & Needle */}
             <div className="space-y-1.5 pt-1">
               <div className="relative w-full h-3 rounded-full bg-slate-200 dark:bg-slate-700 overflow-visible p-0.5">
-                {/* Smooth Gradient Bar */}
                 <div 
                   className="w-full h-full rounded-full bg-gradient-to-r from-[#28C76F] via-[#FF9F43] to-[#EA5455] opacity-90"
                 />
-                {/* Smooth Moving Thumb / Needle Indicator */}
                 <div 
                   className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 bg-white dark:bg-slate-900 border-2 rounded-full shadow-md transition-all duration-500 ease-out z-10 flex items-center justify-center"
                   style={{ 
@@ -795,34 +783,33 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 </div>
               </div>
 
-              {/* Risk Range Scale Labels */}
               <div className="flex items-center justify-between text-[9px] font-bold text-slate-400 font-mono px-0.5">
-                <span className="text-[#28C76F]">0% Güvenli</span>
-                <span className="text-[#FF9F43]">50% Dengeli</span>
-                <span className="text-[#EA5455]">100% Yüksek</span>
+                <span className="text-[#28C76F]">{t('whatsapp.riskSafe')}</span>
+                <span className="text-[#FF9F43]">{t('whatsapp.riskBalanced')}</span>
+                <span className="text-[#EA5455]">{t('whatsapp.riskHigh')}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Save Actions & State Feedback */}
+        {/* Save Actions */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-white/[0.05]">
           <div className="flex items-center gap-2">
             {saveSuccess ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#28C76F] bg-[#28C76F]/15 px-3 py-1.5 rounded-lg border border-[#28C76F]/30 animate-fade-in">
                 <Check className="w-3.5 h-3.5" />
-                <span>Anti-Ban ayarları veritabanına başarıyla kaydedildi!</span>
+                <span>{t('whatsapp.policySavedSuccess')}</span>
               </span>
             ) : hasUnsavedChanges ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF9F43] bg-[#FF9F43]/15 px-3 py-1.5 rounded-lg border border-[#FF9F43]/30 animate-fade-in">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                <span>Değişikliklerin geçerli olması için kaydetmeyi unutmayın.</span>
+                <span>{t('whatsapp.unsavedChangesDesc')}</span>
               </span>
             ) : (
               <span className="text-xs text-slate-400 dark:text-[#7E7F96]">
                 {savedConfig.updated_at
-                  ? `Son güncelleme: ${new Date(savedConfig.updated_at).toLocaleString('tr-TR')}`
-                  : 'Varsayılan altın denge yapılandırması aktif.'}
+                  ? `${t('whatsapp.synchronized')}: ${new Date(savedConfig.updated_at).toLocaleTimeString()}`
+                  : t('whatsapp.synchronized')}
               </span>
             )}
           </div>
@@ -832,10 +819,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <Button
                 variant="outline"
                 onClick={handleRevertChanges}
-                className="space-x-1.5 font-bold text-slate-600 dark:text-slate-300"
+                className="space-x-1.5 font-bold text-slate-600 dark:text-slate-300 cursor-pointer"
               >
                 <Undo2 className="w-4 h-4" />
-                <span>Geri Al</span>
+                <span>{t('whatsapp.revertChanges')}</span>
               </Button>
             )}
 
@@ -851,12 +838,12 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               {isSavingAntiBan ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Kaydediliyor...</span>
+                  <span>{t('whatsapp.saving')}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-4 h-4" />
-                  <span>{hasUnsavedChanges ? 'Yapılandırmayı Kaydet' : 'Ayarlar Güncel'}</span>
+                  <span>{hasUnsavedChanges ? t('whatsapp.savePolicy') : t('whatsapp.savedStatus')}</span>
                 </>
               )}
             </Button>
@@ -872,18 +859,18 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
                 <Zap className="w-4 h-4 text-[#FF9F43]" />
-                Doğrudan Test Mesajı Gönderimi
+                {t('whatsapp.testSandboxTitle')}
               </h3>
               <Badge variant="warning" className="font-mono text-[9px]">SANDBOX</Badge>
             </div>
             <p className="text-xs text-slate-500 dark:text-[#7E7F96] font-medium">
-              Bağlı hattınızın sağlığını ve mesaj iletimini anlık olarak test edin.
+              {t('whatsapp.testSandboxSubtitle')}
             </p>
 
             <form onSubmit={handleSendTest} className="space-y-3 text-xs">
               <div>
                 <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
-                  Alıcı Telefon Numarası *
+                  {t('whatsapp.testRecipient')}
                 </label>
                 <input
                   type="text"
@@ -896,13 +883,13 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               </div>
 
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">Mesaj Metni *</label>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('whatsapp.testMessageText')}</label>
                 <textarea
                   value={testMsg}
                   onChange={(e) => setTestMsg(e.target.value)}
                   rows={3}
                   className="w-full p-3 rounded-lg vuexy-input text-xs leading-relaxed font-medium"
-                  placeholder="Test mesajı..."
+                  placeholder="Test message..."
                   required
                 />
               </div>
@@ -910,7 +897,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               {testResult && (
                 <div
                   className={`p-3 rounded-lg text-xs font-bold ${
-                    testResult.includes('Hata')
+                    testResult.includes('Hata') || testResult.includes('Error')
                       ? 'bg-[#EA5455]/15 border border-[#EA5455]/30 text-[#EA5455]'
                       : 'bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F]'
                   }`}
@@ -928,12 +915,12 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 {testSending ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>İletiliyor...</span>
+                    <span>{t('whatsapp.testSending')}</span>
                   </>
                 ) : (
                   <>
                     <Send className="w-3.5 h-3.5" />
-                    <span>Test Mesajını Gönder</span>
+                    <span>{t('whatsapp.sendTestMessage')}</span>
                   </>
                 )}
               </Button>
@@ -946,28 +933,28 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
           <Card className="p-6 space-y-4">
             <h3 className="text-base font-bold text-slate-800 dark:text-white flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[#28C76F]" />
-              Scoutify Anti-Ban Güvenlik İlkeleri
+              {t('whatsapp.guidelinesTitle')}
             </h3>
 
             <div className="space-y-2.5 text-xs text-slate-700 dark:text-slate-300 font-medium">
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-1">
-                <span className="font-bold text-[#28C76F]">1. Kademeli Isınma (Warm-Up Schedule)</span>
+                <span className="font-bold text-[#28C76F]">{t('whatsapp.guideline1Title')}</span>
                 <p className="text-slate-500 dark:text-[#7E7F96] text-[11px]">
-                  Yeni bağlanan hatlarda 1. Gün: 15 mesaj, 2. Gün: 25 mesaj, 5. Gün: 50 mesaj olarak limit kademeli artar.
+                  {t('whatsapp.guideline1Desc')}
                 </p>
               </div>
 
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-1">
-                <span className="font-bold text-[#00CFE8]">2. İnsansı Gaussian Rastgele Gecikme</span>
+                <span className="font-bold text-[#00CFE8]">{t('whatsapp.guideline2Title')}</span>
                 <p className="text-slate-500 dark:text-[#7E7F96] text-[11px]">
-                  Her mesaj arasına 45-120 saniye rastgele bekleme ve öncesinde 3-7 saniye "Yazıyor..." simülasyonu eklenir.
+                  {t('whatsapp.guideline2Desc')}
                 </p>
               </div>
 
               <div className="p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-1">
-                <span className="font-bold text-[#7367F0]">3. Spintax Varyasyon Zorunluluğu</span>
+                <span className="font-bold text-[#7367F0]">{t('whatsapp.guideline3Title')}</span>
                 <p className="text-slate-500 dark:text-[#7E7F96] text-[11px]">
-                  Her alıcıya giden mesajın metin ve hash imzası farklılaşarak spam filtrelerine takılma riski minimize edilir.
+                  {t('whatsapp.guideline3Desc')}
                 </p>
               </div>
             </div>
@@ -991,7 +978,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 <div className="w-8 h-8 rounded-lg bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
                   <Smartphone className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">WhatsApp Hattı Eşle</h3>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">{t('whatsapp.qrModalTitle')}</h3>
               </div>
               <button
                 type="button"
@@ -1006,15 +993,15 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             <div className="p-3 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-left text-xs space-y-1.5">
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
                 <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">1</span>
-                <span>WhatsApp uygulamasını açın</span>
+                <span>{t('whatsapp.qrModalStep1')}</span>
               </div>
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
                 <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">2</span>
-                <span>Ayarlar → Bağlı Cihazlar → Cihaz Bağla</span>
+                <span>{t('whatsapp.qrModalStep2')}</span>
               </div>
               <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-semibold">
                 <span className="w-4 h-4 rounded-full bg-[#7367F0]/15 text-[#7367F0] text-[10px] flex items-center justify-center font-bold shrink-0">3</span>
-                <span>Aşağıdaki QR kodu kameranızla taratın</span>
+                <span>{t('whatsapp.qrModalStep3')}</span>
               </div>
             </div>
 
@@ -1050,7 +1037,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             {isPairingSuccess ? (
               <div className="p-3 rounded-xl bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F] text-xs font-bold flex items-center justify-center gap-2 animate-fade-in">
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Oturum Başarıyla Bağlandı!</span>
+                <span>{t('whatsapp.qrPairSuccess')}</span>
               </div>
             ) : (
               <Button
@@ -1058,7 +1045,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 size="lg"
                 className="w-full font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
               >
-                (Demo) QR Taramasını Onayla & Bağlan
+                {t('whatsapp.simulateScan')}
               </Button>
             )}
           </div>

@@ -8,7 +8,8 @@ import {
   ShieldCheck,
   Zap,
   Globe,
-  Languages
+  Languages,
+  ChevronDown
 } from 'lucide-react';
 import { Card } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -39,46 +40,29 @@ export const SettingsPage: React.FC = () => {
           {t('settings.languageSection')}
         </h3>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => setLanguage('en')}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              language === 'en'
-                ? 'border-[#7367F0] bg-[#7367F0]/10 ring-1 ring-[#7367F0]/50 shadow-sm'
-                : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.04]'
-            }`}
-          >
+        <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="text-xs font-bold text-slate-800 dark:text-white block">
-                🇺🇸 English (EN)
-              </span>
-              <span className="text-[11px] text-slate-400">Default system language</span>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                {t('settings.languageLabel')}: <span className="text-[#7367F0] font-extrabold">{language === 'en' ? 'English (EN)' : 'Türkçe (TR)'}</span>
+              </p>
+              <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
+                {language === 'en' ? 'Choose the interface language for Scoutify.' : 'Scoutify arayüz ve bildirim dilini seçin.'}
+              </p>
             </div>
-            {language === 'en' && (
-              <Badge variant="primary" className="text-[10px]">Active</Badge>
-            )}
-          </button>
 
-          <button
-            type="button"
-            onClick={() => setLanguage('tr')}
-            className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-              language === 'tr'
-                ? 'border-[#7367F0] bg-[#7367F0]/10 ring-1 ring-[#7367F0]/50 shadow-sm'
-                : 'border-slate-200 dark:border-white/[0.08] bg-slate-50/50 dark:bg-white/[0.02] hover:bg-slate-100 dark:hover:bg-white/[0.04]'
-            }`}
-          >
-            <div>
-              <span className="text-xs font-bold text-slate-800 dark:text-white block">
-                🇹🇷 Türkçe (TR)
-              </span>
-              <span className="text-[11px] text-slate-400">Türkçe arayüz ve bildirimler</span>
+            <div className="relative w-full sm:w-56">
+              <select
+                value={language}
+                onChange={(e) => setLanguage(e.target.value as 'en' | 'tr')}
+                className="w-full px-3 py-2.5 pr-8 rounded-lg vuexy-input text-xs font-bold cursor-pointer appearance-none"
+              >
+                <option value="en">🇺🇸 English (EN)</option>
+                <option value="tr">🇹🇷 Türkçe (TR)</option>
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-            {language === 'tr' && (
-              <Badge variant="primary" className="text-[10px]">Aktif</Badge>
-            )}
-          </button>
+          </div>
         </div>
       </Card>
 
@@ -95,7 +79,7 @@ export const SettingsPage: React.FC = () => {
               {theme === 'light' ? t('settings.themeLight') : t('settings.themeDark')}
             </p>
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              {theme === 'light' ? 'Light mode is currently active.' : 'Dark mode (Vuexy Sleek) is currently active.'}
+              {theme === 'light' ? t('settings.themeDescLight') : t('settings.themeDescDark')}
             </p>
           </div>
 
@@ -122,7 +106,7 @@ export const SettingsPage: React.FC = () => {
       <Card className="p-4 sm:p-6 space-y-4 sm:space-y-6">
         <h3 className="text-sm font-bold text-slate-800 dark:text-white flex items-center gap-2">
           <Server className="w-4 h-4 text-[#7367F0]" />
-          System & Service Endpoints
+          {t('settings.servicesSection')}
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -130,9 +114,9 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-[#7367F0]" />
-                FastAPI REST & WebSocket Core
+                {t('settings.fastapiCore')}
               </span>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="success">{t('common.active')}</Badge>
             </div>
             <p className="font-mono text-[#7367F0] text-[11px] font-bold">http://localhost:8000/api/v1</p>
             <p className="text-slate-400 dark:text-[#7E7F96] text-[10px]">Pydantic v2 & SQLAlchemy 2.0 Async Session</p>
@@ -142,9 +126,9 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-[#00CFE8]" />
-                WhatsApp Gateway Sidecar
+                {t('settings.gatewaySidecar')}
               </span>
-              <Badge variant="success">Active</Badge>
+              <Badge variant="success">{t('common.active')}</Badge>
             </div>
             <p className="font-mono text-[#00CFE8] text-[11px] font-bold">http://localhost:3001</p>
             <p className="text-slate-400 dark:text-[#7E7F96] text-[10px]">Baileys WebSocket Multi-Device Socket Engine</p>
@@ -154,7 +138,7 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <Database className="w-3.5 h-3.5 text-[#28C76F]" />
-                Database Engine
+                {t('settings.databaseEngine')}
               </span>
               <Badge variant="success">SQLite + WAL</Badge>
             </div>
@@ -166,7 +150,7 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-[#FF9F43]" />
-                Crawler & Scraper Engine
+                {t('settings.crawlerEngine')}
               </span>
               <Badge variant="success">Playwright Chromium</Badge>
             </div>
