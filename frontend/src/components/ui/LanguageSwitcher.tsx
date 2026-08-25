@@ -50,7 +50,7 @@ export const LanguageSwitcher: React.FC = () => {
         aria-haspopup="true"
         aria-expanded={isOpen}
         title={language === 'en' ? 'Switch Language' : 'Dili Değiştir'}
-        className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border text-xs font-extrabold transition-all duration-150 cursor-pointer shadow-sm ${
+        className={`flex items-center justify-center space-x-1.5 h-9 px-3 rounded-lg border text-xs font-extrabold transition-all duration-150 cursor-pointer shadow-sm ${
           isOpen
             ? 'border-[#7367F0] bg-[#7367F0]/10 text-[#7367F0] ring-2 ring-[#7367F0]/20'
             : 'border-slate-200 dark:border-white/[0.08] hover:border-[#7367F0]/40 bg-slate-50/80 dark:bg-white/[0.04] text-slate-700 dark:text-slate-200 hover:text-[#7367F0] dark:hover:text-[#A59DF8]'
