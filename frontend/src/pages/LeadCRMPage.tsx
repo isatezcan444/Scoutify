@@ -31,9 +31,12 @@ import {
   Modal, 
   EmptyState, 
   Pagination,
+  Chip,
   WhatsAppIcon,
   GoogleMapsIcon
 } from '../components/ui';
+import { SearchInput } from '../components/forms';
+import { BusinessCell } from '../components/data-display';
 import { LeadDetailDrawer } from '../components/domain/LeadDetailDrawer';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { CategoryMultiSelect } from '../components/LeadFinder/CategoryMultiSelect';
@@ -471,17 +474,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         {/* Filter Controls Row */}
         <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3 pt-4 border-t border-slate-100 dark:border-white/[0.06] items-center">
           {/* Search Box: 4 cols */}
-          <div className="lg:col-span-4 relative flex items-center">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 pointer-events-none" />
-            <input
-              type="text"
+          <div className="lg:col-span-4">
+            <SearchInput
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(val) => {
+                setSearch(val);
                 setPage(1);
               }}
               placeholder={t('leads.searchPlaceholder')}
-              className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium h-10"
             />
           </div>
 
@@ -556,52 +556,40 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
             {/* Active Filters Summary Chips */}
             {selectedCity && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-[#7367F0]/15 text-[#7367F0] dark:bg-[#7367F0]/25 dark:text-[#A59DF8]">
-                <span>{selectedCity}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedCity('');
-                    setSelectedDistricts([]);
-                    setPage(1);
-                  }}
-                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
+              <Chip
+                label={selectedCity}
+                variant="primary"
+                size="sm"
+                onRemove={() => {
+                  setSelectedCity('');
+                  setSelectedDistricts([]);
+                  setPage(1);
+                }}
+              />
             )}
 
             {selectedDistricts.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200">
-                <span>{selectedDistricts.length} {t('common.location')}: {selectedDistricts.slice(0, 2).join(', ')}{selectedDistricts.length > 2 ? '...' : ''}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedDistricts([]);
-                    setPage(1);
-                  }}
-                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
+              <Chip
+                label={`${selectedDistricts.length} ${t('common.location')}: ${selectedDistricts.slice(0, 2).join(', ')}${selectedDistricts.length > 2 ? '...' : ''}`}
+                variant="default"
+                size="sm"
+                onRemove={() => {
+                  setSelectedDistricts([]);
+                  setPage(1);
+                }}
+              />
             )}
 
             {selectedCategories.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-[#00CFE8]/15 text-[#00CFE8] dark:bg-[#00CFE8]/25 dark:text-[#00CFE8]">
-                <span>{selectedCategories.length} {t('common.category')}: {selectedCategories.slice(0, 2).join(', ')}{selectedCategories.length > 2 ? '...' : ''}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategories([]);
-                    setPage(1);
-                  }}
-                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
+              <Chip
+                label={`${selectedCategories.length} ${t('common.category')}: ${selectedCategories.slice(0, 2).join(', ')}${selectedCategories.length > 2 ? '...' : ''}`}
+                variant="info"
+                size="sm"
+                onRemove={() => {
+                  setSelectedCategories([]);
+                  setPage(1);
+                }}
+              />
             )}
           </div>
 
@@ -726,28 +714,12 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
                       {/* Name & Avatar & Category */}
                       <td className="py-3.5 px-4 max-w-[260px]">
-                        <div className="flex items-center space-x-2.5">
-                          <Avatar name={lead.name} size="sm" shape="rounded" />
-                          <div className="min-w-0 flex-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenLeadDrawer(lead)}
-                              className="font-bold text-slate-800 dark:text-white text-xs truncate hover:text-[#7367F0] dark:hover:text-[#A59DF8] transition-colors cursor-pointer text-left block w-full"
-                            >
-                              {lead.name}
-                            </button>
-                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                                {lead.category || t('common.general')}
-                              </span>
-                              {lead.entity_type && (
-                                <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
-                                  {lead.entity_type}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                        <BusinessCell
+                          name={lead.name}
+                          category={lead.category || t('common.general')}
+                          entityType={lead.entity_type}
+                          onClick={() => handleOpenLeadDrawer(lead)}
+                        />
                       </td>
 
                       {/* Phone & WhatsApp */}

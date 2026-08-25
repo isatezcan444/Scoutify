@@ -60,6 +60,10 @@ This document defines the core architecture, non-negotiable rules, invariants, a
   - Hardcoded natural language strings in JSX/TSX components are strictly forbidden.
   - Both English (`en`) (default) and Turkish (`tr`) dictionaries in `frontend/src/locales/` must always be maintained in full synchronization.
   - Language selection must persist in `localStorage` (`scoutify_lang`).
+- **Centralized Component System & Registry Invariant**:
+  - All UI elements must follow the design contracts in [`docs/UI_COMPONENT_RULES.md`](file:///Users/isatezcan/Documents/Github/Scoutify/docs/UI_COMPONENT_RULES.md) and [`docs/component-registry.md`](file:///Users/isatezcan/Documents/Github/Scoutify/docs/component-registry.md).
+  - Page-specific ad-hoc duplicate components are strictly prohibited.
+  - Any new reusable UI component or domain composite created during development must be automatically registered in `docs/component-registry.md` and exported via the corresponding `components/<category>/index.ts` barrel.
 
 ---
 

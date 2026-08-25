@@ -19,10 +19,14 @@ import {
   HeroBanner, 
   StatsCard, 
   Alert, 
-  Progress, 
+  Progress 
+} from '../components/ui';
+import { 
+  ProgressFunnel, 
+  FunnelStage, 
   ActivityTimeline, 
   TimelineEvent 
-} from '../components/ui';
+} from '../components/data-display';
 import { useI18n } from '../context/I18nContext';
 
 interface DashboardPageProps {
@@ -54,6 +58,37 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
     ),
     variant: act.status === 'REPLIED' ? 'success' : 'primary',
   }));
+
+  const funnelStages: FunnelStage[] = [
+    {
+      id: 1,
+      label: t('dashboard.funnelTotal'),
+      count: stats.total_leads,
+      percentage: 100,
+      variant: 'primary',
+    },
+    {
+      id: 2,
+      label: t('dashboard.funnelWaReady'),
+      count: stats.whatsapp_eligible_leads,
+      percentage: stats.total_leads > 0 ? (stats.whatsapp_eligible_leads / stats.total_leads) * 100 : 0,
+      variant: 'info',
+    },
+    {
+      id: 3,
+      label: t('dashboard.funnelContacted'),
+      count: stats.contacted_leads,
+      percentage: stats.whatsapp_eligible_leads > 0 ? (stats.contacted_leads / stats.whatsapp_eligible_leads) * 100 : 0,
+      variant: 'warning',
+    },
+    {
+      id: 4,
+      label: t('dashboard.funnelReplied'),
+      count: stats.replied_leads,
+      percentage: stats.response_rate_percentage,
+      variant: 'success',
+    },
+  ];
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 select-none animate-fade-in">
@@ -155,63 +190,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <Badge variant="primary">{t('dashboard.realtime')}</Badge>
             </div>
 
-            <div className="space-y-5">
-              {/* Step 1: Scraped */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <span>1. {t('dashboard.funnelTotal')}</span>
-                  <span className="font-mono text-[#7367F0]">{stats.total_leads} (%100)</span>
-                </div>
-                <Progress value={100} variant="primary" size="md" />
-              </div>
-
-              {/* Step 2: WA Eligible */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <span>2. {t('dashboard.funnelWaReady')}</span>
-                  <span className="font-mono text-[#00CFE8]">
-                    {stats.whatsapp_eligible_leads} (
-                    {stats.total_leads > 0 ? Math.round((stats.whatsapp_eligible_leads / stats.total_leads) * 100) : 0}%)
-                  </span>
-                </div>
-                <Progress
-                  value={stats.total_leads > 0 ? (stats.whatsapp_eligible_leads / stats.total_leads) * 100 : 0}
-                  variant="info"
-                  size="md"
-                />
-              </div>
-
-              {/* Step 3: Contacted */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <span>3. {t('dashboard.funnelContacted')}</span>
-                  <span className="font-mono text-[#FF9F43]">
-                    {stats.contacted_leads} (
-                    {stats.whatsapp_eligible_leads > 0 ? Math.round((stats.contacted_leads / stats.whatsapp_eligible_leads) * 100) : 0}%)
-                  </span>
-                </div>
-                <Progress
-                  value={stats.whatsapp_eligible_leads > 0 ? (stats.contacted_leads / stats.whatsapp_eligible_leads) * 100 : 0}
-                  variant="warning"
-                  size="md"
-                />
-              </div>
-
-              {/* Step 4: Replied */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <span>4. {t('dashboard.funnelReplied')}</span>
-                  <span className="font-mono text-[#28C76F]">
-                    {stats.replied_leads} (%{stats.response_rate_percentage})
-                  </span>
-                </div>
-                <Progress
-                  value={Math.min(stats.response_rate_percentage * 2, 100)}
-                  variant="success"
-                  size="md"
-                />
-              </div>
-            </div>
+            <ProgressFunnel stages={funnelStages} />
 
             {/* Vuexy Safeguard Alert Banner */}
             <Alert

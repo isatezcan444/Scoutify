@@ -28,6 +28,8 @@ import { WhatsAppSession, MessageLog } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
+import { SessionCard } from '../components/domain';
+import { Slider, Switch } from '../components/forms';
 import { 
   AntiBanConfig, 
   DEFAULT_ANTI_BAN_CONFIG, 
@@ -279,110 +281,18 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
       {/* Connected Sessions Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {sessions.map((sess) => {
-          const quotaPercent = Math.round((sess.daily_sent_count / sess.max_daily_limit) * 100);
-          return (
-            <Card key={sess.id} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between h-full space-y-4">
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
-                      <Smartphone className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-800 dark:text-white">{sess.session_name}</h3>
-                      <p className="text-xs font-mono text-[#28C76F] font-bold">
-                        {sess.phone_number || t('whatsapp.waitingNumber')}
-                      </p>
-                    </div>
-                  </div>
-
-                  <Badge
-                    variant={
-                      sess.status === 'CONNECTED'
-                        ? 'success'
-                        : sess.status === 'SCAN_QR'
-                        ? 'warning'
-                        : 'danger'
-                    }
-                    className="gap-1 font-bold text-[10px]"
-                  >
-                    {sess.status === 'CONNECTED' && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#28C76F] live-dot" />
-                    )}
-                    {sess.status}
-                  </Badge>
-                </div>
-
-                {/* Warm-Up Day & Quota Status */}
-                <div className="mt-4 space-y-2.5 p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05]">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-500 dark:text-[#7E7F96] flex items-center gap-1 font-semibold">
-                      <Flame className="w-3.5 h-3.5 text-[#FF9F43]" />
-                      {t('whatsapp.warmUpDay', { day: sess.warm_up_day })}:
-                    </span>
-                    <span className="font-bold text-[#FF9F43] font-mono">#{sess.warm_up_day}</span>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      <span>{t('whatsapp.dailyLimit')}</span>
-                      <span className="font-mono text-[#7367F0]">
-                        {sess.daily_sent_count} / {sess.max_daily_limit}
-                      </span>
-                    </div>
-                    <div className="h-1.5 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
-                      <div
-                        className="h-full bg-gradient-to-r from-[#7367F0] to-[#28C76F] rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(quotaPercent, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 font-semibold">
-                    <span className="flex items-center gap-1">
-                      <BatteryCharging className="w-3 h-3 text-[#28C76F]" />
-                      {t('whatsapp.battery')}: %{sess.battery_level || 90}
-                    </span>
-                    <span>{t('whatsapp.batteryHealthy')}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card Actions */}
-              <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-white/[0.06] text-xs">
-                {sess.status === 'CONNECTED' ? (
-                  <button
-                    onClick={() => handleDisconnect(sess.id)}
-                    className="text-slate-500 hover:text-[#FF9F43] flex items-center gap-1 font-bold transition-colors text-xs cursor-pointer"
-                  >
-                    <PowerOff className="w-3.5 h-3.5" />
-                    <span>{t('whatsapp.disconnect')}</span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setPairingSessionId(sess.id);
-                      setIsQRModalOpen(true);
-                    }}
-                    className="text-[#7367F0] hover:text-[#685DD8] flex items-center gap-1 font-bold text-xs cursor-pointer"
-                  >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>{t('whatsapp.scanQrToConnect')}</span>
-                  </button>
-                )}
-
-                <button
-                  onClick={() => handleDelete(sess.id)}
-                  className="text-slate-400 hover:text-[#EA5455] p-1 transition-colors cursor-pointer"
-                  title={t('whatsapp.deleteSession')}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </Card>
-          );
-        })}
+        {sessions.map((sess) => (
+          <SessionCard
+            key={sess.id}
+            session={sess}
+            onDisconnect={handleDisconnect}
+            onScanQR={(id) => {
+              setPairingSessionId(id);
+              setIsQRModalOpen(true);
+            }}
+            onDelete={handleDelete}
+          />
+        ))}
       </div>
 
       {/* ========================================================================= */}
@@ -522,111 +432,57 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
         {/* Detailed Sliders */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-          {/* Slider 1: Min Delay */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5 shadow-sm hover:border-[#7367F0]/30 transition-all">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
-                {t('whatsapp.minDelay')}
-              </label>
-              <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.min_delay_seconds}s
-              </span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={120}
-              step={5}
-              value={config.min_delay_seconds}
-              onChange={(e) => {
-                const val = Number(e.target.value);
-                handleCustomChange('min_delay_seconds', val);
-                if (val >= config.max_delay_seconds) {
-                  handleCustomChange('max_delay_seconds', val + 15);
-                }
-              }}
-              className="w-full accent-[#7367F0] cursor-pointer"
-            />
-            <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              {t('whatsapp.minDelayHelp')}
-            </p>
-          </div>
+          <Slider
+            label={t('whatsapp.minDelay')}
+            icon={Clock}
+            value={config.min_delay_seconds}
+            min={10}
+            max={120}
+            step={5}
+            unit="s"
+            helperText={t('whatsapp.minDelayHelp')}
+            onChange={(val) => {
+              handleCustomChange('min_delay_seconds', val);
+              if (val >= config.max_delay_seconds) {
+                handleCustomChange('max_delay_seconds', val + 15);
+              }
+            }}
+          />
 
-          {/* Slider 2: Max Delay */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5 shadow-sm hover:border-[#7367F0]/30 transition-all">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#7367F0]" />
-                {t('whatsapp.maxDelay')}
-              </label>
-              <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.max_delay_seconds}s
-              </span>
-            </div>
-            <input
-              type="range"
-              min={config.min_delay_seconds + 5}
-              max={240}
-              step={5}
-              value={config.max_delay_seconds}
-              onChange={(e) => handleCustomChange('max_delay_seconds', Number(e.target.value))}
-              className="w-full accent-[#7367F0] cursor-pointer"
-            />
-            <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              {t('whatsapp.maxDelayHelp')}
-            </p>
-          </div>
+          <Slider
+            label={t('whatsapp.maxDelay')}
+            icon={Clock}
+            value={config.max_delay_seconds}
+            min={config.min_delay_seconds + 5}
+            max={240}
+            step={5}
+            unit="s"
+            helperText={t('whatsapp.maxDelayHelp')}
+            onChange={(val) => handleCustomChange('max_delay_seconds', val)}
+          />
 
-          {/* Slider 3: Typing Simulation */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5 shadow-sm hover:border-[#7367F0]/30 transition-all">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-[#7367F0]" />
-                {t('whatsapp.typingDelay')}
-              </label>
-              <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.typing_delay_seconds}s
-              </span>
-            </div>
-            <input
-              type="range"
-              min={1}
-              max={15}
-              step={1}
-              value={config.typing_delay_seconds}
-              onChange={(e) => handleCustomChange('typing_delay_seconds', Number(e.target.value))}
-              className="w-full accent-[#7367F0] cursor-pointer"
-            />
-            <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              {t('whatsapp.typingDelayHelp')}
-            </p>
-          </div>
+          <Slider
+            label={t('whatsapp.typingDelay')}
+            icon={Sliders}
+            value={config.typing_delay_seconds}
+            min={1}
+            max={15}
+            step={1}
+            unit="s"
+            helperText={t('whatsapp.typingDelayHelp')}
+            onChange={(val) => handleCustomChange('typing_delay_seconds', val)}
+          />
 
-          {/* Slider 4: Daily Limit */}
-          <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-2.5 shadow-sm hover:border-[#7367F0]/30 transition-all">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5 text-[#7367F0]" />
-                {t('whatsapp.dailyLimitSlider')}
-              </label>
-              <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.daily_message_limit}
-              </span>
-            </div>
-            <input
-              type="range"
-              min={10}
-              max={250}
-              step={5}
-              value={config.daily_message_limit}
-              onChange={(e) => handleCustomChange('daily_message_limit', Number(e.target.value))}
-              className="w-full accent-[#7367F0] cursor-pointer"
-            />
-            <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-              {t('whatsapp.dailyLimitHelp')}
-            </p>
-          </div>
+          <Slider
+            label={t('whatsapp.dailyLimitSlider')}
+            icon={Shield}
+            value={config.daily_message_limit}
+            min={10}
+            max={250}
+            step={5}
+            helperText={t('whatsapp.dailyLimitHelp')}
+            onChange={(val) => handleCustomChange('daily_message_limit', val)}
+          />
         </div>
 
         {/* Working Hours Protection & Smooth Risk Gauge */}
@@ -644,15 +500,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 </div>
               </div>
 
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={config.working_hours_enabled !== false}
-                  onChange={(e) => handleCustomChange('working_hours_enabled', e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7367F0]"></div>
-              </label>
+              <Switch
+                checked={config.working_hours_enabled !== false}
+                onChange={(checked) => handleCustomChange('working_hours_enabled', checked)}
+              />
             </div>
 
             {config.working_hours_enabled !== false && (

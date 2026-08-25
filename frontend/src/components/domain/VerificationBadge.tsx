@@ -1,0 +1,57 @@
+import * as React from 'react';
+import { CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from 'lucide-react';
+import { cn } from '../../lib/utils';
+
+export interface VerificationBadgeProps {
+  status?: string;
+  isVerified?: boolean;
+  score?: number;
+  className?: string;
+}
+
+export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
+  status = 'VERIFIED',
+  isVerified = true,
+  score,
+  className,
+}) => {
+  if (isVerified || status === 'VERIFIED') {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/30 text-[10px] font-bold font-mono select-none',
+          className
+        )}
+      >
+        <ShieldCheck className="w-3 h-3" />
+        <span>Verified {score ? `(${score})` : ''}</span>
+      </span>
+    );
+  }
+
+  if (status === 'REJECTED' || status === 'INVALID') {
+    return (
+      <span
+        className={cn(
+          'inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#EA5455]/15 text-[#EA5455] border border-[#EA5455]/30 text-[10px] font-bold font-mono select-none',
+          className
+        )}
+      >
+        <XCircle className="w-3 h-3" />
+        <span>Rejected</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-[#FF9F43]/15 text-[#FF9F43] border border-[#FF9F43]/30 text-[10px] font-bold font-mono select-none',
+        className
+      )}
+    >
+      <AlertTriangle className="w-3 h-3" />
+      <span>Unverified</span>
+    </span>
+  );
+};
