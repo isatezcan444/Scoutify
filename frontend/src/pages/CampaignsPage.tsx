@@ -10,9 +10,13 @@ import {
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { Campaign } from '../types';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { Card } from '../components/ui/card';
+import { 
+  Button, 
+  Badge, 
+  Card, 
+  PageHeader, 
+  EmptyState 
+} from '../components/ui';
 import { getStoredAntiBanConfig, ANTI_BAN_PRESETS } from '../utils/antiBanSettings';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
@@ -129,54 +133,48 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
   return (
     <div className="space-y-6 pb-16 select-none animate-fade-in">
       {/* Top Header & Mode Tabs */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
-            <Send className="w-5 h-5 text-[#7367F0]" />
-            {t('campaigns.title')}
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            {t('titles.campaignsSub')}
-          </p>
-        </div>
-
-        <div className="flex items-center space-x-2">
-          <Button
-            variant={activeTab === 'list' ? 'outline' : 'ghost'}
-            size="sm"
-            onClick={() => setActiveTab('list')}
-            className={`cursor-pointer ${activeTab === 'list' ? 'border-[#7367F0] text-[#7367F0] font-bold' : ''}`}
-          >
-            {t('campaigns.title')} ({campaigns.length})
-          </Button>
-          <Button
-            variant={activeTab === 'builder' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setActiveTab('builder')}
-            className="space-x-1.5 font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{t('campaigns.createCampaign')}</span>
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={t('campaigns.title')}
+        subtitle={t('titles.campaignsSub')}
+        icon={Send}
+        actions={
+          <div className="flex items-center space-x-2">
+            <Button
+              variant={activeTab === 'list' ? 'outline' : 'ghost'}
+              size="sm"
+              onClick={() => setActiveTab('list')}
+              className={`cursor-pointer ${activeTab === 'list' ? 'border-[#7367F0] text-[#7367F0] font-bold' : ''}`}
+            >
+              {t('campaigns.title')} ({campaigns.length})
+            </Button>
+            <Button
+              variant={activeTab === 'builder' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setActiveTab('builder')}
+              className="space-x-1.5 font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{t('campaigns.createCampaign')}</span>
+            </Button>
+          </div>
+        }
+      />
 
       {activeTab === 'list' ? (
         /* Campaigns List View */
         <div className="space-y-4">
           {campaigns.length === 0 ? (
-            <Card className="p-12 text-center space-y-3">
-              <Send className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">No Campaigns Yet</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                Create your first Spintax-powered WhatsApp outreach campaign with randomized jitter delays.
-              </p>
-              <Button
-                onClick={() => setActiveTab('builder')}
-                className="mt-2 font-bold cursor-pointer"
-              >
-                {t('campaigns.createCampaign')}
-              </Button>
+            <Card className="p-8 text-center">
+              <EmptyState
+                icon={Send}
+                title="No Campaigns Yet"
+                description="Create your first Spintax-powered WhatsApp outreach campaign with randomized jitter delays."
+                action={{
+                  label: t('campaigns.createCampaign'),
+                  onClick: () => setActiveTab('builder'),
+                  icon: Sparkles,
+                }}
+              />
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-4">

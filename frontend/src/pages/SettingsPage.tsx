@@ -11,8 +11,7 @@ import {
   Languages,
   ChevronDown
 } from 'lucide-react';
-import { Card } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
+import { Card, Badge, PageHeader } from '../components/ui';
 import { useTheme } from '../context/ThemeContext';
 import { useI18n } from '../context/I18nContext';
 
@@ -23,15 +22,11 @@ export const SettingsPage: React.FC = () => {
   return (
     <div className="space-y-6 pb-16 max-w-4xl select-none animate-fade-in">
       {/* Page Header */}
-      <div>
-        <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
-          <Settings className="w-5 h-5 text-[#7367F0]" />
-          {t('settings.title')}
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-          {t('settings.subtitle')}
-        </p>
-      </div>
+      <PageHeader
+        title={t('settings.title')}
+        subtitle={t('settings.subtitle')}
+        icon={Settings}
+      />
 
       {/* Language & Localization Card */}
       <Card className="p-4 sm:p-6 space-y-4">

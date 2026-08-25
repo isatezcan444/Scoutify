@@ -7,14 +7,12 @@ import {
   TrendingUp, 
   ArrowUpRight,
   Search,
-  Sparkles,
   ShieldCheck,
-  Clock
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { DashboardStats } from '../types';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
-import { Card, CardContent } from '../components/ui/card';
+import { Button, Badge, Card, HeroBanner, StatsCard } from '../components/ui';
 import { useI18n } from '../context/I18nContext';
 
 interface DashboardPageProps {
@@ -28,7 +26,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
   if (!stats) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#7367F0]"></div>
+        <Loader2 className="w-10 h-10 animate-spin text-[#7367F0]" />
       </div>
     );
   }
@@ -36,19 +34,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 select-none animate-fade-in">
       {/* Vuexy Hero Welcome Card */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-[#7367F0] to-[#9E95F5] text-white p-4 sm:p-7 shadow-md">
-        <div className="relative z-10 max-w-2xl">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-md bg-white/20 text-white text-xs font-bold mb-3 backdrop-blur-md">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{t('dashboard.heroBadge')}</span>
-          </div>
-          <h2 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white tracking-tight">
-            {t('dashboard.heroTitle')}
-          </h2>
-          <p className="mt-2 text-xs md:text-sm text-white/90 leading-relaxed font-medium">
-            {t('dashboard.heroSubtitle')}
-          </p>
-          <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
+      <HeroBanner
+        badgeText={t('dashboard.heroBadge')}
+        title={t('dashboard.heroTitle')}
+        subtitle={t('dashboard.heroSubtitle')}
+        actions={
+          <>
             <Button
               onClick={() => onNavigate('lead-finder')}
               className="bg-white text-[#7367F0] hover:bg-white/95 font-bold shadow-md space-x-2 w-full sm:w-auto justify-center cursor-pointer"
@@ -64,113 +55,62 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <Send className="w-4 h-4" />
               <span>{t('dashboard.quickStartCampaign')}</span>
             </Button>
-          </div>
-        </div>
-
-        {/* Decorative Circles */}
-        <div className="absolute right-0 top-0 bottom-0 w-80 bg-white/10 rounded-full blur-3xl pointer-events-none transform translate-x-1/3" />
-      </div>
+          </>
+        }
+      />
 
       {/* Vuexy 4-Column Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        {/* Card 1: Total Leads */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  {t('dashboard.totalLeads')}
-                </span>
-                <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
-                  {stats.total_leads}
-                </div>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-[#7367F0]/15 text-[#7367F0] flex items-center justify-center font-bold">
-                <Users className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center space-x-1.5 text-xs">
-              <Badge variant="success" className="text-[10px]">
-                {stats.whatsapp_eligible_leads} {t('dashboard.whatsappEligible')}
-              </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">CRM</span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title={t('dashboard.totalLeads')}
+          value={stats.total_leads}
+          icon={Users}
+          iconVariant="primary"
+          badge={{
+            text: `${stats.whatsapp_eligible_leads} ${t('dashboard.whatsappEligible')}`,
+            variant: 'success',
+          }}
+          subText="CRM"
+          onClick={() => onNavigate('leads')}
+        />
 
-        {/* Card 2: Messages Sent */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  {t('dashboard.contactedLeads')}
-                </span>
-                <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
-                  {stats.total_messages_sent}
-                </div>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-[#00CFE8]/15 text-[#00CFE8] flex items-center justify-center font-bold">
-                <Send className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center space-x-1.5 text-xs">
-              <Badge variant="info" className="text-[10px]">
-                +{stats.messages_sent_today} {t('dashboard.today')}
-              </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">{t('dashboard.queue')}</span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title={t('dashboard.contactedLeads')}
+          value={stats.total_messages_sent}
+          icon={Send}
+          iconVariant="info"
+          badge={{
+            text: `+${stats.messages_sent_today} ${t('dashboard.today')}`,
+            variant: 'info',
+          }}
+          subText={t('dashboard.queue')}
+          onClick={() => onNavigate('campaigns')}
+        />
 
-        {/* Card 3: Response Rate */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  {t('dashboard.responseRate')}
-                </span>
-                <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
-                  %{stats.response_rate_percentage}
-                </div>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
-                <MessageSquareReply className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center space-x-1.5 text-xs">
-              <Badge variant="success" className="text-[10px]">
-                {stats.replied_leads} {t('dashboard.repliedLeads')}
-              </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">{t('dashboard.inbound')}</span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title={t('dashboard.responseRate')}
+          value={`%${stats.response_rate_percentage}`}
+          icon={MessageSquareReply}
+          iconVariant="success"
+          badge={{
+            text: `${stats.replied_leads} ${t('dashboard.repliedLeads')}`,
+            variant: 'success',
+          }}
+          subText={t('dashboard.inbound')}
+        />
 
-        {/* Card 4: Connected WhatsApp Lines */}
-        <Card className="hover:shadow-md transition-shadow">
-          <CardContent className="p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  {t('dashboard.connectedSessions')}
-                </span>
-                <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
-                  {stats.connected_sessions}
-                </div>
-              </div>
-              <div className="w-11 h-11 rounded-xl bg-[#FF9F43]/15 text-[#FF9F43] flex items-center justify-center font-bold">
-                <Smartphone className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-3 flex items-center space-x-1.5 text-xs">
-              <span className="w-2 h-2 rounded-full bg-[#28C76F] live-dot" />
-              <span className="text-[#28C76F] font-bold">{t('dashboard.online')}</span>
-              <span className="text-slate-400 dark:text-[#7E7F96]">({stats.active_campaigns} {t('dashboard.activeCampaigns')})</span>
-            </div>
-          </CardContent>
-        </Card>
+        <StatsCard
+          title={t('dashboard.connectedSessions')}
+          value={stats.connected_sessions}
+          icon={Smartphone}
+          iconVariant="warning"
+          badge={{
+            text: t('dashboard.online'),
+            variant: 'success',
+          }}
+          subText={`(${stats.active_campaigns} ${t('dashboard.activeCampaigns')})`}
+          onClick={() => onNavigate('whatsapp')}
+        />
       </div>
 
       {/* Vuexy Outreach Funnel & Activity Stream */}
