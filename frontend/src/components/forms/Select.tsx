@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { ChevronDown, LucideIcon } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, renderIcon } from '../../lib/utils';
 
 export interface SelectOption {
   value: string | number;
@@ -27,7 +27,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       <div className="relative flex items-center w-full">
         {LeftIcon && (
           <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center justify-center">
-            {typeof LeftIcon === 'function' ? <LeftIcon className="w-4 h-4" /> : LeftIcon}
+            {renderIcon(LeftIcon, 'w-4 h-4')}
           </div>
         )}
 

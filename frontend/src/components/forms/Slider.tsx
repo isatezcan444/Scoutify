@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { LucideIcon } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, renderIcon } from '../../lib/utils';
 
 export interface SliderProps {
   value: number;
@@ -41,7 +41,7 @@ export const Slider: React.FC<SliderProps> = ({
       <div className="flex items-center justify-between">
         {label && (
           <label className="text-xs font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 select-none">
-            {Icon && (typeof Icon === 'function' ? <Icon className="w-3.5 h-3.5 text-[#7367F0]" /> : Icon)}
+            {Icon && renderIcon(Icon, 'w-3.5 h-3.5 text-[#7367F0]')}
             <span>{label}</span>
           </label>
         )}

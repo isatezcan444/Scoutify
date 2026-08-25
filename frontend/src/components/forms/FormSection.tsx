@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { LucideIcon } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, renderIcon } from '../../lib/utils';
 
 export interface FormSectionProps {
   title: React.ReactNode;
@@ -25,7 +25,7 @@ export const FormSection: React.FC<FormSectionProps> = ({
         <div className="flex items-center space-x-2.5">
           {Icon && (
             <div className="w-8 h-8 rounded-lg bg-[#7367F0]/15 text-[#7367F0] flex items-center justify-center shrink-0">
-              {typeof Icon === 'function' ? <Icon className="w-4 h-4" /> : Icon}
+              {renderIcon(Icon, 'w-4 h-4')}
             </div>
           )}
           <div>

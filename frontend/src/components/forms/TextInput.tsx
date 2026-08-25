@@ -1,6 +1,6 @@
 import * as React from 'react';
 import { LucideIcon, X } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, renderIcon } from '../../lib/utils';
 
 export interface TextInputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   leftIcon?: LucideIcon | React.ReactNode;
@@ -17,7 +17,7 @@ export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
       <div className="relative flex items-center w-full">
         {LeftIcon && (
           <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center justify-center">
-            {typeof LeftIcon === 'function' ? <LeftIcon className="w-4 h-4" /> : LeftIcon}
+            {renderIcon(LeftIcon, 'w-4 h-4')}
           </div>
         )}
 
@@ -44,7 +44,7 @@ export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
           </button>
         ) : RightIcon ? (
           <div className="absolute right-3 text-slate-400 pointer-events-none flex items-center justify-center">
-            {typeof RightIcon === 'function' ? <RightIcon className="w-4 h-4" /> : RightIcon}
+            {renderIcon(RightIcon, 'w-4 h-4')}
           </div>
         ) : null}
       </div>
