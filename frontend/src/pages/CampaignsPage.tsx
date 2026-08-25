@@ -36,12 +36,12 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
   const [template, setTemplate] = useState(
     "{Merhaba|Selamlar|İyi günler} {name} Yetkilisi,\n\n{city} {district} bölgesindeki {category} profilinizi inceledik. Google'daki {rating} yıldızlı puanınız çok başarılı! 🌟\n\nKlinikler için geliştirdiğimiz otomatik WhatsApp randevu ve hatırlatma sistemimizle hasta kaçırma oranını %40 azaltıyoruz. Size 2 dakikalık kısa bir demo sunabilir miyiz?\n\n{İyi çalışmalar dileriz|Saygılarımızla}."
   );
-  const [minDelay, setMinDelay] = useState(storedConfig.minDelaySeconds);
-  const [maxDelay, setMaxDelay] = useState(storedConfig.maxDelaySeconds);
-  const [typingDelay, setTypingDelay] = useState(storedConfig.typingDelaySeconds);
-  const [workingHoursEnabled, setWorkingHoursEnabled] = useState(storedConfig.workingHoursEnabled);
-  const [workingHoursStart, setWorkingHoursStart] = useState(storedConfig.workingHoursStart);
-  const [workingHoursEnd, setWorkingHoursEnd] = useState(storedConfig.workingHoursEnd);
+  const [minDelay, setMinDelay] = useState(storedConfig.min_delay_seconds);
+  const [maxDelay, setMaxDelay] = useState(storedConfig.max_delay_seconds);
+  const [typingDelay, setTypingDelay] = useState(storedConfig.typing_delay_seconds);
+  const [workingHoursEnabled, setWorkingHoursEnabled] = useState(storedConfig.working_hours_enabled);
+  const [workingHoursStart, setWorkingHoursStart] = useState(storedConfig.working_hours_start);
+  const [workingHoursEnd, setWorkingHoursEnd] = useState(storedConfig.working_hours_end);
 
   // Spintax Preview State
   const [permutationsCount, setPermutationsCount] = useState(1);
@@ -361,12 +361,12 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
                       type="button"
                       onClick={() => {
                         const p = ANTI_BAN_PRESETS.ultra_safe;
-                        setMinDelay(p.minDelaySeconds);
-                        setMaxDelay(p.maxDelaySeconds);
-                        setTypingDelay(p.typingDelaySeconds);
-                        setWorkingHoursEnabled(p.workingHoursEnabled);
-                        setWorkingHoursStart(p.workingHoursStart);
-                        setWorkingHoursEnd(p.workingHoursEnd);
+                        setMinDelay(p.min_delay_seconds);
+                        setMaxDelay(p.max_delay_seconds);
+                        setTypingDelay(p.typing_delay_seconds);
+                        setWorkingHoursEnabled(p.working_hours_enabled);
+                        setWorkingHoursStart(p.working_hours_start);
+                        setWorkingHoursEnd(p.working_hours_end);
                       }}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#28C76F]/10 text-[#28C76F] border border-[#28C76F]/30 hover:bg-[#28C76F]/20"
                     >
@@ -376,12 +376,12 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
                       type="button"
                       onClick={() => {
                         const p = ANTI_BAN_PRESETS.standard_balanced;
-                        setMinDelay(p.minDelaySeconds);
-                        setMaxDelay(p.maxDelaySeconds);
-                        setTypingDelay(p.typingDelaySeconds);
-                        setWorkingHoursEnabled(p.workingHoursEnabled);
-                        setWorkingHoursStart(p.workingHoursStart);
-                        setWorkingHoursEnd(p.workingHoursEnd);
+                        setMinDelay(p.min_delay_seconds);
+                        setMaxDelay(p.max_delay_seconds);
+                        setTypingDelay(p.typing_delay_seconds);
+                        setWorkingHoursEnabled(p.working_hours_enabled);
+                        setWorkingHoursStart(p.working_hours_start);
+                        setWorkingHoursEnd(p.working_hours_end);
                       }}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#7367F0]/10 text-[#7367F0] border border-[#7367F0]/30 hover:bg-[#7367F0]/20"
                     >
@@ -391,12 +391,12 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats }) 
                       type="button"
                       onClick={() => {
                         const p = ANTI_BAN_PRESETS.fast_warmed;
-                        setMinDelay(p.minDelaySeconds);
-                        setMaxDelay(p.maxDelaySeconds);
-                        setTypingDelay(p.typingDelaySeconds);
-                        setWorkingHoursEnabled(p.workingHoursEnabled);
-                        setWorkingHoursStart(p.workingHoursStart);
-                        setWorkingHoursEnd(p.workingHoursEnd);
+                        setMinDelay(p.min_delay_seconds);
+                        setMaxDelay(p.max_delay_seconds);
+                        setTypingDelay(p.typing_delay_seconds);
+                        setWorkingHoursEnabled(p.working_hours_enabled);
+                        setWorkingHoursStart(p.working_hours_start);
+                        setWorkingHoursEnd(p.working_hours_end);
                       }}
                       className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#FF9F43]/10 text-[#FF9F43] border border-[#FF9F43]/30 hover:bg-[#FF9F43]/20"
                     >

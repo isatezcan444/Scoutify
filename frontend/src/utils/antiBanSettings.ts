@@ -1,44 +1,36 @@
-export interface AntiBanConfig {
-  preset: 'ultra_safe' | 'standard_balanced' | 'fast_warmed' | 'custom';
-  minDelaySeconds: number;
-  maxDelaySeconds: number;
-  typingDelaySeconds: number;
-  dailyMessageLimit: number;
-  workingHoursEnabled: boolean;
-  workingHoursStart: string;
-  workingHoursEnd: string;
-}
+import { AntiBanConfig } from '../types';
+export type { AntiBanConfig };
 
-export const ANTI_BAN_PRESETS: Record<'ultra_safe' | 'standard_balanced' | 'fast_warmed', Omit<AntiBanConfig, 'preset'>> = {
+export const ANTI_BAN_PRESETS: Record<'ultra_safe' | 'standard_balanced' | 'fast_warmed', Omit<AntiBanConfig, 'preset' | 'updated_at'>> = {
   // Ultra Safe: For newly registered WhatsApp accounts (< 1 month)
   ultra_safe: {
-    minDelaySeconds: 60,
-    maxDelaySeconds: 150,
-    typingDelaySeconds: 5,
-    dailyMessageLimit: 35,
-    workingHoursEnabled: true,
-    workingHoursStart: '09:00',
-    workingHoursEnd: '18:00',
+    min_delay_seconds: 60,
+    max_delay_seconds: 150,
+    typing_delay_seconds: 5,
+    daily_message_limit: 35,
+    working_hours_enabled: true,
+    working_hours_start: '09:00',
+    working_hours_end: '18:00',
   },
   // Standard Balanced (Recommended Default): Zero-ban algorithm compliance with corporate working hours
   standard_balanced: {
-    minDelaySeconds: 45,
-    maxDelaySeconds: 120,
-    typingDelaySeconds: 4,
-    dailyMessageLimit: 50,
-    workingHoursEnabled: true,
-    workingHoursStart: '09:00',
-    workingHoursEnd: '18:30',
+    min_delay_seconds: 45,
+    max_delay_seconds: 120,
+    typing_delay_seconds: 4,
+    daily_message_limit: 50,
+    working_hours_enabled: true,
+    working_hours_start: '09:00',
+    working_hours_end: '18:30',
   },
   // Fast: Only for heavily warmed-up and established WhatsApp Business numbers (> 6 months)
   fast_warmed: {
-    minDelaySeconds: 20,
-    maxDelaySeconds: 60,
-    typingDelaySeconds: 2,
-    dailyMessageLimit: 100,
-    workingHoursEnabled: true,
-    workingHoursStart: '08:30',
-    workingHoursEnd: '19:00',
+    min_delay_seconds: 20,
+    max_delay_seconds: 60,
+    typing_delay_seconds: 2,
+    daily_message_limit: 100,
+    working_hours_enabled: true,
+    working_hours_start: '08:30',
+    working_hours_end: '19:00',
   }
 };
 
@@ -49,18 +41,23 @@ export const DEFAULT_ANTI_BAN_CONFIG: AntiBanConfig = {
   ...ANTI_BAN_PRESETS.standard_balanced
 };
 
+/**
+ * Loads Anti-Ban configuration from localStorage cache with backward-compatible key normalization.
+ */
 export const getStoredAntiBanConfig = (): AntiBanConfig => {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { 
-        ...DEFAULT_ANTI_BAN_CONFIG, 
-        ...parsed,
-        // Guarantee workingHoursEnabled is active with valid corporate defaults
-        workingHoursEnabled: parsed.workingHoursEnabled !== undefined ? parsed.workingHoursEnabled : true,
-        workingHoursStart: parsed.workingHoursStart || '09:00',
-        workingHoursEnd: parsed.workingHoursEnd || '18:30',
+      return {
+        preset: parsed.preset || DEFAULT_ANTI_BAN_CONFIG.preset,
+        min_delay_seconds: parsed.min_delay_seconds ?? parsed.minDelaySeconds ?? DEFAULT_ANTI_BAN_CONFIG.min_delay_seconds,
+        max_delay_seconds: parsed.max_delay_seconds ?? parsed.maxDelaySeconds ?? DEFAULT_ANTI_BAN_CONFIG.max_delay_seconds,
+        typing_delay_seconds: parsed.typing_delay_seconds ?? parsed.typingDelaySeconds ?? DEFAULT_ANTI_BAN_CONFIG.typing_delay_seconds,
+        daily_message_limit: parsed.daily_message_limit ?? parsed.dailyMessageLimit ?? DEFAULT_ANTI_BAN_CONFIG.daily_message_limit,
+        working_hours_enabled: parsed.working_hours_enabled ?? parsed.workingHoursEnabled ?? DEFAULT_ANTI_BAN_CONFIG.working_hours_enabled,
+        working_hours_start: parsed.working_hours_start || parsed.workingHoursStart || DEFAULT_ANTI_BAN_CONFIG.working_hours_start,
+        working_hours_end: parsed.working_hours_end || parsed.workingHoursEnd || DEFAULT_ANTI_BAN_CONFIG.working_hours_end,
       };
     }
   } catch (e) {
@@ -69,6 +66,9 @@ export const getStoredAntiBanConfig = (): AntiBanConfig => {
   return DEFAULT_ANTI_BAN_CONFIG;
 };
 
+/**
+ * Saves Anti-Ban configuration to local cache.
+ */
 export const saveAntiBanConfig = (config: AntiBanConfig): void => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
@@ -77,7 +77,23 @@ export const saveAntiBanConfig = (config: AntiBanConfig): void => {
   }
 };
 
-export const calculateRiskLevel = (minDelay: number, dailyLimit: number): {
+/**
+ * Compares two AntiBanConfig instances to check if there are actual configuration changes.
+ */
+export const isConfigEqual = (a: AntiBanConfig, b: AntiBanConfig): boolean => {
+  return (
+    a.preset === b.preset &&
+    a.min_delay_seconds === b.min_delay_seconds &&
+    a.max_delay_seconds === b.max_delay_seconds &&
+    a.typing_delay_seconds === b.typing_delay_seconds &&
+    a.daily_message_limit === b.daily_message_limit &&
+    Boolean(a.working_hours_enabled) === Boolean(b.working_hours_enabled) &&
+    a.working_hours_start === b.working_hours_start &&
+    a.working_hours_end === b.working_hours_end
+  );
+};
+
+export interface RiskEvaluation {
   score: number;
   level: 'safe' | 'moderate' | 'high';
   title: string;
@@ -85,7 +101,12 @@ export const calculateRiskLevel = (minDelay: number, dailyLimit: number): {
   color: string;
   badgeBg: string;
   badgeText: string;
-} => {
+}
+
+/**
+ * Evaluates real-time risk index (0 to 100) based on jitter timing and volume limits.
+ */
+export const calculateRiskLevel = (minDelay: number, dailyLimit: number): RiskEvaluation => {
   // Score: 0 (Ultra Safe) to 100 (Maximum Risk)
   const delayRisk = Math.max(0, Math.min(100, ((60 - minDelay) / 50) * 100));
   const limitRisk = Math.max(0, Math.min(100, ((dailyLimit - 30) / 120) * 100));

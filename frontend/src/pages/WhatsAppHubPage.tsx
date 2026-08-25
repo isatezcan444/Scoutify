@@ -20,7 +20,9 @@ import {
   AlertTriangle,
   Shield,
   Building2,
-  Sparkles
+  Sparkles,
+  Save,
+  Undo2
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { WhatsAppSession, MessageLog } from '../types';
@@ -33,7 +35,8 @@ import {
   ANTI_BAN_PRESETS, 
   getStoredAntiBanConfig, 
   saveAntiBanConfig, 
-  calculateRiskLevel 
+  calculateRiskLevel,
+  isConfigEqual
 } from '../utils/antiBanSettings';
 import { useToast } from '../context/ToastContext';
 
@@ -47,8 +50,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Anti-Ban Timing State
+  // Anti-Ban Timing & Change-Tracking State
+  const [savedConfig, setSavedConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
   const [config, setConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
+  const [isSavingAntiBan, setIsSavingAntiBan] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
   // New Line / QR Pairing Modal
@@ -82,89 +87,105 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   useEffect(() => {
     fetchSessionsAndLogs();
-    // Load backend Anti-Ban settings
+    // Load persisted Anti-Ban configuration from backend database
     ApiClient.getAntiBanSettings()
       .then((remote) => {
         if (remote) {
-          const loaded: AntiBanConfig = {
-            preset: (remote.preset as any) || 'standard_balanced',
-            minDelaySeconds: remote.min_delay_seconds,
-            maxDelaySeconds: remote.max_delay_seconds,
-            typingDelaySeconds: remote.typing_delay_seconds,
-            dailyMessageLimit: remote.daily_message_limit,
-            workingHoursEnabled: remote.working_hours_enabled,
-            workingHoursStart: remote.working_hours_start,
-            workingHoursEnd: remote.working_hours_end,
-          };
-          setConfig(loaded);
-          saveAntiBanConfig(loaded);
+          setConfig(remote);
+          setSavedConfig(remote);
+          saveAntiBanConfig(remote);
         }
       })
-      .catch(() => {
-        // Fallback to local storage
+      .catch((e) => {
+        console.warn('Anti-ban ayarları backendden alınamadı, yerel önbellek devrede:', e);
       });
   }, []);
 
   const handlePresetSelect = (presetKey: 'ultra_safe' | 'standard_balanced' | 'fast_warmed') => {
     const presetData = ANTI_BAN_PRESETS[presetKey];
-    setConfig({
-      preset: presetKey,
-      ...presetData
-    });
-  };
-
-  const handleCustomChange = (field: keyof AntiBanConfig, value: any) => {
     setConfig((prev) => ({
       ...prev,
-      preset: 'custom',
-      [field]: value
+      preset: presetKey,
+      ...presetData
     }));
   };
 
+  const handleCustomChange = (field: keyof AntiBanConfig, value: any) => {
+    setConfig((prev) => {
+      const updated = {
+        ...prev,
+        preset: 'custom',
+        [field]: value
+      };
+      // Check if updated parameters match an established preset
+      for (const [key, presetObj] of Object.entries(ANTI_BAN_PRESETS)) {
+        if (
+          updated.min_delay_seconds === presetObj.min_delay_seconds &&
+          updated.max_delay_seconds === presetObj.max_delay_seconds &&
+          updated.typing_delay_seconds === presetObj.typing_delay_seconds &&
+          updated.daily_message_limit === presetObj.daily_message_limit &&
+          Boolean(updated.working_hours_enabled) === Boolean(presetObj.working_hours_enabled) &&
+          updated.working_hours_start === presetObj.working_hours_start &&
+          updated.working_hours_end === presetObj.working_hours_end
+        ) {
+          updated.preset = key;
+          break;
+        }
+      }
+      return updated;
+    });
+  };
+
   const handleSaveAntiBan = async () => {
+    setIsSavingAntiBan(true);
     try {
-      saveAntiBanConfig(config);
-      await ApiClient.updateAntiBanSettings({
-        preset: config.preset,
-        min_delay_seconds: config.minDelaySeconds,
-        max_delay_seconds: config.maxDelaySeconds,
-        typing_delay_seconds: config.typingDelaySeconds,
-        daily_message_limit: config.dailyMessageLimit,
-        working_hours_enabled: config.workingHoursEnabled,
-        working_hours_start: config.workingHoursStart,
-        working_hours_end: config.workingHoursEnd
-      });
+      const updated = await ApiClient.updateAntiBanSettings(config);
+      setSavedConfig(updated);
+      setConfig(updated);
+      saveAntiBanConfig(updated);
       setSaveSuccess(true);
-      toast.success('Anti-Ban ve gecikme parametreleri backend sunucusuna kalıcı olarak kaydedildi.', 'Yapılandırma Güncellendi');
+      toast.success('Anti-Ban ve gecikme parametreleri veritabanına kalıcı olarak kaydedildi.', 'Yapılandırma Kaydedildi');
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
-      toast.error(err.message, 'Ayar Kaydetme Hatası');
+      toast.error(err.message || 'Ayar kaydetme işlemi başarısız oldu', 'Kaydetme Hatası');
+    } finally {
+      setIsSavingAntiBan(false);
     }
+  };
+
+  const handleRevertChanges = () => {
+    setConfig(savedConfig);
+    toast.info('Değişiklikler geri alındı ve kayıtlı ayarlara dönüldü.', 'Geri Alındı');
   };
 
   const handleResetDefaults = async () => {
+    const confirmed = await toast.confirm({
+      title: 'Güvenli Varsayılanlara Dön?',
+      message: 'Tüm özel gecikme ve mesai saati ayarları önerilen altın denge (Dengeli Standart) değerlerine sıfırlanacak ve veritabanına kaydedilecektir.',
+      confirmText: 'Sıfırla ve Kaydet',
+      cancelText: 'Vazgeç',
+      variant: 'warning'
+    });
+    if (!confirmed) return;
+
+    setIsSavingAntiBan(true);
     try {
-      setConfig(DEFAULT_ANTI_BAN_CONFIG);
-      saveAntiBanConfig(DEFAULT_ANTI_BAN_CONFIG);
-      await ApiClient.updateAntiBanSettings({
-        preset: DEFAULT_ANTI_BAN_CONFIG.preset,
-        min_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.minDelaySeconds,
-        max_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.maxDelaySeconds,
-        typing_delay_seconds: DEFAULT_ANTI_BAN_CONFIG.typingDelaySeconds,
-        daily_message_limit: DEFAULT_ANTI_BAN_CONFIG.dailyMessageLimit,
-        working_hours_enabled: DEFAULT_ANTI_BAN_CONFIG.workingHoursEnabled,
-        working_hours_start: DEFAULT_ANTI_BAN_CONFIG.workingHoursStart,
-        working_hours_end: DEFAULT_ANTI_BAN_CONFIG.workingHoursEnd
-      });
+      const updated = await ApiClient.updateAntiBanSettings(DEFAULT_ANTI_BAN_CONFIG);
+      setSavedConfig(updated);
+      setConfig(updated);
+      saveAntiBanConfig(updated);
       setSaveSuccess(true);
-      toast.success('Ayarlar varsayılan güvenli değerlere döndürüldü.', 'Sıfırlandı');
+      toast.success('Anti-Ban parametreleri varsayılan altın denge değerlerine sıfırlandı ve kaydedildi.', 'Varsayılanlara Sıfırlandı');
       setTimeout(() => setSaveSuccess(false), 3500);
     } catch (err: any) {
-      toast.error(err.message, 'Sıfırlama Hatası');
+      toast.error(err.message || 'Varsayılana dönme hatası', 'Hata');
+    } finally {
+      setIsSavingAntiBan(false);
     }
   };
 
-  const riskInfo = calculateRiskLevel(config.minDelaySeconds, config.dailyMessageLimit);
+  const hasUnsavedChanges = !isConfigEqual(config, savedConfig);
+  const riskInfo = calculateRiskLevel(config.min_delay_seconds, config.daily_message_limit);
 
   const handleCreateSession = async () => {
     if (!newSessionName) return;
@@ -385,16 +406,39 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
-                WhatsApp Anti-Ban Yapılandırması
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  WhatsApp Anti-Ban Yapılandırması
+                </h3>
+                {hasUnsavedChanges ? (
+                  <Badge variant="warning" className="text-[10px] animate-pulse">
+                    ⚠️ Kaydedilmemiş Değişiklikler
+                  </Badge>
+                ) : (
+                  <Badge variant="success" className="text-[10px]">
+                    ✅ Veritabanı ile Senkronize
+                  </Badge>
+                )}
+              </div>
               <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium">
-                Mesajlar arası bekleme süreleri (Jitter), insan taklidi ve kurumsal mesai saatleri koruması
+                Mesajlar arası bekleme süreleri (Gaussian Jitter), insan taklidi ve kurumsal mesai saatleri koruması
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-2">
+            {hasUnsavedChanges && (
+              <button
+                type="button"
+                onClick={handleRevertChanges}
+                className="text-xs font-bold text-slate-500 hover:text-[#7367F0] dark:text-[#7E7F96] dark:hover:text-white flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.08] hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-all cursor-pointer"
+                title="Yaptığınız değişiklikleri geri alıp kayıtlı ayarlara dönün"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                <span>Değişiklikleri Geri Al</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleResetDefaults}
@@ -499,7 +543,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 Minimum Bekleme Süresi
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.minDelaySeconds} saniye
+                {config.min_delay_seconds} saniye
               </span>
             </div>
             <input
@@ -507,12 +551,12 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               min={10}
               max={120}
               step={5}
-              value={config.minDelaySeconds}
+              value={config.min_delay_seconds}
               onChange={(e) => {
                 const val = Number(e.target.value);
-                handleCustomChange('minDelaySeconds', val);
-                if (val >= config.maxDelaySeconds) {
-                  handleCustomChange('maxDelaySeconds', val + 15);
+                handleCustomChange('min_delay_seconds', val);
+                if (val >= config.max_delay_seconds) {
+                  handleCustomChange('max_delay_seconds', val + 15);
                 }
               }}
               className="w-full accent-[#7367F0] cursor-pointer"
@@ -530,16 +574,16 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 Maksimum Bekleme Süresi
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.maxDelaySeconds} saniye
+                {config.max_delay_seconds} saniye
               </span>
             </div>
             <input
               type="range"
-              min={config.minDelaySeconds + 5}
+              min={config.min_delay_seconds + 5}
               max={240}
               step={5}
-              value={config.maxDelaySeconds}
-              onChange={(e) => handleCustomChange('maxDelaySeconds', Number(e.target.value))}
+              value={config.max_delay_seconds}
+              onChange={(e) => handleCustomChange('max_delay_seconds', Number(e.target.value))}
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
@@ -555,7 +599,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 "Yazıyor..." İnsan Taklidi Süresi
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.typingDelaySeconds} saniye
+                {config.typing_delay_seconds} saniye
               </span>
             </div>
             <input
@@ -563,8 +607,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               min={1}
               max={15}
               step={1}
-              value={config.typingDelaySeconds}
-              onChange={(e) => handleCustomChange('typingDelaySeconds', Number(e.target.value))}
+              value={config.typing_delay_seconds}
+              onChange={(e) => handleCustomChange('typing_delay_seconds', Number(e.target.value))}
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
@@ -580,7 +624,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                 Hat Başına Günlük Mesaj Limiti
               </label>
               <span className="text-xs font-extrabold font-mono text-[#7367F0] bg-[#7367F0]/10 px-2.5 py-0.5 rounded-lg border border-[#7367F0]/20">
-                {config.dailyMessageLimit} mesaj / gün
+                {config.daily_message_limit} mesaj / gün
               </span>
             </div>
             <input
@@ -588,8 +632,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               min={10}
               max={250}
               step={5}
-              value={config.dailyMessageLimit}
-              onChange={(e) => handleCustomChange('dailyMessageLimit', Number(e.target.value))}
+              value={config.daily_message_limit}
+              onChange={(e) => handleCustomChange('daily_message_limit', Number(e.target.value))}
               className="w-full accent-[#7367F0] cursor-pointer"
             />
             <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
@@ -618,26 +662,26 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               <label className="relative inline-flex items-center cursor-pointer">
                 <input
                   type="checkbox"
-                  checked={config.workingHoursEnabled !== false}
-                  onChange={(e) => handleCustomChange('workingHoursEnabled', e.target.checked)}
+                  checked={config.working_hours_enabled !== false}
+                  onChange={(e) => handleCustomChange('working_hours_enabled', e.target.checked)}
                   className="sr-only peer"
                 />
                 <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#7367F0]"></div>
               </label>
             </div>
 
-            {config.workingHoursEnabled !== false && (
+            {config.working_hours_enabled !== false && (
               <div className="space-y-2.5 pt-1 animate-fade-in">
                 {/* Quick Corporate Time Presets */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <button
                     type="button"
                     onClick={() => {
-                      handleCustomChange('workingHoursStart', '09:00');
-                      handleCustomChange('workingHoursEnd', '18:00');
+                      handleCustomChange('working_hours_start', '09:00');
+                      handleCustomChange('working_hours_end', '18:00');
                     }}
                     className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                      config.workingHoursStart === '09:00' && config.workingHoursEnd === '18:00'
+                      config.working_hours_start === '09:00' && config.working_hours_end === '18:00'
                         ? 'bg-[#7367F0]/15 text-[#7367F0] border-[#7367F0]/40'
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
@@ -648,11 +692,11 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   <button
                     type="button"
                     onClick={() => {
-                      handleCustomChange('workingHoursStart', '09:00');
-                      handleCustomChange('workingHoursEnd', '18:30');
+                      handleCustomChange('working_hours_start', '09:00');
+                      handleCustomChange('working_hours_end', '18:30');
                     }}
                     className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                      config.workingHoursStart === '09:00' && config.workingHoursEnd === '18:30'
+                      config.working_hours_start === '09:00' && config.working_hours_end === '18:30'
                         ? 'bg-[#7367F0]/15 text-[#7367F0] border-[#7367F0]/40'
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
@@ -663,11 +707,11 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   <button
                     type="button"
                     onClick={() => {
-                      handleCustomChange('workingHoursStart', '09:00');
-                      handleCustomChange('workingHoursEnd', '20:00');
+                      handleCustomChange('working_hours_start', '09:00');
+                      handleCustomChange('working_hours_end', '20:00');
                     }}
                     className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
-                      config.workingHoursStart === '09:00' && config.workingHoursEnd === '20:00'
+                      config.working_hours_start === '09:00' && config.working_hours_end === '20:00'
                         ? 'bg-[#7367F0]/15 text-[#7367F0] border-[#7367F0]/40'
                         : 'bg-white dark:bg-white/[0.04] text-slate-500 border-slate-200 dark:border-white/[0.08] hover:bg-slate-100'
                     }`}
@@ -684,8 +728,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                     </label>
                     <input
                       type="time"
-                      value={config.workingHoursStart || '09:00'}
-                      onChange={(e) => handleCustomChange('workingHoursStart', e.target.value)}
+                      value={config.working_hours_start || '09:00'}
+                      onChange={(e) => handleCustomChange('working_hours_start', e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded-lg vuexy-input text-xs font-mono font-bold"
                     />
                   </div>
@@ -695,8 +739,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                     </label>
                     <input
                       type="time"
-                      value={config.workingHoursEnd || '18:30'}
-                      onChange={(e) => handleCustomChange('workingHoursEnd', e.target.value)}
+                      value={config.working_hours_end || '18:30'}
+                      onChange={(e) => handleCustomChange('working_hours_end', e.target.value)}
                       className="w-full px-2.5 py-1.5 rounded-lg vuexy-input text-xs font-mono font-bold"
                     />
                   </div>
@@ -759,24 +803,62 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
           </div>
         </div>
 
-        {/* Save Actions */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          <div>
-            {saveSuccess && (
+        {/* Save Actions & State Feedback */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-white/[0.05]">
+          <div className="flex items-center gap-2">
+            {saveSuccess ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#28C76F] bg-[#28C76F]/15 px-3 py-1.5 rounded-lg border border-[#28C76F]/30 animate-fade-in">
                 <Check className="w-3.5 h-3.5" />
-                <span>Anti-Ban ayarları başarıyla kaydedildi ve uygulandı!</span>
+                <span>Anti-Ban ayarları veritabanına başarıyla kaydedildi!</span>
+              </span>
+            ) : hasUnsavedChanges ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF9F43] bg-[#FF9F43]/15 px-3 py-1.5 rounded-lg border border-[#FF9F43]/30 animate-fade-in">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span>Değişikliklerin geçerli olması için kaydetmeyi unutmayın.</span>
+              </span>
+            ) : (
+              <span className="text-xs text-slate-400 dark:text-[#7E7F96]">
+                {savedConfig.updated_at
+                  ? `Son güncelleme: ${new Date(savedConfig.updated_at).toLocaleString('tr-TR')}`
+                  : 'Varsayılan altın denge yapılandırması aktif.'}
               </span>
             )}
           </div>
 
-          <Button
-            onClick={handleSaveAntiBan}
-            className="space-x-2 font-bold shadow-md shadow-[#7367F0]/30 w-full sm:w-auto justify-center cursor-pointer"
-          >
-            <Check className="w-4 h-4" />
-            <span>Ayarları Kaydet</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            {hasUnsavedChanges && (
+              <Button
+                variant="outline"
+                onClick={handleRevertChanges}
+                className="space-x-1.5 font-bold text-slate-600 dark:text-slate-300"
+              >
+                <Undo2 className="w-4 h-4" />
+                <span>Geri Al</span>
+              </Button>
+            )}
+
+            <Button
+              onClick={handleSaveAntiBan}
+              disabled={isSavingAntiBan || !hasUnsavedChanges}
+              className={`space-x-2 font-bold justify-center cursor-pointer transition-all duration-300 ${
+                hasUnsavedChanges
+                  ? 'bg-[#7367F0] hover:bg-[#5E50EE] text-white shadow-lg shadow-[#7367F0]/30 ring-2 ring-[#7367F0]/30'
+                  : 'bg-slate-200 dark:bg-white/[0.08] text-slate-400 dark:text-slate-500 cursor-not-allowed'
+              }`}
+            >
+              {isSavingAntiBan ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Kaydediliyor...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>{hasUnsavedChanges ? 'Yapılandırmayı Kaydet' : 'Ayarlar Güncel'}</span>
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </Card>
 
