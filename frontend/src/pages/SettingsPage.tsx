@@ -57,8 +57,8 @@ export const SettingsPage: React.FC = () => {
                 onChange={(e) => setLanguage(e.target.value as 'en' | 'tr')}
                 className="w-full px-3 py-2.5 pr-8 rounded-lg vuexy-input text-xs font-bold cursor-pointer appearance-none"
               >
-                <option value="en">🇺🇸 English (EN)</option>
-                <option value="tr">🇹🇷 Türkçe (TR)</option>
+                <option value="en">English (EN)</option>
+                <option value="tr">Türkçe (TR)</option>
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
