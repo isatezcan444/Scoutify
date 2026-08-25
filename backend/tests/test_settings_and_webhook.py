@@ -23,7 +23,7 @@ async def test_get_and_patch_antiban_settings():
             "typing_delay_seconds": 5,
             "daily_message_limit": 35,
             "working_hours_enabled": True,
-            "working_hours_start": "09:30",
+            "working_hours_start": "09:00",
             "working_hours_end": "18:00"
         }
         patch_res = await client.patch("/api/v1/settings/antiban", json=patch_payload)
@@ -32,6 +32,21 @@ async def test_get_and_patch_antiban_settings():
         assert updated["preset"] == "ultra_safe"
         assert updated["min_delay_seconds"] == 60
         assert updated["daily_message_limit"] == 35
+
+        # Cleanup / Restore default standard_balanced
+        restore_payload = {
+            "preset": "standard_balanced",
+            "min_delay_seconds": 45,
+            "max_delay_seconds": 120,
+            "typing_delay_seconds": 4,
+            "daily_message_limit": 50,
+            "working_hours_enabled": True,
+            "working_hours_start": "09:00",
+            "working_hours_end": "18:30"
+        }
+        restore_res = await client.patch("/api/v1/settings/antiban", json=restore_payload)
+        assert restore_res.status_code == 200
+        assert restore_res.json()["preset"] == "standard_balanced"
 
 
 @pytest.mark.asyncio

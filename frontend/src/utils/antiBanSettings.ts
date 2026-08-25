@@ -42,6 +42,27 @@ export const DEFAULT_ANTI_BAN_CONFIG: AntiBanConfig = {
 };
 
 /**
+ * Resolves the preset name ('ultra_safe', 'standard_balanced', 'fast_warmed', or 'custom')
+ * by comparing actual numerical values and working hours against known presets.
+ */
+export const resolvePresetFromConfig = (config: Partial<AntiBanConfig>): string => {
+  for (const [key, presetObj] of Object.entries(ANTI_BAN_PRESETS)) {
+    if (
+      config.min_delay_seconds === presetObj.min_delay_seconds &&
+      config.max_delay_seconds === presetObj.max_delay_seconds &&
+      config.typing_delay_seconds === presetObj.typing_delay_seconds &&
+      config.daily_message_limit === presetObj.daily_message_limit &&
+      Boolean(config.working_hours_enabled) === Boolean(presetObj.working_hours_enabled) &&
+      config.working_hours_start === presetObj.working_hours_start &&
+      config.working_hours_end === presetObj.working_hours_end
+    ) {
+      return key;
+    }
+  }
+  return config.preset || 'custom';
+};
+
+/**
  * Loads Anti-Ban configuration from localStorage cache with backward-compatible key normalization.
  */
 export const getStoredAntiBanConfig = (): AntiBanConfig => {
@@ -49,7 +70,7 @@ export const getStoredAntiBanConfig = (): AntiBanConfig => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return {
+      const normalized: AntiBanConfig = {
         preset: parsed.preset || DEFAULT_ANTI_BAN_CONFIG.preset,
         min_delay_seconds: parsed.min_delay_seconds ?? parsed.minDelaySeconds ?? DEFAULT_ANTI_BAN_CONFIG.min_delay_seconds,
         max_delay_seconds: parsed.max_delay_seconds ?? parsed.maxDelaySeconds ?? DEFAULT_ANTI_BAN_CONFIG.max_delay_seconds,
@@ -59,6 +80,8 @@ export const getStoredAntiBanConfig = (): AntiBanConfig => {
         working_hours_start: parsed.working_hours_start || parsed.workingHoursStart || DEFAULT_ANTI_BAN_CONFIG.working_hours_start,
         working_hours_end: parsed.working_hours_end || parsed.workingHoursEnd || DEFAULT_ANTI_BAN_CONFIG.working_hours_end,
       };
+      normalized.preset = resolvePresetFromConfig(normalized);
+      return normalized;
     }
   } catch (e) {
     console.warn('Failed to load anti-ban config from storage:', e);

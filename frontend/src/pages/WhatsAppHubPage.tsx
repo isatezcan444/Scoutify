@@ -35,7 +35,8 @@ import {
   getStoredAntiBanConfig, 
   saveAntiBanConfig, 
   calculateRiskLevel,
-  isConfigEqual
+  isConfigEqual,
+  resolvePresetFromConfig
 } from '../utils/antiBanSettings';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
@@ -92,9 +93,11 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     ApiClient.getAntiBanSettings()
       .then((remote) => {
         if (remote) {
-          setConfig(remote);
-          setSavedConfig(remote);
-          saveAntiBanConfig(remote);
+          const resolvedPreset = resolvePresetFromConfig(remote);
+          const normalized = { ...remote, preset: remote.preset || resolvedPreset };
+          setConfig(normalized);
+          setSavedConfig(normalized);
+          saveAntiBanConfig(normalized);
         }
       })
       .catch((e) => {
@@ -115,24 +118,9 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     setConfig((prev) => {
       const updated = {
         ...prev,
-        preset: 'custom',
         [field]: value
       };
-      // Check if updated parameters match an established preset
-      for (const [key, presetObj] of Object.entries(ANTI_BAN_PRESETS)) {
-        if (
-          updated.min_delay_seconds === presetObj.min_delay_seconds &&
-          updated.max_delay_seconds === presetObj.max_delay_seconds &&
-          updated.typing_delay_seconds === presetObj.typing_delay_seconds &&
-          updated.daily_message_limit === presetObj.daily_message_limit &&
-          Boolean(updated.working_hours_enabled) === Boolean(presetObj.working_hours_enabled) &&
-          updated.working_hours_start === presetObj.working_hours_start &&
-          updated.working_hours_end === presetObj.working_hours_end
-        ) {
-          updated.preset = key;
-          break;
-        }
-      }
+      updated.preset = resolvePresetFromConfig(updated);
       return updated;
     });
   };

@@ -81,7 +81,7 @@ export const en = {
     administrator: 'Administrator',
   },
   titles: {
-    dashboard: 'Overview & Conversion Dashboard',
+    dashboard: 'Overview',
     dashboardSub: 'Real-time lead acquisition and WhatsApp outreach metrics',
     leadFinder: 'Lead Finder',
     leadFinderSub: 'Sector and location-based automated business and phone discovery',

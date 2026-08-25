@@ -81,7 +81,7 @@ export const tr = {
     administrator: 'Yönetici',
   },
   titles: {
-    dashboard: 'Genel Bakış & Dönüşüm Paneli',
+    dashboard: 'Genel Bakış',
     dashboardSub: 'Gerçek zamanlı lead ve WhatsApp erişim metrikleri',
     leadFinder: 'İşletme Ara',
     leadFinderSub: 'Sektör ve lokasyon bazlı otomatik işletme ve telefon toplama',

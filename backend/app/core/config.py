@@ -72,9 +72,9 @@ class Settings(BaseSettings):
     # AntibanPolicy bu değerlerden beslenir.
     DEFAULT_MIN_DELAY_SECONDS: int = 45
     DEFAULT_MAX_DELAY_SECONDS: int = 120
-    DEFAULT_TYPING_DELAY_SECONDS: int = 5
+    DEFAULT_TYPING_DELAY_SECONDS: int = 4
     DEFAULT_DAILY_LIMIT_PER_SESSION: int = 50
-    DEFAULT_WORKING_HOURS_START: str = "09:30"
+    DEFAULT_WORKING_HOURS_START: str = "09:00"
     DEFAULT_WORKING_HOURS_END: str = "18:30"
 
     # Scraper Settings
