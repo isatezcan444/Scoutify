@@ -34,6 +34,7 @@ import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 
 import { useToast } from '../context/ToastContext';
+import { useI18n } from '../context/I18nContext';
 
 interface LeadCRMPageProps {
   onRefreshStats: () => void;
@@ -41,6 +42,7 @@ interface LeadCRMPageProps {
 
 export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const toast = useToast();
+  const { t } = useI18n();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -391,10 +393,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           <div>
             <h2 className="text-lg sm:text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-[#7367F0]" />
-              Müşteri Adayları ({total})
+              {t('leads.title')} ({total})
             </h2>
             <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-              Tüm taranan işletmeler, WhatsApp durumları ve iletişim geçmişi
+              {t('titles.leadsSub')}
             </p>
           </div>
 
@@ -402,10 +404,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <Button
               onClick={() => setIsAddModalOpen(true)}
               size="sm"
-              className="space-x-1.5 font-bold shadow-md shadow-[#7367F0]/30 w-full sm:w-auto justify-center"
+              className="space-x-1.5 font-bold shadow-md shadow-[#7367F0]/30 w-full sm:w-auto justify-center cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Yeni Lead Ekle</span>
+              <span>{t('leads.addLead')}</span>
             </Button>
             <Button
               variant="outline"
@@ -417,10 +419,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 categories: selectedCategories,
                 status: statusFilter 
               })}
-              className="space-x-1.5 flex-1 sm:flex-initial justify-center"
+              className="space-x-1.5 flex-1 sm:flex-initial justify-center cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>CSV İndir</span>
+              <span>{t('leads.exportCsv')}</span>
             </Button>
             <Button
               variant="outline"
@@ -432,7 +434,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 categories: selectedCategories,
                 status: statusFilter 
               })}
-              className="space-x-1.5 flex-1 sm:flex-initial justify-center"
+              className="space-x-1.5 flex-1 sm:flex-initial justify-center cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-[#28C76F]" />
               <span>Excel (.xlsx)</span>
@@ -452,7 +454,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              placeholder="İsim, telefon veya adres ara..."
+              placeholder={t('leads.searchPlaceholder')}
               className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium h-10"
             />
           </div>
@@ -497,14 +499,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 setStatusFilter(e.target.value);
                 setPage(1);
               }}
-              className="w-full px-3 rounded-lg vuexy-input text-xs font-semibold h-10"
+              className="w-full px-3 rounded-lg vuexy-input text-xs font-semibold h-10 cursor-pointer"
             >
-              <option value="">Tüm Durumlar</option>
-              <option value="NEW">NEW (Yeni)</option>
-              <option value="CONTACTED">CONTACTED (İletildi)</option>
-              <option value="REPLIED">REPLIED (Yanıtlandı)</option>
-              <option value="INTERESTED">INTERESTED (İlgileniyor)</option>
-              <option value="UNSUBSCRIBED">UNSUBSCRIBED (Kara Liste)</option>
+              <option value="">{t('leads.filterByStatus')}</option>
+              <option value="NEW">NEW</option>
+              <option value="CONTACTED">CONTACTED</option>
+              <option value="REPLIED">REPLIED</option>
+              <option value="INTERESTED">INTERESTED</option>
+              <option value="UNSUBSCRIBED">UNSUBSCRIBED</option>
             </select>
           </div>
         </div>
@@ -522,7 +524,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 }}
                 className="rounded border-slate-300 dark:border-slate-700 text-[#7367F0] focus:ring-0"
               />
-              <span>Sadece WhatsApp Uyumlu</span>
+              <span>{t('leads.whatsappOnly')}</span>
             </label>
 
             {/* Active Filters Summary Chips */}
@@ -536,7 +538,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                     setSelectedDistricts([]);
                     setPage(1);
                   }}
-                  className="hover:text-[#EA5455] ml-0.5"
+                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -545,14 +547,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
             {selectedDistricts.length > 0 && (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200">
-                <span>{selectedDistricts.length} İlçe: {selectedDistricts.slice(0, 2).join(', ')}{selectedDistricts.length > 2 ? '...' : ''}</span>
+                <span>{selectedDistricts.length} {t('common.location')}: {selectedDistricts.slice(0, 2).join(', ')}{selectedDistricts.length > 2 ? '...' : ''}</span>
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedDistricts([]);
                     setPage(1);
                   }}
-                  className="hover:text-[#EA5455] ml-0.5"
+                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -561,14 +563,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
             {selectedCategories.length > 0 && (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-lg bg-[#00CFE8]/15 text-[#00CFE8] dark:bg-[#00CFE8]/25 dark:text-[#00CFE8]">
-                <span>{selectedCategories.length} Kategori: {selectedCategories.slice(0, 2).join(', ')}{selectedCategories.length > 2 ? '...' : ''}</span>
+                <span>{selectedCategories.length} {t('common.category')}: {selectedCategories.slice(0, 2).join(', ')}{selectedCategories.length > 2 ? '...' : ''}</span>
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedCategories([]);
                     setPage(1);
                   }}
-                  className="hover:text-[#EA5455] ml-0.5"
+                  className="hover:text-[#EA5455] ml-0.5 cursor-pointer"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -580,10 +582,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <button
               type="button"
               onClick={resetAllFilters}
-              className="text-xs font-bold text-slate-400 hover:text-[#EA5455] flex items-center gap-1.5 self-start sm:self-auto transition-colors"
+              className="text-xs font-bold text-slate-400 hover:text-[#EA5455] flex items-center gap-1.5 self-start sm:self-auto transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Filtreleri Sıfırla</span>
+              <span>{t('leads.resetFilters')}</span>
             </button>
           )}
         </div>
@@ -598,8 +600,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             </span>
             <span className="text-xs font-extrabold tracking-wide">
               {selectAllMatching
-                ? `Tüm ${total} Müşteri Adayı Seçildi`
-                : `${selectedCount} Müşteri Adayı Seçildi`}
+                ? t('leads.allMatchingSelected', { total })
+                : t('leads.bulkToolbarCount', { count: selectedCount })}
             </span>
 
             {/* Quick Button to Select All across all pages if not already done */}
@@ -609,7 +611,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 onClick={handleSelectAllAcrossPages}
                 className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] underline underline-offset-2 transition-all cursor-pointer"
               >
-                Tüm {total} Kaydı Seç
+                {t('leads.selectAllTotal', { total })}
               </button>
             )}
           </div>
@@ -618,32 +620,33 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <button
               type="button"
               onClick={handleOpenBulkBlacklist}
-              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             >
               <ShieldAlert className="w-3.5 h-3.5 text-[#FF9F43]" />
-              <span>Kara Listeye Ekle</span>
+              <span>{t('leads.bulkBlacklist')}</span>
             </button>
 
             <button
               type="button"
               onClick={handleOpenBulkDelete}
-              className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>{selectAllMatching ? `Tümünü Sil (${total})` : `Seçilenleri Sil (${selectedCount})`}</span>
+              <span>{selectAllMatching ? t('leads.bulkDeleteAll', { total }) : t('leads.bulkDelete', { count: selectedCount })}</span>
             </button>
 
             <button
               type="button"
               onClick={handleClearSelection}
-              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors"
-              title="Seçimi Temizle"
+              className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+              title={t('common.clearSelection')}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
+
 
       {/* Leads Table Card */}
       <Card className="overflow-hidden shadow-sm">
@@ -656,8 +659,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   <button
                     type="button"
                     onClick={handleToggleSelectAllPage}
-                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors"
-                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Bu Sayfadaki Tümünü Seç'}
+                    className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
+                    title={isAllCurrentPageSelected ? t('common.clearSelection') : t('common.selectAll')}
                   >
                     {selectAllMatching || isAllCurrentPageSelected ? (
                       <CheckSquare className="w-4 h-4 text-[#7367F0]" />
@@ -668,12 +671,12 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-4">İşletme Profili</th>
-                <th className="py-3.5 px-4">İletişim & WhatsApp</th>
-                <th className="py-3.5 px-4">Lokasyon</th>
-                <th className="py-3.5 px-4">Puan & Web</th>
-                <th className="py-3.5 px-4">Durum</th>
-                <th className="py-3.5 px-4 text-right">İşlemler</th>
+                <th className="py-3.5 px-4">{t('leads.colProfile')}</th>
+                <th className="py-3.5 px-4">{t('leads.colContact')}</th>
+                <th className="py-3.5 px-4">{t('leads.colLocation')}</th>
+                <th className="py-3.5 px-4">{t('leads.colRatingWeb')}</th>
+                <th className="py-3.5 px-4">{t('leads.colStatus')}</th>
+                <th className="py-3.5 px-4 text-right">{t('leads.colActions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04]">
@@ -681,15 +684,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#7367F0] mb-2" />
-                    <span>Müşteri adayları yükleniyor...</span>
+                    <span>{t('common.loading')}</span>
                   </td>
                 </tr>
               ) : leads.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-slate-400">
                     <Users className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-                    <p className="font-bold text-slate-700 dark:text-slate-200">Kayıt Bulunamadı</p>
-                    <p className="text-[11px] mt-0.5">Arama kriterlerinizi değiştirin veya "İşletme Ara" bölümünden yeni arama başlatın.</p>
+                    <p className="font-bold text-slate-700 dark:text-slate-200">{t('leadFinder.noJobsFound')}</p>
                   </td>
                 </tr>
               ) : (
@@ -709,7 +711,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         <button
                           type="button"
                           onClick={() => handleToggleSingleSelect(lead.id)}
-                          className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors"
+                          className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
                         >
                           {isSelected ? (
                             <CheckSquare className="w-4 h-4 text-[#7367F0]" />
@@ -726,7 +728,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                            {lead.category || 'Genel'}
+                            {lead.category || t('common.general')}
                           </span>
                           {lead.entity_type && (
                             <span className="text-[9px] font-mono uppercase px-1 py-0.2 rounded bg-slate-100 dark:bg-white/[0.06] text-slate-500">
@@ -740,17 +742,17 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
                           <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                          <span>{lead.phone_e164 || lead.phone || 'Belirtilmemiş'}</span>
+                          <span>{lead.phone_e164 || lead.phone || t('leads.noPhone')}</span>
                         </div>
                         <div className="mt-1">
                           {lead.is_whatsapp_eligible ? (
                             <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-[10px]">
                               <WhatsAppIcon className="w-3 h-3" />
-                              <span>WhatsApp Aktif</span>
+                              <span>{t('leads.whatsappActive')}</span>
                             </span>
                           ) : (
                             <span className="text-[10px] text-slate-400 font-sans">
-                              WhatsApp Doğrulanmadı
+                              {t('leads.whatsappUnverified')}
                             </span>
                           )}
                         </div>
@@ -777,7 +779,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-slate-400 text-[10px]">Puan Yok</span>
+                          <span className="text-slate-400 text-[10px]">{t('leads.noRating')}</span>
                         )}
 
                         {lead.website ? (
@@ -824,8 +826,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           <button
                             type="button"
                             onClick={() => handleOpenSendModal(lead)}
-                            title="Hızlı WhatsApp Mesajı Gönder"
-                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors"
+                            title={t('leads.quickSendTitle')}
+                            className="p-1.5 rounded-lg text-[#25D366] hover:bg-[#25D366]/15 transition-colors cursor-pointer"
                           >
                             <Send className="w-4 h-4" />
                           </button>
@@ -833,24 +835,24 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             href={getGoogleMapsUrl(lead)}
                             target="_blank"
                             rel="noreferrer"
-                            title="Google Maps'te Aç"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#7367F0] hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors"
+                            title="Google Maps"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#7367F0] hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors cursor-pointer"
                           >
                             <GoogleMapsIcon className="w-4 h-4" />
                           </a>
                           <button
                             type="button"
                             onClick={() => handleOpenSingleBlacklist(lead)}
-                            title="Numarayı Kara Listeye Ekle"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                            title={t('blacklist.addNumber')}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#FF9F43] hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors cursor-pointer"
                           >
                             <ShieldAlert className="w-4 h-4" />
                           </button>
                           <button
                             type="button"
                             onClick={() => handleOpenSingleDelete(lead)}
-                            title="Lead'i Sil"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                            title={t('common.delete')}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#EA5455] hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -868,7 +870,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         {total > pageSize && (
           <div className="p-4 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between text-xs text-slate-500 dark:text-[#7E7F96]">
             <span>
-              Toplam <strong>{total}</strong> kayıttan <strong>{(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)}</strong> arası gösteriliyor
+              {t('common.showing')} <strong>{total}</strong> {t('common.entries')} <strong>{(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)}</strong>
             </span>
             <div className="flex items-center space-x-2">
               <Button
@@ -876,19 +878,21 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
+                className="cursor-pointer"
               >
-                Önceki
+                {t('common.previous')}
               </Button>
               <span className="font-bold text-slate-700 dark:text-slate-200">
-                Sayfa {page} / {Math.ceil(total / pageSize)}
+                {t('common.page')} {page} / {Math.ceil(total / pageSize)}
               </span>
               <Button
                 variant="outline"
                 size="sm"
                 disabled={page * pageSize >= total}
                 onClick={() => setPage(page + 1)}
+                className="cursor-pointer"
               >
-                Sonraki
+                {t('common.next')}
               </Button>
             </div>
           </div>
@@ -915,10 +919,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               <div>
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
                   {isBulkDelete 
-                    ? (selectAllMatching ? `Tüm (${total}) Müşteri Adayını Sil` : `Seçilen (${selectedCount}) Müşteri Adayını Sil`) 
-                    : 'Müşteri Adayını Sil'}
+                    ? (selectAllMatching ? t('leads.bulkDeleteAll', { total }) : t('leads.bulkDelete', { count: selectedCount })) 
+                    : t('leads.deleteConfirmTitle')}
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">Bu işlem geri alınamaz</p>
+                <p className="text-[11px] text-slate-400 font-medium">{t('leads.deleteConfirmMsg')}</p>
               </div>
             </div>
 
@@ -926,7 +930,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-3 mb-5">
               {!isBulkDelete && leadToDelete ? (
                 <p>
-                  <strong className="text-slate-800 dark:text-white font-bold">{leadToDelete.name}</strong> isimli müşteri adayını kalıcı olarak silmek istediğinize emin misiniz?
+                  <strong className="text-slate-800 dark:text-white font-bold">{leadToDelete.name}</strong> - {t('leads.deleteConfirmMsg')}
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -940,9 +944,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                     />
                     <div>
                       <span className="font-bold text-slate-800 dark:text-white">
-                        Sadece Seçilenleri Sil ({selectedIds.length} Kayıt)
+                        {t('leads.bulkDelete', { count: selectedIds.length })}
                       </span>
-                      <p className="text-[11px] text-slate-400">Bu sayfada işaretlediğiniz {selectedIds.length} kayıt silinir.</p>
                     </div>
                   </label>
 
@@ -957,19 +960,13 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                       />
                       <div>
                         <span className="font-bold text-[#EA5455]">
-                          Filtrelenen TÜM Müşteri Adaylarını Sil ({total} Kayıt)
+                          {t('leads.bulkDeleteAll', { total })}
                         </span>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-300">
-                          Mevcut arama sonucundaki tüm sayfaların kayıtları kalıcı olarak temizlenir.
-                        </p>
                       </div>
                     </label>
                   )}
                 </div>
               )}
-              <p className="text-[11px] text-slate-400">
-                Silinen kayıtların iletişim geçmişi ve lead kartları sistemden tamamen kaldırılır.
-              </p>
             </div>
 
             {/* Modal Actions */}
@@ -980,29 +977,26 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 size="sm"
                 disabled={isDeleting}
                 onClick={() => setIsDeleteModalOpen(false)}
+                className="cursor-pointer"
               >
-                Vazgeç
+                {t('common.cancel')}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 disabled={isDeleting}
                 onClick={handleConfirmDelete}
-                className="bg-[#EA5455] hover:bg-[#D43B3C] text-white font-bold space-x-1.5 shadow-md shadow-[#EA5455]/30"
+                className="bg-[#EA5455] hover:bg-[#D43B3C] text-white font-bold space-x-1.5 shadow-md shadow-[#EA5455]/30 cursor-pointer"
               >
                 {isDeleting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Siliniyor...</span>
+                    <span>{t('common.loading')}</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    <span>
-                      {isBulkDelete 
-                        ? (selectAllMatching ? `Evet, Tüm ${total} Kaydı Sil` : `Evet, ${selectedIds.length} Kaydı Sil`) 
-                        : 'Evet, Kalıcı Olarak Sil'}
-                    </span>
+                    <span>{t('common.delete')}</span>
                   </>
                 )}
               </Button>
@@ -1031,9 +1025,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
-                  {isBulkBlacklist ? `Seçilen (${selectedCount}) Numarayı Kara Listeye Ekle` : 'Numarayı Kara Listeye Ekle'}
+                  {isBulkBlacklist ? t('blacklist.confirmBulkRemoveTitle') : t('blacklist.modalTitle')}
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">WhatsApp Opt-Out & Anti-Spam Koruması</p>
+                <p className="text-[11px] text-slate-400 font-medium">{t('blacklist.subtitle')}</p>
               </div>
             </div>
 
@@ -1041,49 +1035,39 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs text-slate-600 dark:text-slate-300 space-y-2 mb-4">
               {!isBulkBlacklist && leadToBlacklist ? (
                 <p>
-                  <strong className="text-slate-800 dark:text-white font-bold">{leadToBlacklist.name}</strong> ({leadToBlacklist.phone_e164 || leadToBlacklist.phone}) kara listeye eklenecek.
+                  <strong className="text-slate-800 dark:text-white font-bold">{leadToBlacklist.name}</strong> ({leadToBlacklist.phone_e164 || leadToBlacklist.phone})
                 </p>
               ) : (
                 <p>
-                  Seçilen <strong className="text-slate-800 dark:text-white font-bold">{selectedCount} adet</strong> işletme numarası kara listeye alınacaktır.
+                  {t('blacklist.selectedToolbarCount', { count: selectedCount })}
                 </p>
               )}
-              <p className="text-[11px] text-[#FF9F43] font-semibold">
-                🛡️ Kara listeye alınan numaralara sistem üzerinden bir daha asla otomatik mesaj gönderilmeyecektir.
-              </p>
             </div>
 
             {/* Reason Selection */}
             <div className="space-y-2 mb-5 text-xs">
-              <label className="text-slate-700 dark:text-slate-300 font-bold block">Engelleme / Opt-Out Nedeni</label>
+              <label className="text-slate-700 dark:text-slate-300 font-bold block">{t('blacklist.blockReasonLabel')}</label>
               <div className="flex flex-wrap gap-1.5 mb-2">
                 {[
-                  'Kullanıcı talebi / İletişim reddi',
-                  'Yanlış numara / Ulaşılamıyor',
-                  'Spam şikayeti bildirimi',
-                  'Rakip firma / İlgisiz'
+                  'USER_REQUEST',
+                  'BOUNCED',
+                  'SPAM_COMPLAINT',
+                  'MANUAL_BLACKLIST'
                 ].map((r) => (
                   <button
                     key={r}
                     type="button"
                     onClick={() => setBlacklistReason(r)}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
                       blacklistReason === r
                         ? 'bg-[#FF9F43]/15 text-[#FF9F43] border-[#FF9F43]'
                         : 'bg-white dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.08] text-slate-600 dark:text-slate-300 hover:bg-slate-50'
                     }`}
                   >
-                    {r}
+                    {r === 'USER_REQUEST' ? t('blacklist.reasonUserRequest') : r === 'BOUNCED' ? t('blacklist.reasonBounced') : r === 'SPAM_COMPLAINT' ? t('blacklist.reasonSpamComplaint') : t('blacklist.reasonManual')}
                   </button>
                 ))}
               </div>
-              <input
-                type="text"
-                value={blacklistReason}
-                onChange={(e) => setBlacklistReason(e.target.value)}
-                placeholder="Özel neden belirtin..."
-                className="w-full px-3 py-2 rounded-lg vuexy-input"
-              />
             </div>
 
             {/* Actions */}
@@ -1094,25 +1078,26 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                 size="sm"
                 disabled={isBlacklisting}
                 onClick={() => setIsBlacklistModalOpen(false)}
+                className="cursor-pointer"
               >
-                Vazgeç
+                {t('common.cancel')}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 disabled={isBlacklisting}
                 onClick={handleConfirmBlacklist}
-                className="bg-[#FF9F43] hover:bg-[#E58A32] text-white font-bold space-x-1.5 shadow-md shadow-[#FF9F43]/30"
+                className="bg-[#FF9F43] hover:bg-[#E58A32] text-white font-bold space-x-1.5 shadow-md shadow-[#FF9F43]/30 cursor-pointer"
               >
                 {isBlacklisting ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Ekleniyor...</span>
+                    <span>{t('common.loading')}</span>
                   </>
                 ) : (
                   <>
                     <ShieldAlert className="w-4 h-4" />
-                    <span>Kara Listeye Ekle</span>
+                    <span>{t('blacklist.addNumber')}</span>
                   </>
                 )}
               </Button>
@@ -1137,11 +1122,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
               <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
                 <Plus className="w-5 h-5 text-[#7367F0]" />
-                Yeni Müşteri Adayı Ekle
+                {t('leads.addNewLeadTitle')}
               </h3>
               <button 
                 onClick={() => setIsAddModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1155,43 +1140,43 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
             <form onSubmit={handleAddLead} className="space-y-3.5 text-xs">
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">İşletme Adı *</label>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('leads.leadNameRequired')}</label>
                 <input
                   type="text"
                   value={newLeadName}
                   onChange={(e) => setNewLeadName(e.target.value)}
-                  placeholder="Örn: Dentgroup Ataşehir"
+                  placeholder="e.g. Dentgroup Ataşehir"
                   className="w-full px-3 py-2 rounded-lg vuexy-input"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">Telefon Numarası *</label>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('leads.leadPhoneRequired')}</label>
                 <input
                   type="text"
                   value={newLeadPhone}
                   onChange={(e) => setNewLeadPhone(e.target.value)}
-                  placeholder="Örn: 0532 123 45 67 veya 0216 414 99 88"
+                  placeholder="e.g. +905321234567"
                   className="w-full px-3 py-2 rounded-lg vuexy-input font-mono"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">Kategori / Sektör</label>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('leads.categoryLabel')}</label>
                 <input
                   type="text"
                   value={newLeadCategory}
                   onChange={(e) => setNewLeadCategory(e.target.value)}
-                  placeholder="Örn: Diş Kliniği"
+                  placeholder="e.g. Dental Clinic"
                   className="w-full px-3 py-2 rounded-lg vuexy-input"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">Şehir</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('leads.cityLabel')}</label>
                   <input
                     type="text"
                     value={newLeadCity}
@@ -1201,7 +1186,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   />
                 </div>
                 <div>
-                  <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">İlçe</label>
+                  <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('leads.districtLabel')}</label>
                   <input
                     type="text"
                     value={newLeadDistrict}
@@ -1218,15 +1203,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   variant="outline" 
                   size="sm" 
                   onClick={() => setIsAddModalOpen(false)}
+                  className="cursor-pointer"
                 >
-                  Vazgeç
+                  {t('common.cancel')}
                 </Button>
                 <Button 
                   type="submit" 
                   size="sm" 
-                  className="font-bold shadow-md shadow-[#7367F0]/30"
+                  className="font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
                 >
-                  Kaydet
+                  {t('common.save')}
                 </Button>
               </div>
             </form>
@@ -1250,11 +1236,11 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
               <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
                 <Send className="w-4 h-4 text-[#25D366]" />
-                Tekil WhatsApp Mesajı Gönder
+                {t('leads.quickSendTitle')}
               </h3>
               <button 
                 onClick={() => setIsSendModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1273,13 +1259,13 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
             <div className="space-y-3.5 text-xs">
               <div>
-                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">Mesaj Metni</label>
+                <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('whatsapp.testMessageText')}</label>
                 <textarea
                   value={customMessage}
                   onChange={(e) => setCustomMessage(e.target.value)}
                   rows={5}
                   className="w-full p-3 rounded-lg vuexy-input leading-relaxed"
-                  placeholder="Mesajınızı buraya yazın..."
+                  placeholder={t('leads.messagePlaceholder')}
                 />
               </div>
 
@@ -1289,25 +1275,26 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                   variant="outline" 
                   size="sm" 
                   onClick={() => setIsSendModalOpen(false)}
+                  className="cursor-pointer"
                 >
-                  Kapat
+                  {t('common.close')}
                 </Button>
                 <Button 
                   type="button" 
                   size="sm" 
                   disabled={isSending || !customMessage}
                   onClick={handleSendSingleMessage}
-                  className="bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold space-x-1.5"
+                  className="bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold space-x-1.5 cursor-pointer"
                 >
                   {isSending ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>İletiliyor...</span>
+                      <span>{t('leads.sending')}</span>
                     </>
                   ) : (
                     <>
                       <Send className="w-3.5 h-3.5" />
-                      <span>Mesajı Gönder</span>
+                      <span>{t('leads.sendNow')}</span>
                     </>
                   )}
                 </Button>

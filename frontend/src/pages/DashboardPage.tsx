@@ -1,24 +1,21 @@
 import React from 'react';
 import { 
   Users, 
-  CheckCircle2, 
   Send, 
   MessageSquareReply, 
   Smartphone, 
-  Flame, 
   TrendingUp, 
   ArrowUpRight,
   Search,
   Sparkles,
   ShieldCheck,
-  Clock,
-  Zap,
-  TrendingDown
+  Clock
 } from 'lucide-react';
 import { DashboardStats } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
+import { useI18n } from '../context/I18nContext';
 
 interface DashboardPageProps {
   stats: DashboardStats | null;
@@ -26,6 +23,8 @@ interface DashboardPageProps {
 }
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate }) => {
+  const { t } = useI18n();
+
   if (!stats) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -41,29 +40,29 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center space-x-1.5 px-3 py-0.5 rounded-md bg-white/20 text-white text-xs font-bold mb-3 backdrop-blur-md">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Scoutify B2B Otomasyon Motoru</span>
+            <span>Scoutify B2B Automation Engine</span>
           </div>
           <h2 className="text-lg sm:text-xl md:text-2xl font-extrabold text-white tracking-tight">
-            Hedef Kitleni Bul, Spintax ile Kişiselleştir, Ban Riski Olmadan Ulaş!
+            Discover Targets, Personalize with Spintax, Scale Outreach!
           </h2>
           <p className="mt-2 text-xs md:text-sm text-white/90 leading-relaxed font-medium">
-            Google Maps ve web dizinlerinden otomatik işletme numaralarını toplayın. Rastgele gecikmeler ve kademeli ısınma protokolüyle güvenle WhatsApp mesajı gönderin.
+            Extract business contacts from Google Maps & directories with verified WhatsApp eligibility. Dispatch humanized campaigns with anti-ban safeguards.
           </p>
           <div className="mt-5 flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3">
             <Button
               onClick={() => onNavigate('lead-finder')}
-              className="bg-white text-[#7367F0] hover:bg-white/95 font-bold shadow-md space-x-2 w-full sm:w-auto justify-center"
+              className="bg-white text-[#7367F0] hover:bg-white/95 font-bold shadow-md space-x-2 w-full sm:w-auto justify-center cursor-pointer"
             >
               <Search className="w-4 h-4" />
-              <span>Yeni Lead Taraması Başlat</span>
+              <span>{t('dashboard.discoverNewLeads')}</span>
             </Button>
             <Button
               onClick={() => onNavigate('campaigns')}
               variant="outline"
-              className="bg-white/10 hover:bg-white/20 border-white/30 text-white font-semibold space-x-2 w-full sm:w-auto justify-center"
+              className="bg-white/10 hover:bg-white/20 border-white/30 text-white font-semibold space-x-2 w-full sm:w-auto justify-center cursor-pointer"
             >
               <Send className="w-4 h-4" />
-              <span>Kampanyaları Yönet</span>
+              <span>{t('dashboard.quickStartCampaign')}</span>
             </Button>
           </div>
         </div>
@@ -80,7 +79,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  Toplam Lead
+                  {t('dashboard.totalLeads')}
                 </span>
                 <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
                   {stats.total_leads}
@@ -92,9 +91,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             </div>
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <Badge variant="success" className="text-[10px]">
-                {stats.whatsapp_eligible_leads} WA Uygun
+                {stats.whatsapp_eligible_leads} {t('dashboard.whatsappEligible')}
               </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">Kayıtlı işletme</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">CRM</span>
             </div>
           </CardContent>
         </Card>
@@ -105,7 +104,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  Gönderilen Mesaj
+                  {t('dashboard.contactedLeads')}
                 </span>
                 <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
                   {stats.total_messages_sent}
@@ -117,9 +116,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             </div>
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <Badge variant="info" className="text-[10px]">
-                +{stats.messages_sent_today} Bugün
+                +{stats.messages_sent_today} Today
               </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">Kademeli kuyruk</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">Queue</span>
             </div>
           </CardContent>
         </Card>
@@ -130,7 +129,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  Geri Dönüş Oranı
+                  {t('dashboard.responseRate')}
                 </span>
                 <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
                   %{stats.response_rate_percentage}
@@ -142,9 +141,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             </div>
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <Badge variant="success" className="text-[10px]">
-                {stats.replied_leads} Yanıt
+                {stats.replied_leads} {t('dashboard.repliedLeads')}
               </Badge>
-              <span className="text-slate-400 dark:text-[#7E7F96]">Dönüş sağlandı</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">Inbound</span>
             </div>
           </CardContent>
         </Card>
@@ -155,10 +154,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-xs font-bold text-slate-500 dark:text-[#7E7F96] uppercase tracking-wider">
-                  Bağlı Hat Sayısı
+                  {t('dashboard.connectedSessions')}
                 </span>
                 <div className="mt-2 text-2xl font-extrabold text-slate-800 dark:text-white">
-                  {stats.connected_sessions} Hat
+                  {stats.connected_sessions}
                 </div>
               </div>
               <div className="w-11 h-11 rounded-xl bg-[#FF9F43]/15 text-[#FF9F43] flex items-center justify-center font-bold">
@@ -168,7 +167,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <div className="mt-3 flex items-center space-x-1.5 text-xs">
               <span className="w-2 h-2 rounded-full bg-[#28C76F] live-dot" />
               <span className="text-[#28C76F] font-bold">Online</span>
-              <span className="text-slate-400 dark:text-[#7E7F96]">({stats.active_campaigns} Aktif Kampanya)</span>
+              <span className="text-slate-400 dark:text-[#7E7F96]">({stats.active_campaigns} {t('dashboard.activeCampaigns')})</span>
             </div>
           </CardContent>
         </Card>
@@ -183,21 +182,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <div>
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-[#7367F0]" />
-                  Dönüşüm Hunisi (Outreach Funnel)
+                  {t('dashboard.outreachFunnel')}
                 </h3>
                 <p className="text-xs text-slate-400 dark:text-[#7E7F96] mt-0.5 font-medium">
-                  Lead toplama ve WhatsApp mesajlaşma performans basamakları
+                  {t('titles.dashboardSub')}
                 </p>
               </div>
-              <Badge variant="primary">Canlı Metrikler</Badge>
+              <Badge variant="primary">Realtime</Badge>
             </div>
 
             <div className="space-y-4">
               {/* Step 1: Scraped */}
               <div>
                 <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
-                  <span>1. Taranan Toplam İşletmeler</span>
-                  <span className="font-mono text-[#7367F0]">{stats.total_leads} Lead (%100)</span>
+                  <span>1. {t('dashboard.funnelTotal')}</span>
+                  <span className="font-mono text-[#7367F0]">{stats.total_leads} (%100)</span>
                 </div>
                 <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
                   <div className="h-full bg-[#7367F0] rounded-full w-full" />
@@ -207,9 +206,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               {/* Step 2: WA Eligible */}
               <div>
                 <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
-                  <span>2. Doğrulanmış WhatsApp Numaraları (Mobil E.164)</span>
+                  <span>2. {t('dashboard.funnelWaReady')}</span>
                   <span className="font-mono text-[#00CFE8]">
-                    {stats.whatsapp_eligible_leads} Numara (
+                    {stats.whatsapp_eligible_leads} (
                     {stats.total_leads > 0 ? Math.round((stats.whatsapp_eligible_leads / stats.total_leads) * 100) : 0}%)
                   </span>
                 </div>
@@ -224,9 +223,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               {/* Step 3: Contacted */}
               <div>
                 <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
-                  <span>3. Mesaj İletilen (Contacted)</span>
+                  <span>3. {t('dashboard.funnelContacted')}</span>
                   <span className="font-mono text-[#FF9F43]">
-                    {stats.contacted_leads} İşletme (
+                    {stats.contacted_leads} (
                     {stats.whatsapp_eligible_leads > 0 ? Math.round((stats.contacted_leads / stats.whatsapp_eligible_leads) * 100) : 0}%)
                   </span>
                 </div>
@@ -241,9 +240,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               {/* Step 4: Replied */}
               <div>
                 <div className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-200 mb-1.5">
-                  <span>4. Geri Dönüş Yapan (Replied / Interested)</span>
+                  <span>4. {t('dashboard.funnelReplied')}</span>
                   <span className="font-mono text-[#28C76F]">
-                    {stats.replied_leads} Yanıt (%{stats.response_rate_percentage})
+                    {stats.replied_leads} (%{stats.response_rate_percentage})
                   </span>
                 </div>
                 <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
@@ -260,9 +259,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <div className="flex items-center space-x-3">
                 <ShieldCheck className="w-5 h-5 text-[#28C76F]" />
                 <div>
-                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Anti-Ban & Isınma Protokolü</p>
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-100">Anti-Ban & Cooldown Policy</p>
                   <p className="text-[11px] text-slate-500 dark:text-[#7E7F96] font-medium">
-                    Her mesaj rastgele 45-120 saniye aralıkla gönderilir.
+                    Gaussian Jitter & Working Hours fail-closed enforcement active.
                   </p>
                 </div>
               </div>
@@ -270,9 +269,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
                 variant="ghost"
                 size="sm"
                 onClick={() => onNavigate('whatsapp')}
-                className="text-[#28C76F] hover:text-[#28C76F]/80 font-bold space-x-1"
+                className="text-[#28C76F] hover:text-[#28C76F]/80 font-bold space-x-1 cursor-pointer"
               >
-                <span>Hat Detayları</span>
+                <span>{t('dashboard.manageSessions')}</span>
                 <ArrowUpRight className="w-3.5 h-3.5" />
               </Button>
             </div>
@@ -286,15 +285,15 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
                   <Clock className="w-4 h-4 text-[#7367F0]" />
-                  Son Mesajlar
+                  {t('campaigns.logsTitle')}
                 </h3>
-                <Badge variant="primary" className="font-mono text-[9px]">CANLI</Badge>
+                <Badge variant="primary" className="font-mono text-[9px]">LIVE</Badge>
               </div>
 
               <div className="space-y-3">
                 {stats.recent_activity.length === 0 ? (
                   <div className="text-center py-8 text-xs text-slate-400">
-                    Henüz bir mesaj aktivitesi bulunmuyor.
+                    {t('dashboard.noRecentLeads')}
                   </div>
                 ) : (
                   stats.recent_activity.map((act) => (
@@ -323,9 +322,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ stats, onNavigate 
             <Button
               variant="outline"
               onClick={() => onNavigate('leads')}
-              className="w-full mt-4 font-bold"
+              className="w-full mt-4 font-bold cursor-pointer"
             >
-              Tüm CRM Veritabanını Gör
+              {t('dashboard.viewAllLeads')}
             </Button>
           </Card>
         </div>

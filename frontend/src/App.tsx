@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './context/ToastContext';
+import { I18nProvider, useI18n } from './context/I18nContext';
 import { Sidebar } from './components/Layout/Sidebar';
 import { TopHeader } from './components/Layout/TopHeader';
 import { DashboardPage } from './pages/DashboardPage';
@@ -19,6 +20,7 @@ const AppContent: React.FC = () => {
   const [isWsConnected, setIsWsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const toast = useToast();
+  const { t } = useI18n();
 
   const refreshStats = async () => {
     try {
@@ -41,19 +43,19 @@ const AppContent: React.FC = () => {
         if (eventData.event === 'inbound_reply') {
           toast.reply(
             `${eventData.lead_name} (${eventData.phone}): "${eventData.message}"`,
-            '📩 Yeni WhatsApp Yanıtı!'
+            t('toast.newReplyTitle')
           );
           refreshStats();
         } else if (eventData.event === 'message_sent') {
           toast.success(
-            `${eventData.lead_name} (${eventData.phone}) alıcısına güvenle iletildi.`,
-            '✅ Mesaj İletildi'
+            `${eventData.lead_name} (${eventData.phone})`,
+            t('toast.messageSentTitle')
           );
           refreshStats();
         } else if (eventData.event === 'scraper_completed') {
           toast.info(
-            `Toplam ${eventData.total_found} işletme bulundu, ${eventData.total_new_leads} yeni lead eklendi.`,
-            '🎉 Tarama Tamamlandı'
+            t('toast.scraperCompletedMsg', { found: eventData.total_found, leads: eventData.total_new_leads }),
+            t('toast.scraperCompletedTitle')
           );
           refreshStats();
         }
@@ -68,24 +70,24 @@ const AppContent: React.FC = () => {
       clearInterval(interval);
       if (ws) ws.close();
     };
-  }, [toast]);
+  }, [toast, t]);
 
   const getPageTitle = () => {
     switch (activeTab) {
       case 'dashboard':
-        return 'Genel Bakış & Dönüşüm Paneli';
+        return t('titles.dashboard');
       case 'lead-finder':
-        return 'İşletme Ara';
+        return t('titles.leadFinder');
       case 'leads':
-        return 'Müşteri Adayları';
+        return t('titles.leads');
       case 'campaigns':
-        return 'WhatsApp Kampanyaları & Spintax Studio';
+        return t('titles.campaigns');
       case 'whatsapp':
-        return 'WhatsApp Oturumları & Anti-Ban Kalkanı';
+        return t('titles.whatsapp');
       case 'blacklist':
-        return 'Kara Liste';
+        return t('titles.blacklist');
       case 'settings':
-        return 'Ayarlar';
+        return t('titles.settings');
       default:
         return 'Scoutify';
     }
@@ -94,19 +96,19 @@ const AppContent: React.FC = () => {
   const getPageSubtitle = () => {
     switch (activeTab) {
       case 'dashboard':
-        return 'Gerçek zamanlı lead ve WhatsApp erişim metrikleri';
+        return t('titles.dashboardSub');
       case 'lead-finder':
-        return 'Sektör ve lokasyon bazlı otomatik işletme ve telefon toplama';
+        return t('titles.leadFinderSub');
       case 'leads':
-        return 'Toplanan işletme profilleri, telefon doğrulaması ve iletişim geçmişi';
+        return t('titles.leadsSub');
       case 'campaigns':
-        return 'Metin çeşitlendirme (Spintax), rastgele gecikmeler ve kademeli gönderim';
+        return t('titles.campaignsSub');
       case 'whatsapp':
-        return 'Cihaz QR kod eşleme, ısınma takvimi ve günlük kota takibi';
+        return t('titles.whatsappSub');
       case 'blacklist':
-        return 'Otomatik veya manuel engellenen numaralar';
+        return t('titles.blacklistSub');
       case 'settings':
-        return 'WhatsApp bekleme süreleri, anti-ban koruma parametreleri ve tema';
+        return t('titles.settingsSub');
       default:
         return undefined;
     }
@@ -169,9 +171,11 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </I18nProvider>
     </ThemeProvider>
   );
 };

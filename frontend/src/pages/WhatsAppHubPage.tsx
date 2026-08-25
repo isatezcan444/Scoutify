@@ -39,6 +39,7 @@ import {
   isConfigEqual
 } from '../utils/antiBanSettings';
 import { useToast } from '../context/ToastContext';
+import { useI18n } from '../context/I18nContext';
 
 interface WhatsAppHubPageProps {
   onRefreshStats: () => void;
@@ -46,6 +47,7 @@ interface WhatsAppHubPageProps {
 
 export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats }) => {
   const toast = useToast();
+  const { t } = useI18n();
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [logs, setLogs] = useState<MessageLog[]>([]);
   const [loading, setLoading] = useState(false);

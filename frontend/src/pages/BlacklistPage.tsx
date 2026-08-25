@@ -21,9 +21,11 @@ import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { useToast } from '../context/ToastContext';
+import { useI18n } from '../context/I18nContext';
 
 export const BlacklistPage: React.FC = () => {
   const toast = useToast();
+  const { t } = useI18n();
   const [blacklist, setBlacklist] = useState<BlacklistEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -73,7 +75,7 @@ export const BlacklistPage: React.FC = () => {
       setBlacklist(data.items || []);
       setTotal(data.total || 0);
     } catch (err: any) {
-      toast.error(err.message || 'Kara liste yüklenirken hata oluştu', 'Kara Liste Yüklenemedi');
+      toast.error(err.message || t('common.error'), t('toast.errorTitle'));
     } finally {
       setLoading(false);
     }
@@ -199,13 +201,13 @@ export const BlacklistPage: React.FC = () => {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedLead) {
-      toast.error('Lütfen kara listeye eklemek için bir müşteri adayı arayıp seçin.', 'Müşteri Adayı Seçilmedi');
+      toast.error(t('blacklist.leadNotSelectedError'), t('common.warning'));
       return;
     }
 
     const phoneToSubmit = (selectedLead.phone_e164 || selectedLead.phone || '').trim();
     if (!phoneToSubmit) {
-      toast.error('Seçilen işletmenin kayıtlı bir telefon numarası bulunmuyor.', 'Telefon Numarası Eksik');
+      toast.error(t('blacklist.noPhoneInLead'), t('common.error'));
       return;
     }
 
@@ -213,37 +215,37 @@ export const BlacklistPage: React.FC = () => {
     try {
       await ApiClient.addToBlacklist(phoneToSubmit, newReason);
       toast.success(
-        `${selectedLead.name} (${phoneToSubmit}) başarıyla kara listeye eklendi.`,
-        'Numara Engellendi'
+        t('blacklist.addedSuccess', { name: selectedLead.name, phone: phoneToSubmit }),
+        t('common.success')
       );
       setIsAddOpen(false);
       handleClearSelectedLead();
       fetchBlacklist();
     } catch (err: any) {
-      toast.error(err.message || 'Numara kara listeye eklenemedi', 'Kara Listeye Eklenemedi');
+      toast.error(err.message || t('common.error'), t('toast.errorTitle'));
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleRemove = async (id: number, phone: string, leadName?: string) => {
-    const displayName = leadName ? `${leadName} (${phone})` : phone;
+    const displayName = leadName || phone;
     const ok = await toast.confirm({
-      title: 'Numarayı Kara Listeden Kaldır',
-      message: `${displayName} işletmesinin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
-      confirmText: 'Evet, Engeli Kaldır',
-      cancelText: 'Vazgeç',
+      title: t('blacklist.confirmRemoveTitle'),
+      message: t('blacklist.confirmRemoveMsg', { name: displayName, phone }),
+      confirmText: t('blacklist.unblockButton'),
+      cancelText: t('common.cancel'),
       variant: 'warning',
     });
     if (!ok) return;
 
     try {
       await ApiClient.removeFromBlacklist(id);
-      toast.success('İşletme kara listeden çıkarıldı.', 'Engel Kaldırıldı');
+      toast.success(t('blacklist.removedSuccess'), t('common.success'));
       setSelectedIds((prev) => prev.filter((x) => x !== id));
       fetchBlacklist();
     } catch (err: any) {
-      toast.error(err.message || 'Engel kaldırılamadı', 'Hata');
+      toast.error(err.message || t('common.error'), t('toast.errorTitle'));
     }
   };
 
@@ -251,12 +253,12 @@ export const BlacklistPage: React.FC = () => {
     if (selectedCount === 0) return;
 
     const ok = await toast.confirm({
-      title: selectAllMatching ? 'Tüm Kara Listeyi Temizle' : 'Seçilen Numaraları Kara Listeden Kaldır',
+      title: selectAllMatching ? t('blacklist.confirmClearAllTitle') : t('blacklist.confirmBulkRemoveTitle'),
       message: selectAllMatching
-        ? `Kara listedeki toplam ${total} adet işletmenin tamamı listeden çıkarılacak ve kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`
-        : `Seçilen ${selectedCount} adet işletmenin engeli kaldırılacak ve gelecekteki kampanyalara dahil edilebilecektir. Devam etmek istiyor musunuz?`,
-      confirmText: selectAllMatching ? `Evet, Tümünü (${total}) Kaldır` : `Evet, ${selectedCount} Engeli Kaldır`,
-      cancelText: 'Vazgeç',
+        ? t('blacklist.confirmClearAllMsg', { total })
+        : t('blacklist.confirmBulkRemoveMsg', { count: selectedCount }),
+      confirmText: selectAllMatching ? t('blacklist.unblockAllButton', { total }) : t('blacklist.unblockBulkButton', { count: selectedCount }),
+      cancelText: t('common.cancel'),
       variant: 'warning',
     });
     if (!ok) return;
@@ -272,11 +274,11 @@ export const BlacklistPage: React.FC = () => {
             }
           : { ids: selectedIds }
       );
-      toast.success(`${res.deleted_count} numara başarıyla kara listeden çıkarıldı.`, 'Engeller Kaldırıldı');
+      toast.success(t('blacklist.bulkRemovedSuccess', { count: res.deleted_count }), t('common.success'));
       handleClearSelection();
       fetchBlacklist();
     } catch (err: any) {
-      toast.error(err.message || 'Toplu silme işlemi başarısız oldu', 'Hata');
+      toast.error(err.message || t('common.error'), t('toast.errorTitle'));
     } finally {
       setIsBulkRemoving(false);
     }
@@ -285,13 +287,13 @@ export const BlacklistPage: React.FC = () => {
   const getReasonLabel = (reason: string) => {
     switch (reason) {
       case 'USER_REQUEST':
-        return 'Müşteri Talebi';
+        return t('blacklist.reasonUserRequest');
       case 'BOUNCED':
-        return 'Ulaşılamayan Numara';
+        return t('blacklist.reasonBounced');
       case 'SPAM_COMPLAINT':
-        return 'Şikayet Riski Önleme';
+        return t('blacklist.reasonSpamComplaint');
       case 'MANUAL_BLACKLIST':
-        return 'Manuel Yönetici Engeli';
+        return t('blacklist.reasonManual');
       default:
         return reason;
     }
@@ -306,10 +308,10 @@ export const BlacklistPage: React.FC = () => {
         <div>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-[#EA5455]" />
-            Kara Liste ({total} Numara)
+            {t('blacklist.title')} {t('blacklist.countBadge', { count: total })}
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            İletişim kurulması engellenen işletmeler ve mesajlaşma dışı tutulan profiller
+            {t('blacklist.subtitle')}
           </p>
         </div>
 
@@ -320,7 +322,7 @@ export const BlacklistPage: React.FC = () => {
           className="space-x-1.5 font-bold cursor-pointer shadow-md shadow-[#EA5455]/20"
         >
           <Plus className="w-4 h-4" />
-          <span>Numara Ekle</span>
+          <span>{t('blacklist.addNumber')}</span>
         </Button>
       </div>
 
@@ -335,7 +337,7 @@ export const BlacklistPage: React.FC = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Kara listede ara (İşletme adı veya telefon)..."
+              placeholder={t('blacklist.searchPlaceholder')}
               className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
             />
           </div>
@@ -350,11 +352,11 @@ export const BlacklistPage: React.FC = () => {
                 }}
                 className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
               >
-                <option value="">Tüm Engelleme Nedenleri</option>
-                <option value="USER_REQUEST">Müşteri Talebi</option>
-                <option value="BOUNCED">Ulaşılamayan / Geçersiz Numara</option>
-                <option value="SPAM_COMPLAINT">Şikayet Riski Önleme</option>
-                <option value="MANUAL_BLACKLIST">Manuel Yönetici Engeli</option>
+                <option value="">{t('blacklist.filterAllReasons')}</option>
+                <option value="USER_REQUEST">{t('blacklist.reasonUserRequest')}</option>
+                <option value="BOUNCED">{t('blacklist.reasonBounced')}</option>
+                <option value="SPAM_COMPLAINT">{t('blacklist.reasonSpamComplaint')}</option>
+                <option value="MANUAL_BLACKLIST">{t('blacklist.reasonManual')}</option>
               </select>
             </div>
 
@@ -367,10 +369,10 @@ export const BlacklistPage: React.FC = () => {
                   setReasonFilter('');
                   setPage(1);
                 }}
-                className="text-xs font-bold shrink-0 space-x-1"
+                className="text-xs font-bold shrink-0 space-x-1 cursor-pointer"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>Temizle</span>
+                <span>{t('common.clear')}</span>
               </Button>
             )}
           </div>
@@ -386,8 +388,8 @@ export const BlacklistPage: React.FC = () => {
             </span>
             <span className="text-xs font-extrabold tracking-wide">
               {selectAllMatching
-                ? `Tüm ${total} İşletme / Numara Seçildi`
-                : `${selectedCount} İşletme / Numara Seçildi`}
+                ? t('blacklist.allRecordsSelected', { total })
+                : t('blacklist.selectedToolbarCount', { count: selectedCount })}
             </span>
 
             {/* Quick Button to Select All across all pages if not already done */}
@@ -397,7 +399,7 @@ export const BlacklistPage: React.FC = () => {
                 onClick={handleSelectAllAcrossPages}
                 className="px-2.5 py-1 rounded-lg bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] underline underline-offset-2 transition-all cursor-pointer"
               >
-                Tüm {total} Kaydı Seç
+                {t('blacklist.selectAllRecords', { total })}
               </button>
             )}
           </div>
@@ -413,15 +415,15 @@ export const BlacklistPage: React.FC = () => {
               {isBulkRemoving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Siliniyor...</span>
+                  <span>{t('common.loading')}</span>
                 </>
               ) : (
                 <>
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>
                     {selectAllMatching
-                      ? `Tümünü Sil (${total})`
-                      : `Seçilenleri Sil (${selectedCount})`}
+                      ? t('blacklist.bulkDeleteAllButton', { total })
+                      : t('blacklist.bulkDeleteButton', { count: selectedCount })}
                   </span>
                 </>
               )}
@@ -431,7 +433,7 @@ export const BlacklistPage: React.FC = () => {
               type="button"
               onClick={handleClearSelection}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/90 hover:text-white transition-colors cursor-pointer"
-              title="Seçimi Temizle"
+              title={t('common.clearSelection')}
             >
               <X className="w-4 h-4" />
             </button>
@@ -451,7 +453,7 @@ export const BlacklistPage: React.FC = () => {
                     type="button"
                     onClick={handleToggleSelectAllPage}
                     className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] text-slate-500 dark:text-slate-300 transition-colors cursor-pointer"
-                    title={isAllCurrentPageSelected ? 'Seçimi Kaldır' : 'Bu Sayfadaki Tümünü Seç'}
+                    title={isAllCurrentPageSelected ? t('common.clearSelection') : t('common.selectAll')}
                   >
                     {selectAllMatching || isAllCurrentPageSelected ? (
                       <CheckSquare className="w-4 h-4 text-[#7367F0]" />
@@ -462,11 +464,11 @@ export const BlacklistPage: React.FC = () => {
                     )}
                   </button>
                 </th>
-                <th className="py-3.5 px-4">İşletme Profili</th>
-                <th className="py-3.5 px-4">İletişim</th>
-                <th className="py-3.5 px-4">Engelleme Nedeni</th>
-                <th className="py-3.5 px-4">Eklenme Tarihi</th>
-                <th className="py-3.5 px-4 text-right">İşlemler</th>
+                <th className="py-3.5 px-4">{t('leads.colProfile')}</th>
+                <th className="py-3.5 px-4">{t('leads.colContact')}</th>
+                <th className="py-3.5 px-4">{t('blacklist.blockReasonLabel')}</th>
+                <th className="py-3.5 px-4">{t('common.date')}</th>
+                <th className="py-3.5 px-4 text-right">{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-white/[0.04] text-slate-700 dark:text-slate-300 font-medium">
@@ -474,7 +476,7 @@ export const BlacklistPage: React.FC = () => {
                 <tr>
                   <td colSpan={6} className="py-12 text-center text-slate-400">
                     <Loader2 className="w-6 h-6 animate-spin mx-auto text-[#EA5455] mb-2" />
-                    <span className="text-xs font-bold block">Kara liste yükleniyor...</span>
+                    <span className="text-xs font-bold block">{t('common.loading')}</span>
                   </td>
                 </tr>
               ) : blacklist.length === 0 ? (
@@ -482,7 +484,7 @@ export const BlacklistPage: React.FC = () => {
                   <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
                     <ShieldAlert className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
                     <p className="font-bold text-slate-700 dark:text-slate-200">
-                      {total === 0 ? 'Kara listede kayıtlı numara bulunmuyor.' : 'Arama kriterlerinize uygun kayıt bulunamadı.'}
+                      {total === 0 ? t('blacklist.emptyList') : t('blacklist.emptySearch')}
                     </p>
                   </td>
                 </tr>
@@ -513,14 +515,14 @@ export const BlacklistPage: React.FC = () => {
                         </button>
                       </td>
 
-                      {/* 1. İşletme Profili */}
+                      {/* 1. Business Profile */}
                       <td className="py-3.5 px-4 max-w-[280px]">
                         <div className="font-bold text-slate-800 dark:text-white text-xs truncate">
-                          {entry.lead_name || 'Kayıtlı İşletme Adı Yok'}
+                          {entry.lead_name || t('leads.noPhone')}
                         </div>
                         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                           <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
-                            {entry.lead_category || 'Genel'}
+                            {entry.lead_category || t('common.general')}
                           </span>
                           {(entry.lead_district || entry.lead_city) && (
                             <span className="text-[10px] text-slate-400 font-medium">
@@ -530,7 +532,7 @@ export const BlacklistPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 2. İletişim */}
+                      {/* 2. Contact */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2 font-mono font-bold text-xs text-slate-700 dark:text-slate-200">
                           <Phone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -538,24 +540,24 @@ export const BlacklistPage: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* 3. Engelleme Nedeni */}
+                      {/* 3. Block Reason */}
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         <Badge variant="danger" className="text-[11px] font-bold">
                           {getReasonLabel(entry.reason)}
                         </Badge>
                       </td>
 
-                      {/* 4. Eklenme Tarihi */}
+                      {/* 4. Date */}
                       <td className="py-3.5 px-4 whitespace-nowrap text-slate-500 dark:text-[#7E7F96] font-sans">
-                        {new Date(entry.created_at).toLocaleString('tr-TR')}
+                        {new Date(entry.created_at).toLocaleString()}
                       </td>
 
-                      {/* 5. İşlemler */}
+                      {/* 5. Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <button
                           onClick={() => handleRemove(entry.id, entry.phone_e164, entry.lead_name)}
                           className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-[#EA5455]/10 transition-colors cursor-pointer"
-                          title="Kara Listeden Çıkar"
+                          title={t('blacklist.confirmRemoveTitle')}
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -572,13 +574,13 @@ export const BlacklistPage: React.FC = () => {
         {total > 0 && (
           <div className="p-4 border-t border-slate-100 dark:border-white/[0.06] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500 dark:text-[#7E7F96]">
             <span>
-              Toplam <strong>{total}</strong> kayıttan <strong>{(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)}</strong> arası gösteriliyor
+              {t('common.showing')} <strong>{total}</strong> {t('common.entries')} <strong>{(page - 1) * pageSize + 1} - {Math.min(page * pageSize, total)}</strong>
             </span>
 
             <div className="flex items-center space-x-3">
               {/* Page size selector */}
               <div className="flex items-center space-x-1.5">
-                <span className="text-[11px]">Sayfa Başına:</span>
+                <span className="text-[11px]">{t('common.perPage')}</span>
                 <select
                   value={pageSize}
                   onChange={(e) => {
@@ -603,10 +605,10 @@ export const BlacklistPage: React.FC = () => {
                   onClick={() => setPage((p) => Math.max(p - 1, 1))}
                   className="cursor-pointer"
                 >
-                  Önceki
+                  {t('common.previous')}
                 </Button>
                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                  Sayfa {page} / {totalPages}
+                  {t('common.page')} {page} / {totalPages}
                 </span>
                 <Button
                   variant="outline"
@@ -615,7 +617,7 @@ export const BlacklistPage: React.FC = () => {
                   onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                   className="cursor-pointer"
                 >
-                  Sonraki
+                  {t('common.next')}
                 </Button>
               </div>
             </div>
@@ -642,10 +644,10 @@ export const BlacklistPage: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
-                    Kara Listeye Numara Ekle
+                    {t('blacklist.modalTitle')}
                   </h3>
                   <p className="text-[11px] text-slate-400 dark:text-[#7E7F96]">
-                    Kara listeye almak istediğiniz müşteri adayını seçin
+                    {t('blacklist.modalSubtitle')}
                   </p>
                 </div>
               </div>
@@ -663,14 +665,14 @@ export const BlacklistPage: React.FC = () => {
               {/* Mandatory Lead Search Field */}
               <div ref={searchContainerRef} className="relative">
                 <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1 flex items-center justify-between">
-                  <span>Müşteri Adayı Ara *</span>
+                  <span>{t('blacklist.leadSearchLabel')}</span>
                   {selectedLead && (
                     <button
                       type="button"
                       onClick={handleClearSelectedLead}
                       className="text-[10px] text-[#7367F0] hover:underline font-bold cursor-pointer"
                     >
-                      Değiştir
+                      {t('blacklist.changeSelection')}
                     </button>
                   )}
                 </label>
@@ -691,7 +693,7 @@ export const BlacklistPage: React.FC = () => {
                       onFocus={() => {
                         if (searchResults.length > 0) setShowSuggestions(true);
                       }}
-                      placeholder="İşletme adı veya anahtar kelime..."
+                      placeholder={t('blacklist.leadSearchPlaceholder')}
                       className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
                       autoFocus
                     />
@@ -706,7 +708,7 @@ export const BlacklistPage: React.FC = () => {
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-[#EA5455] font-mono font-bold">
                         <Phone className="w-3 h-3" />
-                        <span>{selectedLead.phone_e164 || selectedLead.phone || 'Numara Yok'}</span>
+                        <span>{selectedLead.phone_e164 || selectedLead.phone || t('leads.noPhone')}</span>
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-slate-400">
                         {selectedLead.category && <span>{selectedLead.category}</span>}
@@ -718,14 +720,14 @@ export const BlacklistPage: React.FC = () => {
 
                     <div className="flex flex-col items-end gap-1.5">
                       <Badge variant="success" className="text-[9px] font-bold">
-                        Seçildi
+                        {t('common.selected')}
                       </Badge>
                       <button
                         type="button"
                         onClick={handleClearSelectedLead}
                         className="text-[10px] text-[#7367F0] hover:underline font-bold cursor-pointer"
                       >
-                        Değiştir
+                        {t('blacklist.changeSelection')}
                       </button>
                     </div>
                   </div>
@@ -758,10 +760,10 @@ export const BlacklistPage: React.FC = () => {
 
                         <div className="text-right">
                           <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 block">
-                            {lead.phone_e164 || lead.phone || 'Tel yok'}
+                            {lead.phone_e164 || lead.phone || t('leads.noPhone')}
                           </span>
                           <span className="text-[9px] text-[#7367F0] group-hover:underline font-bold">
-                            Seç ↵
+                            {t('common.selected')} ↵
                           </span>
                         </div>
                       </button>
@@ -773,17 +775,17 @@ export const BlacklistPage: React.FC = () => {
               {/* Reason Selection */}
               <div>
                 <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">
-                  Engelleme Nedeni
+                  {t('blacklist.blockReasonLabel')}
                 </label>
                 <select
                   value={newReason}
                   onChange={(e) => setNewReason(e.target.value)}
-                  className="w-full p-2.5 rounded-lg vuexy-input text-xs font-bold"
+                  className="w-full p-2.5 rounded-lg vuexy-input text-xs font-bold cursor-pointer"
                 >
-                  <option value="USER_REQUEST">Müşteri Talebi</option>
-                  <option value="BOUNCED">Ulaşılamayan / Geçersiz Numara</option>
-                  <option value="SPAM_COMPLAINT">Şikayet Riski Önleme</option>
-                  <option value="MANUAL_BLACKLIST">Manuel Yönetici Engeli</option>
+                  <option value="USER_REQUEST">{t('blacklist.reasonUserRequest')}</option>
+                  <option value="BOUNCED">{t('blacklist.reasonBounced')}</option>
+                  <option value="SPAM_COMPLAINT">{t('blacklist.reasonSpamComplaint')}</option>
+                  <option value="MANUAL_BLACKLIST">{t('blacklist.reasonManual')}</option>
                 </select>
               </div>
             </div>
@@ -797,7 +799,7 @@ export const BlacklistPage: React.FC = () => {
                 className="w-1/2 font-bold cursor-pointer"
                 disabled={submitting}
               >
-                İptal
+                {t('common.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -808,12 +810,12 @@ export const BlacklistPage: React.FC = () => {
                 {submitting ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Kaydediliyor...</span>
+                    <span>{t('common.loading')}</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-3.5 h-3.5" />
-                    <span>Kaydet</span>
+                    <span>{t('common.save')}</span>
                   </>
                 )}
               </Button>

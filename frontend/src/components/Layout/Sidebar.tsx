@@ -13,6 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { Badge } from '../ui/badge';
+import { useI18n } from '../../context/I18nContext';
 
 interface SidebarProps {
   activeTab: string;
@@ -33,27 +34,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile = false,
   onCloseMobile = () => {},
 }) => {
+  const { t } = useI18n();
+
   const sections = [
     {
-      title: "UYGULAMALAR & CRM",
+      title: t('nav.leads').toUpperCase() + " & CRM",
       items: [
-        { id: 'dashboard', label: 'Genel Bakış (Analytics)', icon: LayoutDashboard, badge: null },
-        { id: 'lead-finder', label: 'İşletme Ara', icon: Search, badge: 'Live', badgeVariant: 'success' as const },
-        { id: 'leads', label: 'Müşteri Adayları', icon: Users, badge: totalLeadsCount > 0 ? `${totalLeadsCount}` : null, badgeVariant: 'primary' as const },
+        { id: 'dashboard', label: t('nav.dashboard'), icon: LayoutDashboard, badge: null },
+        { id: 'lead-finder', label: t('nav.leadFinder'), icon: Search, badge: 'Live', badgeVariant: 'success' as const },
+        { id: 'leads', label: t('nav.leads'), icon: Users, badge: totalLeadsCount > 0 ? `${totalLeadsCount}` : null, badgeVariant: 'primary' as const },
       ]
     },
     {
-      title: "OTOMASYON & OUTREACH",
+      title: "OUTREACH & AUTOMATION",
       items: [
-        { id: 'campaigns', label: 'Kampanyalar & Spintax', icon: Send, badge: activeCampaignsCount > 0 ? `${activeCampaignsCount} Aktif` : null, badgeVariant: 'warning' as const },
-        { id: 'whatsapp', label: 'WhatsApp & Anti-Ban Hub', icon: Smartphone, badge: null },
-        { id: 'blacklist', label: 'Kara Liste', icon: ShieldAlert, badge: null },
+        { id: 'campaigns', label: t('nav.campaigns'), icon: Send, badge: activeCampaignsCount > 0 ? `${activeCampaignsCount}` : null, badgeVariant: 'warning' as const },
+        { id: 'whatsapp', label: t('nav.whatsappHub'), icon: Smartphone, badge: null },
+        { id: 'blacklist', label: t('nav.blacklist'), icon: ShieldAlert, badge: null },
       ]
     },
     {
-      title: "YAPILANDIRMA",
+      title: "CONFIGURATION",
       items: [
-        { id: 'settings', label: 'Ayarlar', icon: Settings, badge: null },
+        { id: 'settings', label: t('nav.settings'), icon: Settings, badge: null },
       ]
     }
   ];
@@ -88,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <button
           type="button"
           onClick={onCloseMobile}
-          className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05]"
+          className="lg:hidden p-2 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
@@ -99,7 +102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex items-center space-x-2">
           <span className={`w-2.5 h-2.5 rounded-full ${isWsConnected ? 'bg-[#28C76F] live-dot' : 'bg-[#EA5455]'}`} />
           <span className="text-xs font-bold text-slate-600 dark:text-slate-300 truncate">
-            {isWsConnected ? 'Canlı Soket Aktif' : 'Bağlantı Bekleniyor'}
+            {isWsConnected ? t('nav.liveSync') : t('nav.connecting')}
           </span>
         </div>
         <Radio className={`w-3.5 h-3.5 shrink-0 ${isWsConnected ? 'text-[#28C76F]' : 'text-slate-400'}`} />
@@ -119,7 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <button
                   key={item.id}
                   onClick={() => handleTabClick(item.id)}
-                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 group ${
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg text-xs font-semibold transition-all duration-150 group cursor-pointer ${
                     isActive
                       ? 'bg-gradient-to-r from-[#7367F0] to-[#867BFF] text-white shadow-md shadow-[#7367F0]/40 font-bold'
                       : 'text-slate-600 dark:text-[#DBD7EC] hover:bg-slate-100 dark:hover:bg-white/[0.04] hover:text-slate-900 dark:hover:text-white'
@@ -155,14 +158,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between mb-1">
             <span className="text-[11px] font-bold text-[#28C76F] flex items-center gap-1">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Anti-Ban Kalkanı
+              Anti-Ban Shield
             </span>
             <Badge variant="success" className="text-[9px] px-1.5 py-0">
-              Aktif
+              {t('common.active')}
             </Badge>
           </div>
           <p className="text-[10px] text-slate-500 dark:text-[#7E7F96] leading-tight font-medium">
-            Gaussian Jitter & Spintax koruması devrede.
+            Gaussian Jitter & Spintax active.
           </p>
         </div>
       </div>

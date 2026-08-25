@@ -55,6 +55,11 @@ This document defines the core architecture, non-negotiable rules, invariants, a
   - Search inputs must use debouncing (e.g. 300ms) to avoid request storms and race conditions.
   - File exports must check `res.ok` and revoke blob URLs (`window.URL.revokeObjectURL`).
   - Base URLs must respect `import.meta.env.VITE_API_URL`.
+- **Centralized Localization (i18n) Invariant**:
+  - All user-facing strings, button labels, table headers, placeholders, badges, modals, and toasts MUST be resolved via `useI18n()` (`t('domain.key')`).
+  - Hardcoded natural language strings in JSX/TSX components are strictly forbidden.
+  - Both English (`en`) (default) and Turkish (`tr`) dictionaries in `frontend/src/locales/` must always be maintained in full synchronization.
+  - Language selection must persist in `localStorage` (`scoutify_lang`).
 
 ---
 

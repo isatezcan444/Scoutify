@@ -1,7 +1,9 @@
+import React from 'react';
 import { Search, Zap, Sun, Moon, Bell, Menu, Settings } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Badge } from '../ui/badge';
 import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../context/I18nContext';
+import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 
 interface TopHeaderProps {
   title: string;
@@ -21,6 +23,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   onOpenSettings,
 }) => {
   const { theme, toggleTheme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <header className="sticky top-0 z-30 px-3.5 sm:px-6 lg:px-8 pt-3.5 sm:pt-6 pb-2 select-none">
@@ -31,8 +34,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <button
               type="button"
               onClick={onToggleMobileMenu}
-              className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors"
-              title="Menüyü Aç"
+              className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
+              title="Menu"
             >
               <Menu className="w-5 h-5" />
             </button>
@@ -56,10 +59,10 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <Button
               onClick={onOpenQuickScrape}
               size="sm"
-              className="space-x-1.5 font-bold shadow-sm text-xs hidden sm:inline-flex h-9 px-3"
+              className="space-x-1.5 font-bold shadow-sm text-xs hidden sm:inline-flex h-9 px-3 cursor-pointer"
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Hızlı Ara</span>
+              <span>{t('header.quickSearch')}</span>
             </Button>
           )}
 
@@ -68,19 +71,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               onClick={onOpenQuickTest}
               variant="outline"
               size="sm"
-              className="space-x-1.5 font-semibold text-slate-700 dark:text-slate-200 text-xs hidden md:inline-flex h-9 px-3"
+              className="space-x-1.5 font-semibold text-slate-700 dark:text-slate-200 text-xs hidden md:inline-flex h-9 px-3 cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-[#FF9F43]" />
-              <span>Test</span>
+              <span>{t('header.test')}</span>
             </Button>
           )}
+
+          {/* Language Switcher (EN / TR) */}
+          <LanguageSwitcher />
 
           {/* Theme Switcher Toggle Button */}
           <button
             type="button"
             onClick={toggleTheme}
-            title={theme === 'light' ? 'Koyu Moda Geç' : 'Aydınlık Moda Geç'}
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-all duration-150 active:scale-95"
+            title={theme === 'light' ? t('header.darkMode') : t('header.lightMode')}
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-all duration-150 active:scale-95 cursor-pointer"
           >
             {theme === 'light' ? (
               <Moon className="w-4 h-4 sm:w-4.5 sm:h-4.5 text-[#7367F0]" />
@@ -92,7 +98,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           {/* Notification Bell */}
           <button
             type="button"
-            className="relative p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors"
+            className="relative p-2 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
+            title={t('header.notifications')}
           >
             <Bell className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#EA5455]" />
@@ -103,8 +110,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             <button
               type="button"
               onClick={onOpenSettings}
-              title="Ayarlar"
-              className="p-2 rounded-lg text-slate-500 hover:text-[#7367F0] dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors"
+              title={t('header.settings')}
+              className="p-2 rounded-lg text-slate-500 hover:text-[#7367F0] dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
             >
               <Settings className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
             </button>
@@ -121,8 +128,8 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-[#28C76F] ring-2 ring-white dark:ring-[#2F3349]" />
             </div>
             <div className="hidden xl:block text-left">
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">Admin User</p>
-              <p className="text-[10px] text-slate-400 dark:text-[#7E7F96] font-semibold">Yönetici</p>
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-tight">{t('header.adminUser')}</p>
+              <p className="text-[10px] text-slate-400 dark:text-[#7E7F96] font-semibold">{t('header.administrator')}</p>
             </div>
           </div>
         </div>
