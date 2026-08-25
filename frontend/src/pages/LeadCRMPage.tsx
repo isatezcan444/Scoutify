@@ -645,36 +645,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         </div>
       )}
 
-      {/* Gmail-Style "Select All Across Pages" Notice Banner */}
-      {selectedCount > 0 && total > leads.length && (
-        <div className="p-3 rounded-xl bg-indigo-50/80 dark:bg-[#7367F0]/10 border border-[#7367F0]/30 text-xs text-center text-slate-700 dark:text-slate-200 animate-fade-in flex items-center justify-center gap-2">
-          {!selectAllMatching ? (
-            <>
-              <span>Sayfadaki <strong>{selectedCount}</strong> müşteri adayı seçildi.</span>
-              <button
-                type="button"
-                onClick={handleSelectAllAcrossPages}
-                className="font-extrabold text-[#7367F0] dark:text-[#A59DF8] hover:underline cursor-pointer flex items-center gap-1"
-              >
-                <span>Filtrelenen tüm {total} müşteri adayını seçmek için tıklayın</span>
-                <Check className="w-3.5 h-3.5" />
-              </button>
-            </>
-          ) : (
-            <>
-              <span>✅ Filtrelenen <strong>TÜM {total}</strong> müşteri adayı seçildi.</span>
-              <button
-                type="button"
-                onClick={handleClearSelection}
-                className="font-bold text-slate-400 hover:text-[#EA5455] hover:underline cursor-pointer ml-2"
-              >
-                Seçimi temizle
-              </button>
-            </>
-          )}
-        </div>
-      )}
-
       {/* Leads Table Card */}
       <Card className="overflow-hidden shadow-sm">
         <div className="overflow-x-auto min-w-full">
