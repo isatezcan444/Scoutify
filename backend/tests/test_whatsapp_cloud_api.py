@@ -23,49 +23,55 @@ from backend.app.services.whatsapp_sender import CloudApiSender
 
 @pytest.mark.asyncio
 async def test_cloud_webhook_verification_success():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get(
-            "/api/v1/whatsapp/cloud-webhook",
-            params={
-                "hub.mode": "subscribe",
-                "hub.verify_token": settings.WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN,
-                "hub.challenge": "1158201444",
-            },
-        )
-        assert res.status_code == 200
-        assert res.text == "1158201444"
+    test_verify_token = "test-webhook-verify-token-secret"
+    with patch.object(settings, "WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN", test_verify_token):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/v1/whatsapp/cloud-webhook",
+                params={
+                    "hub.mode": "subscribe",
+                    "hub.verify_token": test_verify_token,
+                    "hub.challenge": "1158201444",
+                },
+            )
+            assert res.status_code == 200
+            assert res.text == "1158201444"
 
 
 @pytest.mark.asyncio
 async def test_cloud_webhook_verification_invalid_token():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get(
-            "/api/v1/whatsapp/cloud-webhook",
-            params={
-                "hub.mode": "subscribe",
-                "hub.verify_token": "wrong-verify-token",
-                "hub.challenge": "1158201444",
-            },
-        )
-        assert res.status_code == 403
-        assert "Invalid verify token" in res.json()["detail"]
+    test_verify_token = "test-webhook-verify-token-secret"
+    with patch.object(settings, "WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN", test_verify_token):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/v1/whatsapp/cloud-webhook",
+                params={
+                    "hub.mode": "subscribe",
+                    "hub.verify_token": "wrong-verify-token",
+                    "hub.challenge": "1158201444",
+                },
+            )
+            assert res.status_code == 403
+            assert "Invalid verify token" in res.json()["detail"]
 
 
 @pytest.mark.asyncio
 async def test_cloud_webhook_verification_invalid_mode():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.get(
-            "/api/v1/whatsapp/cloud-webhook",
-            params={
-                "hub.mode": "unsubscribe",
-                "hub.verify_token": settings.WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN,
-                "hub.challenge": "1158201444",
-            },
-        )
-        assert res.status_code == 403
+    test_verify_token = "test-webhook-verify-token-secret"
+    with patch.object(settings, "WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN", test_verify_token):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.get(
+                "/api/v1/whatsapp/cloud-webhook",
+                params={
+                    "hub.mode": "unsubscribe",
+                    "hub.verify_token": test_verify_token,
+                    "hub.challenge": "1158201444",
+                },
+            )
+            assert res.status_code == 403
 
 
 @pytest.mark.asyncio

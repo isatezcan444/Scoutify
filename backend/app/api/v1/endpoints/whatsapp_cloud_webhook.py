@@ -57,7 +57,7 @@ async def verify_webhook(
     """
     configured_token = settings.WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN
 
-    if hub_mode == "subscribe" and hub_verify_token == configured_token and hub_challenge:
+    if configured_token and hub_mode == "subscribe" and hub_verify_token == configured_token and hub_challenge:
         logger.info("[WhatsAppCloudWebhook] Webhook successfully verified with Meta.")
         # Meta expects the raw integer/string challenge in plain text
         return Response(content=str(hub_challenge), media_type="text/plain", status_code=200)

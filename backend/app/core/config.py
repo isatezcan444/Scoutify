@@ -89,7 +89,7 @@ class Settings(BaseSettings):
         description="Base URL for Meta Graph API calls.",
     )
     WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN: str = Field(
-        default="scoutify-cloud-verify-token",
+        default="",
         description="Custom verification token configured in Meta App Dashboard for webhook handshake.",
     )
     WHATSAPP_CLOUD_APP_SECRET: str = Field(
