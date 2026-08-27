@@ -426,25 +426,68 @@ export class ApiClient {
   }
 }
 
-export function createWebSocket(onMessage: (data: any) => void) {
-  const ws = new WebSocket(WS_URL);
-  
-  ws.onopen = () => {
-    console.log('[Scoutify WS] Connected to realtime event stream');
-  };
+export interface ManagedWebSocket {
+  close: () => void;
+  readonly socket: WebSocket | null;
+}
 
-  ws.onmessage = (event) => {
+export function createWebSocket(
+  onMessage: (data: any) => void,
+  onStatusChange?: (connected: boolean) => void
+): ManagedWebSocket {
+  let ws: WebSocket | null = null;
+  let isManuallyClosed = false;
+  let reconnectTimeout: any = null;
+
+  function connect() {
+    if (isManuallyClosed) return;
     try {
-      const data = JSON.parse(event.data);
-      onMessage(data);
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('[Scoutify WS] Connected to realtime event stream');
+        onStatusChange?.(true);
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          onMessage(data);
+        } catch (e) {
+          // ignore non-json ping/pong
+        }
+      };
+
+      ws.onclose = () => {
+        onStatusChange?.(false);
+        if (!isManuallyClosed) {
+          reconnectTimeout = setTimeout(() => {
+            connect();
+          }, 3000);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.warn('[Scoutify WS] Error:', err);
+        ws?.close();
+      };
     } catch (e) {
-      // ignore plain text ping/pong
+      if (!isManuallyClosed) {
+        reconnectTimeout = setTimeout(connect, 3000);
+      }
     }
-  };
+  }
 
-  ws.onerror = (err) => {
-    console.warn('[Scoutify WS] Error:', err);
-  };
+  connect();
 
-  return ws;
+  return {
+    close: () => {
+      isManuallyClosed = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
+    },
+    get socket() {
+      return ws;
+    },
+  };
 }

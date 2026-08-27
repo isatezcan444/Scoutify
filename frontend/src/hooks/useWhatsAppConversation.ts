@@ -57,9 +57,10 @@ export function useWhatsAppConversation({
       // Handle incoming message
       if (eventData.event === 'inbound_reply') {
         const matchesLead = leadId && eventData.lead_id === leadId;
-        const matchesConv = conversation && (eventData.conversation_id === conversation.id || eventData.lead_id === conversation.lead_id);
+        const matchesConvId = conversationId && eventData.conversation_id === conversationId;
+        const matchesCurrentConv = conversation && (eventData.conversation_id === conversation.id || eventData.lead_id === conversation.lead_id);
 
-        if (matchesLead || matchesConv) {
+        if (matchesLead || matchesConvId || matchesCurrentConv) {
           setConversation((prev) => {
             if (!prev) return prev;
 

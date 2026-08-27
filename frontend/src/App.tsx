@@ -34,35 +34,39 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     refreshStats();
 
-    // Setup Realtime WebSocket connection
-    let ws: WebSocket | null = null;
+    // Setup Realtime WebSocket connection with automatic reconnect
+    let ws: { close: () => void } | null = null;
     try {
-      ws = createWebSocket((eventData) => {
-        setIsWsConnected(true);
-        // Broadcast to hooks/subscribers
-        window.dispatchEvent(new CustomEvent('scoutify:ws_event', { detail: eventData }));
+      ws = createWebSocket(
+        (eventData) => {
+          // Broadcast to hooks/subscribers
+          window.dispatchEvent(new CustomEvent('scoutify:ws_event', { detail: eventData }));
 
-        // Handle Inbound Reply Event
-        if (eventData.event === 'inbound_reply') {
-          toast.reply(
-            `${eventData.lead_name} (${eventData.phone}): "${eventData.message}"`,
-            t('toast.newReplyTitle')
-          );
-          refreshStats();
-        } else if (eventData.event === 'message_sent') {
-          toast.success(
-            `${eventData.lead_name} (${eventData.phone})`,
-            t('toast.messageSentTitle')
-          );
-          refreshStats();
-        } else if (eventData.event === 'scraper_completed') {
-          toast.info(
-            t('toast.scraperCompletedMsg', { found: eventData.total_found, leads: eventData.total_new_leads }),
-            t('toast.scraperCompletedTitle')
-          );
-          refreshStats();
+          // Handle Inbound Reply Event
+          if (eventData.event === 'inbound_reply') {
+            toast.reply(
+              `${eventData.lead_name} (${eventData.phone}): "${eventData.message}"`,
+              t('toast.newReplyTitle')
+            );
+            refreshStats();
+          } else if (eventData.event === 'message_sent') {
+            toast.success(
+              `${eventData.lead_name} (${eventData.phone})`,
+              t('toast.messageSentTitle')
+            );
+            refreshStats();
+          } else if (eventData.event === 'scraper_completed') {
+            toast.info(
+              t('toast.scraperCompletedMsg', { found: eventData.total_found, leads: eventData.total_new_leads }),
+              t('toast.scraperCompletedTitle')
+            );
+            refreshStats();
+          }
+        },
+        (connected) => {
+          setIsWsConnected(connected);
         }
-      });
+      );
     } catch (e) {
       console.warn('WS Init failed:', e);
     }
