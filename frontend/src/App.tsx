@@ -134,7 +134,6 @@ const AppContent: React.FC = () => {
           title={getPageTitle()}
           subtitle={getPageSubtitle()}
           onOpenQuickScrape={() => setActiveTab('lead-finder')}
-          onOpenQuickTest={() => setActiveTab('whatsapp')}
           onOpenSettings={() => setActiveTab('settings')}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />

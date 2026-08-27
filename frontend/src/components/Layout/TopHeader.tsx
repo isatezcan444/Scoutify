@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Zap, Sun, Moon, Bell, Menu, Settings } from 'lucide-react';
+import { Search, Sun, Moon, Bell, Menu, Settings } from 'lucide-react';
 import { Button } from '../ui/button';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../context/I18nContext';
@@ -9,7 +9,6 @@ interface TopHeaderProps {
   title: string;
   subtitle?: string;
   onOpenQuickScrape?: () => void;
-  onOpenQuickTest?: () => void;
   onToggleMobileMenu?: () => void;
   onOpenSettings?: () => void;
 }
@@ -18,7 +17,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   title,
   subtitle,
   onOpenQuickScrape,
-  onOpenQuickTest,
   onToggleMobileMenu,
   onOpenSettings,
 }) => {
@@ -63,18 +61,6 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             >
               <Search className="w-3.5 h-3.5" />
               <span>{t('header.quickSearch')}</span>
-            </Button>
-          )}
-
-          {onOpenQuickTest && (
-            <Button
-              onClick={onOpenQuickTest}
-              variant="outline"
-              size="sm"
-              className="space-x-1.5 font-semibold text-slate-700 dark:text-slate-200 text-xs hidden md:inline-flex h-9 px-3 cursor-pointer"
-            >
-              <Zap className="w-3.5 h-3.5 text-[#FF9F43]" />
-              <span>{t('header.test')}</span>
             </Button>
           )}
 
