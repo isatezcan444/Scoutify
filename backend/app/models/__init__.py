@@ -8,6 +8,8 @@ from backend.app.models.raw_candidate import RawCandidate
 from backend.app.models.discovery_run import DiscoveryRun, DiscoveryRunStatus
 
 from backend.app.models.system_settings import SystemSetting
+from backend.app.models.conversation import Conversation, ConversationStatus
+from backend.app.models.message import Message, MessageDirection, MessageType, ConversationMessageStatus
 
 __all__ = [
     "Base",
@@ -29,4 +31,10 @@ __all__ = [
     "DiscoveryRun",
     "DiscoveryRunStatus",
     "SystemSetting",
+    "Conversation",
+    "ConversationStatus",
+    "Message",
+    "MessageDirection",
+    "MessageType",
+    "ConversationMessageStatus",
 ]

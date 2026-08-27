@@ -1,6 +1,7 @@
 import enum
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Text, Enum, JSON, Index
+from sqlalchemy.orm import relationship
 from backend.app.core.database import Base
 
 
@@ -97,6 +98,9 @@ class Lead(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     last_contacted_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    conversations = relationship("Conversation", back_populates="lead", cascade="all, delete-orphan", passive_deletes=True)
 
     __table_args__ = (
         Index("idx_lead_city_category", "city", "category"),

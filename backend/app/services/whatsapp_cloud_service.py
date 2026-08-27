@@ -18,6 +18,13 @@ from sqlalchemy import select
 from backend.app.models.lead import Lead, LeadStatus
 from backend.app.models.blacklist import Blacklist
 from backend.app.models.message_log import MessageLog, MessageStatus
+from backend.app.models.conversation import Conversation, ConversationStatus
+from backend.app.models.message import (
+    Message,
+    MessageDirection,
+    MessageType,
+    ConversationMessageStatus,
+)
 from backend.app.schemas.whatsapp_cloud import ParsedIncomingMessage, ParsedStatusUpdate
 from backend.app.services.phone_service import PhoneService
 from backend.app.api.v1.websocket import ws_manager
@@ -43,6 +50,21 @@ STATUS_PRECEDENCE = {
     MessageStatus.CANCELLED: 99,
 }
 
+CONVERSATION_STATUS_PRECEDENCE = {
+    ConversationMessageStatus.RECEIVED: 1,
+    ConversationMessageStatus.SENT: 2,
+    ConversationMessageStatus.DELIVERED: 3,
+    ConversationMessageStatus.READ: 4,
+    ConversationMessageStatus.FAILED: 99,
+}
+
+META_TO_CONV_STATUS = {
+    "sent": ConversationMessageStatus.SENT,
+    "delivered": ConversationMessageStatus.DELIVERED,
+    "read": ConversationMessageStatus.READ,
+    "failed": ConversationMessageStatus.FAILED,
+}
+
 
 class WhatsAppCloudService:
     """Application service for Meta WhatsApp Cloud events."""
@@ -54,7 +76,7 @@ class WhatsAppCloudService:
     ) -> Dict[str, Any]:
         """
         Processes an incoming WhatsApp message received via Meta Webhook.
-        Idempotent: Duplicate message IDs will not create duplicate blacklist entries or corrupted notes.
+        Idempotent: Duplicate message IDs will not create duplicate Message/Conversation entries or corrupted notes.
         """
         phone_data = PhoneService.normalize_to_e164(msg.sender_phone)
         e164 = phone_data["e164"] if phone_data else (
@@ -66,25 +88,74 @@ class WhatsAppCloudService:
             f"id={msg.message_id}, sender={e164}, len={len(msg.text)}"
         )
 
-        # 1. Correlate with Lead
+        # 1. Idempotency Check on Message Entity
+        existing_msg_stmt = select(Message).where(Message.wa_message_id == msg.message_id)
+        existing_msg = (await db.execute(existing_msg_stmt)).scalar_one_or_none()
+        if existing_msg:
+            logger.info(f"[WhatsAppCloudService] Idempotent skip: Message {msg.message_id} already persisted.")
+            return {
+                "status": "idempotent_duplicate",
+                "phone": e164,
+                "message_id": msg.message_id,
+            }
+
+        # 2. Correlate with Lead
         lead_stmt = select(Lead).where(
             (Lead.phone_e164 == e164) | (Lead.phone == e164)
         )
         lead_res = await db.execute(lead_stmt)
         lead = lead_res.scalar_one_or_none()
 
-        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
-        new_note_entry = f"WhatsApp Yanıtı ({ts_str}): {msg.text}"
+        conversation_id = None
 
         if lead:
-            # Avoid duplicate note appending if identical webhook received
+            # 3. Find or Create Active Conversation for Lead
+            conv_stmt = select(Conversation).where(
+                Conversation.lead_id == lead.id,
+                Conversation.channel == "WHATSAPP",
+                Conversation.status == ConversationStatus.ACTIVE,
+            ).order_by(Conversation.id.desc()).limit(1)
+            conv_res = await db.execute(conv_stmt)
+            conversation = conv_res.scalar_one_or_none()
+
+            if not conversation:
+                conversation = Conversation(
+                    lead_id=lead.id,
+                    channel="WHATSAPP",
+                    status=ConversationStatus.ACTIVE,
+                    last_message_at=msg.timestamp,
+                )
+                db.add(conversation)
+                await db.flush()
+            else:
+                conversation.last_message_at = msg.timestamp
+
+            conversation_id = conversation.id
+
+            # 4. Insert Inbound Message Entity
+            message_entity = Message(
+                conversation_id=conversation.id,
+                direction=MessageDirection.INBOUND,
+                message_type=MessageType.TEXT,
+                body=msg.text,
+                wa_message_id=msg.message_id,
+                sender_phone=e164,
+                recipient_phone="BUSINESS",
+                status=ConversationMessageStatus.RECEIVED,
+                external_timestamp=msg.timestamp,
+            )
+            db.add(message_entity)
+
+            # Backward-compatible notes update
+            ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
+            new_note_entry = f"WhatsApp Yanıtı ({ts_str}): {msg.text}"
             if not lead.notes or new_note_entry not in lead.notes:
                 lead.notes = f"{lead.notes}\n{new_note_entry}" if lead.notes else new_note_entry
 
             if lead.status not in (LeadStatus.INTERESTED, LeadStatus.UNSUBSCRIBED):
                 lead.status = LeadStatus.REPLIED
 
-        # 2. Correlate with most recent MessageLog for this phone
+        # 5. Correlate with most recent MessageLog for this phone (Backward Compatibility)
         log_stmt = (
             select(MessageLog)
             .where(MessageLog.target_phone == e164)
@@ -101,10 +172,9 @@ class WhatsAppCloudService:
             if msg_log.status != MessageStatus.READ:
                 msg_log.status = MessageStatus.REPLIED
 
-        # 3. Check Opt-Out Keyword
+        # 6. Check Opt-Out Keyword
         is_opt_out = bool(OPT_OUT_PATTERN.search(msg.text))
         if is_opt_out:
-            # Check if already blacklisted
             bl_stmt = select(Blacklist).where(Blacklist.phone_e164 == e164)
             bl_res = await db.execute(bl_stmt)
             existing_bl = bl_res.scalar_one_or_none()
@@ -123,14 +193,19 @@ class WhatsAppCloudService:
 
         await db.commit()
 
-        # 4. Broadcast Realtime WebSocket Event
+        # 7. Broadcast Realtime WebSocket Event (Fully Backward Compatible)
         await ws_manager.broadcast({
             "event": "inbound_reply",
             "provider": "meta_cloud",
             "message_id": msg.message_id,
+            "conversation_id": conversation_id,
+            "lead_id": lead.id if lead else None,
+            "lead_name": lead.name if lead else (msg.sender_name or "Bilinmeyen"),
             "phone": e164,
             "sender_name": msg.sender_name or (lead.name if lead else "Bilinmeyen"),
             "message": msg.text,
+            "direction": "INBOUND",
+            "message_type": "TEXT",
             "is_opt_out": is_opt_out,
             "timestamp": msg.timestamp.isoformat(),
         })
@@ -139,6 +214,7 @@ class WhatsAppCloudService:
             "status": "processed",
             "phone": e164,
             "lead_id": lead.id if lead else None,
+            "conversation_id": conversation_id,
             "is_opt_out": is_opt_out,
         }
 
@@ -148,7 +224,7 @@ class WhatsAppCloudService:
         status: ParsedStatusUpdate,
     ) -> Dict[str, Any]:
         """
-        Updates MessageLog status based on Meta Cloud API webhook status update.
+        Updates MessageLog and Message statuses based on Meta Cloud API webhook status update.
         Enforces monotonic status progression (e.g. will not downgrade READ to DELIVERED).
         """
         logger.info(
@@ -156,6 +232,7 @@ class WhatsAppCloudService:
             f"message_id={status.message_id}, status={status.status.value}, recipient={status.recipient_phone}"
         )
 
+        # 1. Update Legacy MessageLog
         stmt = (
             select(MessageLog)
             .where(MessageLog.wa_message_id == status.message_id)
@@ -164,43 +241,45 @@ class WhatsAppCloudService:
         res = await db.execute(stmt)
         msg_log = res.scalars().first()
 
-        if not msg_log:
-            logger.debug(
-                f"[WhatsAppCloudService] MessageLog not found for wa_message_id={status.message_id} "
-                f"(might be external or untracked message)."
-            )
-            return {"status": "untracked_message", "message_id": status.message_id}
-
-        current_rank = STATUS_PRECEDENCE.get(msg_log.status, 0)
+        current_rank = STATUS_PRECEDENCE.get(msg_log.status, 0) if msg_log else 0
         new_rank = STATUS_PRECEDENCE.get(status.status, 0)
 
-        # Monotonic status protection: Do not regress status unless it's a terminal error
-        if status.status != MessageStatus.FAILED and new_rank < current_rank:
-            logger.info(
-                f"[WhatsAppCloudService] Skipping status regression from {msg_log.status.value} "
-                f"to {status.status.value} for message_id={status.message_id}"
-            )
-            return {
-                "status": "skipped_regression",
-                "current_status": msg_log.status.value,
-                "message_id": status.message_id,
-            }
+        if msg_log and (status.status == MessageStatus.FAILED or new_rank >= current_rank):
+            msg_log.status = status.status
+            if status.status == MessageStatus.FAILED and status.error_message:
+                msg_log.error_reason = f"Meta Error ({status.error_code}): {status.error_message}"
 
-        msg_log.status = status.status
-        if status.status == MessageStatus.FAILED and status.error_message:
-            msg_log.error_reason = f"Meta Error ({status.error_code}): {status.error_message}"
+        # 2. Update Conversation Message Entity
+        conv_msg_stmt = select(Message).where(Message.wa_message_id == status.message_id)
+        conv_msg = (await db.execute(conv_msg_stmt)).scalar_one_or_none()
+        conversation_id = None
+
+        if conv_msg:
+            conversation_id = conv_msg.conversation_id
+            target_conv_status = META_TO_CONV_STATUS.get(
+                status.status.value.lower(), ConversationMessageStatus.SENT
+            )
+            msg_cur_rank = CONVERSATION_STATUS_PRECEDENCE.get(conv_msg.status, 0)
+            msg_new_rank = CONVERSATION_STATUS_PRECEDENCE.get(target_conv_status, 0)
+
+            if target_conv_status == ConversationMessageStatus.FAILED or msg_new_rank >= msg_cur_rank:
+                conv_msg.status = target_conv_status
+                if target_conv_status == ConversationMessageStatus.FAILED:
+                    conv_msg.error_code = status.error_code
+                    conv_msg.error_message = status.error_message
 
         await db.commit()
 
-        # Broadcast status update
+        # 3. Broadcast Realtime Status Update
         await ws_manager.broadcast({
             "event": "message_status_updated",
             "provider": "meta_cloud",
             "message_id": status.message_id,
+            "conversation_id": conversation_id,
             "status": status.status.value,
-            "target_phone": msg_log.target_phone,
-            "lead_id": msg_log.lead_id,
-            "campaign_id": msg_log.campaign_id,
+            "target_phone": msg_log.target_phone if msg_log else status.recipient_phone,
+            "lead_id": msg_log.lead_id if msg_log else None,
+            "campaign_id": msg_log.campaign_id if msg_log else None,
             "timestamp": status.timestamp.isoformat(),
         })
 
@@ -208,4 +287,5 @@ class WhatsAppCloudService:
             "status": "updated",
             "message_id": status.message_id,
             "new_status": status.status.value,
+            "conversation_id": conversation_id,
         }

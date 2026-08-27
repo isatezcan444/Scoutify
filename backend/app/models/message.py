@@ -1,0 +1,64 @@
+import enum
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, DateTime, Text, Enum, ForeignKey, Index
+from sqlalchemy.orm import relationship
+from backend.app.core.database import Base
+
+
+class MessageDirection(str, enum.Enum):
+    INBOUND = "INBOUND"
+    OUTBOUND = "OUTBOUND"
+
+
+class MessageType(str, enum.Enum):
+    TEXT = "TEXT"
+    IMAGE = "IMAGE"
+    DOCUMENT = "DOCUMENT"
+    AUDIO = "AUDIO"
+    VIDEO = "VIDEO"
+    TEMPLATE = "TEMPLATE"
+    OTHER = "OTHER"
+
+
+class ConversationMessageStatus(str, enum.Enum):
+    RECEIVED = "RECEIVED"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    READ = "READ"
+    FAILED = "FAILED"
+
+
+class Message(Base):
+    """
+    Represents an individual message exchanged within a Conversation.
+    Maintains a strict UNIQUE constraint on wa_message_id to enforce idempotency.
+    """
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    direction = Column(Enum(MessageDirection), nullable=False, index=True)
+    message_type = Column(Enum(MessageType), default=MessageType.TEXT, nullable=False)
+    body = Column(Text, nullable=True)
+    
+    # Meta WhatsApp Message ID (e.g. wamid.HBgM...) with strict UNIQUE constraint
+    wa_message_id = Column(String(150), unique=True, index=True, nullable=True)
+    
+    sender_phone = Column(String(50), nullable=False, index=True)
+    recipient_phone = Column(String(50), nullable=False, index=True)
+    
+    status = Column(Enum(ConversationMessageStatus), default=ConversationMessageStatus.RECEIVED, nullable=False, index=True)
+    error_code = Column(Integer, nullable=True)
+    error_message = Column(Text, nullable=True)
+    
+    external_timestamp = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    # Relationships
+    conversation = relationship("Conversation", back_populates="messages")
+
+    __table_args__ = (
+        Index("idx_msg_conv_created", "conversation_id", "created_at"),
+    )

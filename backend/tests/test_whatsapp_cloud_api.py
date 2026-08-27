@@ -13,6 +13,7 @@ from backend.app.core.database import AsyncSessionLocal
 from backend.app.models.lead import Lead, LeadStatus
 from backend.app.models.blacklist import Blacklist
 from backend.app.models.message_log import MessageLog, MessageStatus
+from backend.app.models.message import Message
 from backend.app.services.whatsapp_cloud_client import WhatsAppCloudApiClient
 from backend.app.services.whatsapp_sender import CloudApiSender
 
@@ -137,6 +138,7 @@ async def test_cloud_webhook_incoming_message_updates_lead_and_notes():
     test_phone = "+905329998877"
     async with AsyncSessionLocal() as db:
         # Pre-cleanup in case of prior test runs
+        await db.execute(Message.__table__.delete().where(Message.wa_message_id == "wamid.HBgLMTAwMDAwMDAwMDI"))
         await db.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
         await db.commit()
 
@@ -207,6 +209,7 @@ async def test_cloud_webhook_incoming_message_opt_out_triggers_blacklist():
     test_phone = "+905328887766"
     async with AsyncSessionLocal() as db:
         # Pre-cleanup in case of prior test runs
+        await db.execute(Message.__table__.delete().where(Message.wa_message_id == "wamid.OPT_OUT_TEST_1"))
         await db.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
         await db.execute(Blacklist.__table__.delete().where(Blacklist.phone_e164 == test_phone))
         await db.commit()
