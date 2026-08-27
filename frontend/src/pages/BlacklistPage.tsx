@@ -41,9 +41,8 @@ export const BlacklistPage: React.FC = () => {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Table Search & Filter State (Debounced 300ms)
+  // Table Search & Filter State (SearchInput debounces internally)
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [reasonFilter, setReasonFilter] = useState('');
 
   // Multi-Selection State (Gmail-style)
@@ -60,15 +59,6 @@ export const BlacklistPage: React.FC = () => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
-  // Debounce search input (300ms)
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(search);
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [search]);
-
   // Fetch paginated blacklist from server
   const fetchBlacklist = async () => {
     setLoading(true);
@@ -76,7 +66,7 @@ export const BlacklistPage: React.FC = () => {
       const data = await ApiClient.getBlacklist({
         page,
         size: pageSize,
-        search: debouncedSearch.trim() || undefined,
+        search: search.trim() || undefined,
         reason: reasonFilter || undefined,
       });
       setBlacklist(data.items || []);
@@ -90,14 +80,14 @@ export const BlacklistPage: React.FC = () => {
 
   useEffect(() => {
     fetchBlacklist();
-  }, [page, pageSize, debouncedSearch, reasonFilter]);
+  }, [page, pageSize, search, reasonFilter]);
 
   // Clear selection on page/filter change unless all-matching is active
   useEffect(() => {
     if (!selectAllMatching) {
       setSelectedIds([]);
     }
-  }, [page, pageSize, debouncedSearch, reasonFilter]);
+  }, [page, pageSize, search, reasonFilter]);
 
   // Selection Checkbox Logic
   const currentPageIds = blacklist.map((item) => item.id);
@@ -274,7 +264,7 @@ export const BlacklistPage: React.FC = () => {
         selectAllMatching
           ? {
               delete_all_matching: true,
-              search: debouncedSearch || undefined,
+              search: search.trim() || undefined,
               reason: reasonFilter || undefined,
             }
           : { ids: selectedIds }

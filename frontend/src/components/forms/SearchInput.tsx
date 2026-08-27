@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -27,26 +27,49 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
     ref
   ) => {
     const [localValue, setLocalValue] = useState(controlledValue || '');
+    const onChangeRef = useRef(onChange);
+    const onClearRef = useRef(onClear);
+    const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-      if (controlledValue !== undefined) {
+      onChangeRef.current = onChange;
+      onClearRef.current = onClear;
+    });
+
+    // Sync from parent if controlledValue changed from outside
+    useEffect(() => {
+      if (controlledValue !== undefined && controlledValue !== localValue) {
         setLocalValue(controlledValue);
       }
     }, [controlledValue]);
 
+    // Clean up timer on unmount
     useEffect(() => {
-      const handler = setTimeout(() => {
-        if (onChange) {
-          onChange(localValue);
-        }
-      }, debounceMs);
-      return () => clearTimeout(handler);
-    }, [localValue, debounceMs, onChange]);
+      return () => {
+        if (timerRef.current) clearTimeout(timerRef.current);
+      };
+    }, []);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newValue = e.target.value;
+      setLocalValue(newValue);
+
+      if (timerRef.current) clearTimeout(timerRef.current);
+
+      if (debounceMs <= 0) {
+        onChangeRef.current?.(newValue);
+      } else {
+        timerRef.current = setTimeout(() => {
+          onChangeRef.current?.(newValue);
+        }, debounceMs);
+      }
+    };
 
     const handleClear = () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
       setLocalValue('');
-      if (onChange) onChange('');
-      if (onClear) onClear();
+      onChangeRef.current?.('');
+      onClearRef.current?.();
     };
 
     const sizeClasses = {

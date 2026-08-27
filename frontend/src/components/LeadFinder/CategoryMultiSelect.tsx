@@ -28,9 +28,8 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
     // Fetch distinct categories from database to combine with sector presets
     const fetchDBCategories = async () => {
       try {
-        const res = await fetch('http://localhost:8000/api/v1/leads/categories');
-        if (res.ok) {
-          const dbCats: string[] = await res.json();
+        const dbCats = await ApiClient.getLeadCategories();
+        if (dbCats && dbCats.length > 0) {
           const combined = Array.from(new Set([...dbCats, ...SECTORS])).filter(Boolean);
           setAvailableCategories(combined);
         }

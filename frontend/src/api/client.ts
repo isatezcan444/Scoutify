@@ -53,6 +53,12 @@ export class ApiClient {
     return res.json();
   }
 
+  static async getLeadCategories(): Promise<string[]> {
+    const res = await fetch(`${API_BASE}/leads/categories`);
+    if (!res.ok) return [];
+    return res.json();
+  }
+
   static async createLead(lead: Partial<Lead>): Promise<Lead> {
     const res = await fetch(`${API_BASE}/leads`, {
       method: 'POST',

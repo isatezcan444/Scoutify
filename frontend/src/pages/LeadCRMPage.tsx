@@ -59,7 +59,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   
   // Search & Filter State
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -70,14 +69,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   // Detail Drawer State
   const [selectedLeadForDrawer, setSelectedLeadForDrawer] = useState<Lead | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-
-  // Debounce search input (300ms)
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(search);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [search]);
 
   // Selection state (Gmail style)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -118,7 +109,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       const data = await ApiClient.getLeads({
         page,
         size: pageSize,
-        search: debouncedSearch || undefined,
+        search: search.trim() || undefined,
         city: selectedCity || undefined,
         districts: selectedDistricts.length > 0 ? selectedDistricts : undefined,
         categories: selectedCategories.length > 0 ? selectedCategories : undefined,
@@ -136,14 +127,14 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
 
   useEffect(() => {
     fetchLeads();
-  }, [page, pageSize, debouncedSearch, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
+  }, [page, pageSize, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
 
   // Clear selection on page/filter change unless all-matching is active
   useEffect(() => {
     if (!selectAllMatching) {
       setSelectedIds([]);
     }
-  }, [page, pageSize, debouncedSearch, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
+  }, [page, pageSize, search, selectedCity, selectedDistricts, selectedCategories, statusFilter, waOnly]);
 
   // --- Gmail-style Checkbox logic ---
   const currentPageIds = leads.map((l) => l.id);
@@ -492,14 +483,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
               selectedDistricts={selectedDistricts}
               onChange={(city, districts) => {
                 setSelectedCity(city);
-                setSelectedDistricts(districts);
-                setPage(1);
-              }}
-              onCityChange={(city) => {
-                setSelectedCity(city);
-                setPage(1);
-              }}
-              onDistrictsChange={(districts) => {
                 setSelectedDistricts(districts);
                 setPage(1);
               }}
