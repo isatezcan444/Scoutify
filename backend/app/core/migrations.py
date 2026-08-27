@@ -75,6 +75,28 @@ async def ensure_leads_phone_nullable(engine: AsyncEngine) -> None:
         logger.info("[MIGRATION] leads.phone_e164 -> NULLABLE (sqlite rebuild, %d kolon taşındı)", len(shared_sorted))
 
 
+async def ensure_conversations_columns(engine: AsyncEngine) -> None:
+    """Adds unread_count and last_read_at to conversations if missing."""
+    if engine.dialect.name != "sqlite":
+        return
+
+    async with engine.begin() as conn:
+        exists = await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='conversations'")
+        )
+        if exists.first() is None:
+            return
+
+        info_rows = (await conn.execute(text("PRAGMA table_info(conversations)"))).fetchall()
+        columns = _sqlite_columns(info_rows)
+        if "unread_count" not in columns:
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN unread_count INTEGER NOT NULL DEFAULT 0"))
+            logger.info("[MIGRATION] Added conversations.unread_count")
+        if "last_read_at" not in columns:
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN last_read_at DATETIME"))
+            logger.info("[MIGRATION] Added conversations.last_read_at")
+
+
 def _create_leads_only(sync_conn: Any) -> None:
     """Yalnızca `leads` tablosunu model metadata'sından oluşturur."""
     from backend.app.core.database import Base

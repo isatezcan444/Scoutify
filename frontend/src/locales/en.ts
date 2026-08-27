@@ -224,6 +224,12 @@ export const en = {
     msgDelivered: 'Delivered',
     msgRead: 'Read',
     msgFailed: 'Failed',
+    loadOlderMessages: 'Load Older Messages',
+    loadingOlderMessages: 'Loading older messages...',
+    noMoreMessages: 'No older messages found',
+    newMessageAlert: 'New Message',
+    openLeadDetail: 'Lead Details',
+    markAsRead: 'Mark as Read',
   },
   whatsapp: {
     sessionsTitle: 'WhatsApp Sessions & Numbers',

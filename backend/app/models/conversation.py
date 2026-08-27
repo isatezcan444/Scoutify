@@ -24,6 +24,8 @@ class Conversation(Base):
     status = Column(Enum(ConversationStatus), default=ConversationStatus.ACTIVE, nullable=False, index=True)
     
     last_message_at = Column(DateTime, nullable=True, index=True)
+    unread_count = Column(Integer, default=0, nullable=False)
+    last_read_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

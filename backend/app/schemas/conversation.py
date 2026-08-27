@@ -40,6 +40,8 @@ class ConversationBase(BaseModel):
 class ConversationResponse(ConversationBase):
     id: int
     last_message_at: Optional[datetime] = None
+    unread_count: int = 0
+    last_read_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     
@@ -47,12 +49,23 @@ class ConversationResponse(ConversationBase):
     lead_name: Optional[str] = None
     lead_phone: Optional[str] = None
     last_message_preview: Optional[str] = None
-    unread_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationDetailResponse(ConversationResponse):
     messages: List[MessageResponse] = []
+    has_more: bool = False
+    oldest_message_id: Optional[int] = None
+    newest_message_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationMessagesResponse(BaseModel):
+    messages: List[MessageResponse] = []
+    has_more: bool = False
+    oldest_message_id: Optional[int] = None
+    newest_message_id: Optional[int] = None
 
     model_config = ConfigDict(from_attributes=True)

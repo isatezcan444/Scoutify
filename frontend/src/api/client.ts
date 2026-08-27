@@ -10,6 +10,7 @@ import {
   AntiBanConfig,
   Conversation,
   ConversationDetail,
+  ConversationMessagesResponse,
   ConversationStatus,
   Message
 } from '../types';
@@ -64,6 +65,12 @@ export class ApiClient {
 
     const res = await fetch(`${API_BASE}/leads?${query.toString()}`);
     if (!res.ok) throw new Error('Failed to fetch leads');
+    return res.json();
+  }
+
+  static async getLead(id: number): Promise<Lead> {
+    const res = await fetch(`${API_BASE}/leads/${id}`);
+    if (!res.ok) throw new Error('Lead detayı yüklenemedi');
     return res.json();
   }
 
@@ -413,15 +420,58 @@ export class ApiClient {
     return res.json();
   }
 
-  static async getConversation(conversationId: number): Promise<ConversationDetail> {
-    const res = await fetch(`${API_BASE}/conversations/${conversationId}`);
+  static async getConversation(
+    conversationId: number,
+    params?: { limit?: number; before?: number }
+  ): Promise<ConversationDetail> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}${qStr}`);
     if (!res.ok) throw new Error('Konuşma detayı yüklenemedi');
     return res.json();
   }
 
-  static async getLeadConversation(leadId: number): Promise<ConversationDetail> {
-    const res = await fetch(`${API_BASE}/conversations/lead/${leadId}`);
+  static async getConversationMessages(
+    conversationId: number,
+    params?: { limit?: number; before?: number }
+  ): Promise<ConversationMessagesResponse> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages${qStr}`);
+    if (!res.ok) throw new Error('Mesajlar yüklenemedi');
+    return res.json();
+  }
+
+  static async getLeadConversation(
+    leadId: number,
+    params?: { limit?: number; before?: number }
+  ): Promise<ConversationDetail> {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.before) query.set('before', params.before.toString());
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const res = await fetch(`${API_BASE}/conversations/lead/${leadId}${qStr}`);
     if (!res.ok) throw new Error('Lead konuşması yüklenemedi');
+    return res.json();
+  }
+
+  static async markConversationAsRead(conversationId: number): Promise<Conversation> {
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/read`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Konuşma okundu olarak işaretlenemedi');
+    return res.json();
+  }
+
+  static async markLeadConversationAsRead(leadId: number): Promise<Conversation> {
+    const res = await fetch(`${API_BASE}/conversations/lead/${leadId}/read`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error('Lead konuşması okundu olarak işaretlenemedi');
     return res.json();
   }
 }

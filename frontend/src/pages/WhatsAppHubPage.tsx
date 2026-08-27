@@ -22,17 +22,18 @@ import {
   Building2,
   Save,
   Undo2,
-  MessageSquare
+  MessageSquare,
+  ExternalLink
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
-import { WhatsAppSession, MessageLog, Conversation } from '../types';
+import { WhatsAppSession, MessageLog, Conversation, Lead } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Avatar } from '../components/ui/Avatar';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
-import { SessionCard, ConversationList, ChatThread, ChatComposer } from '../components/domain';
+import { SessionCard, ConversationList, ChatThread, ChatComposer, LeadDetailDrawer } from '../components/domain';
 import { Slider, Switch } from '../components/forms';
 import { 
   AntiBanConfig, 
@@ -68,11 +69,36 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [convsLoading, setConvsLoading] = useState<boolean>(false);
   const [convSearch, setConvSearch] = useState<string>('');
 
+  // Lead Detail Drawer State for Conversation -> Lead navigation
+  const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
+  const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState<boolean>(false);
+  const [leadLoading, setLeadLoading] = useState<boolean>(false);
+
   // Active chat hook for selected conversation
-  const { messages: activeMessages, loading: activeChatLoading } = useWhatsAppConversation({
+  const {
+    messages: activeMessages,
+    hasMore: activeHasMore,
+    loadingOlder: activeLoadingOlder,
+    loading: activeChatLoading,
+    loadOlderMessages: activeLoadOlder,
+  } = useWhatsAppConversation({
     conversationId: selectedConv?.id,
     enabled: hubTab === 'conversations' && !!selectedConv,
+    autoMarkAsRead: true,
   });
+
+  const handleOpenLead = async (leadId: number) => {
+    setLeadLoading(true);
+    try {
+      const leadData = await ApiClient.getLead(leadId);
+      setDrawerLead(leadData);
+      setIsLeadDrawerOpen(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Müşteri bilgisi yüklenemedi', t('common.error'));
+    } finally {
+      setLeadLoading(false);
+    }
+  };
 
   const fetchConversations = async () => {
     setConvsLoading(true);
@@ -88,6 +114,52 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       setConvsLoading(false);
     }
   };
+
+  // Real-time listener for conversation list unread and preview updates
+  useEffect(() => {
+    const handleWsEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<any>;
+      const eventData = customEvent.detail;
+      if (!eventData) return;
+
+      if (eventData.event === 'inbound_reply') {
+        const convId = eventData.conversation_id;
+        const isCurrentSelected = selectedConv && selectedConv.id === convId;
+
+        setConversations((prev) => {
+          const idx = prev.findIndex((c) => c.id === convId);
+          if (idx !== -1) {
+            const existing = prev[idx];
+            const updated: Conversation = {
+              ...existing,
+              last_message_preview: eventData.message,
+              last_message_at: eventData.timestamp || new Date().toISOString(),
+              unread_count: isCurrentSelected ? 0 : (existing.unread_count || 0) + 1,
+            };
+            // Move updated conversation to top of list
+            const rest = prev.filter((c) => c.id !== convId);
+            return [updated, ...rest];
+          } else {
+            // New conversation arrived
+            fetchConversations();
+            return prev;
+          }
+        });
+      }
+
+      if (eventData.event === 'conversation_read') {
+        const convId = eventData.conversation_id;
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convId ? { ...c, unread_count: 0 } : c))
+        );
+      }
+    };
+
+    window.addEventListener('scoutify:ws_event', handleWsEvent);
+    return () => {
+      window.removeEventListener('scoutify:ws_event', handleWsEvent);
+    };
+  }, [selectedConv]);
 
   // Anti-Ban Timing & Change-Tracking State
   const [savedConfig, setSavedConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
@@ -401,7 +473,15 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               loading={convsLoading}
               searchQuery={convSearch}
               onSearchChange={setConvSearch}
-              onSelect={(c) => setSelectedConv(c)}
+              onSelect={(c) => {
+                setSelectedConv(c);
+                if (c.unread_count > 0) {
+                  ApiClient.markConversationAsRead(c.id).catch(() => {});
+                  setConversations((prev) =>
+                    prev.map((item) => (item.id === c.id ? { ...item, unread_count: 0 } : item))
+                  );
+                }
+              }}
             />
           </div>
 
@@ -424,6 +504,17 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   </div>
 
                   <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleOpenLead(selectedConv.lead_id)}
+                      disabled={leadLoading}
+                      className="space-x-1.5 text-xs font-bold border-slate-200 dark:border-white/[0.1] hover:bg-slate-100 dark:hover:bg-white/[0.06] cursor-pointer"
+                    >
+                      <Building2 className="w-3.5 h-3.5 text-[#7367F0]" />
+                      <span>{t('leads.openLeadDetail') || 'Müşteri Detayı'}</span>
+                    </Button>
+
                     <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-xs">
                       <WhatsAppIcon className="w-3.5 h-3.5" />
                       <span>{t('leads.whatsappActive')}</span>
@@ -431,10 +522,13 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   </div>
                 </div>
 
-                {/* Chat Thread */}
+                {/* Chat Thread with Pagination */}
                 <ChatThread
                   messages={activeMessages}
                   loading={activeChatLoading}
+                  hasMore={activeHasMore}
+                  loadingOlder={activeLoadingOlder}
+                  onLoadOlder={activeLoadOlder}
                   leadName={selectedConv.lead_name}
                   leadPhone={selectedConv.lead_phone}
                 />
@@ -1088,6 +1182,17 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
         </div>,
         document.body
       )}
+
+      {/* Lead Detail Drawer for Conversation -> Lead Navigation */}
+      <LeadDetailDrawer
+        lead={drawerLead}
+        isOpen={isLeadDrawerOpen}
+        onClose={() => {
+          setIsLeadDrawerOpen(false);
+          setDrawerLead(null);
+        }}
+        initialTab="overview"
+      />
     </div>
   );
 };

@@ -206,14 +206,25 @@ export interface Conversation {
   channel: string;
   status: ConversationStatus;
   last_message_at?: string;
+  unread_count: number;
+  last_read_at?: string;
   created_at: string;
   updated_at: string;
   lead_name?: string;
   lead_phone?: string;
   last_message_preview?: string;
-  unread_count: number;
 }
 
 export interface ConversationDetail extends Conversation {
   messages: Message[];
+  has_more?: boolean;
+  oldest_message_id?: number;
+  newest_message_id?: number;
+}
+
+export interface ConversationMessagesResponse {
+  messages: Message[];
+  has_more: boolean;
+  oldest_message_id?: number;
+  newest_message_id?: number;
 }

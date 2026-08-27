@@ -9,7 +9,7 @@ from backend.app.api.v1.api import api_router
 from backend.app.api.v1.websocket import ws_manager
 from backend.app.core.config import settings
 from backend.app.core.database import Base, engine
-from backend.app.core.migrations import ensure_leads_phone_nullable
+from backend.app.core.migrations import ensure_leads_phone_nullable, ensure_conversations_columns
 from backend.app.core.seed import seed_demo_data_if_empty
 from backend.app.models.blacklist import ScraperJob, ScraperJobStatus
 from backend.app.models.campaign import Campaign, CampaignStatus
@@ -59,6 +59,7 @@ async def lifespan(app: FastAPI):
 
     # Bilinen şema geçişleri (idempotent)
     await ensure_leads_phone_nullable(engine)
+    await ensure_conversations_columns(engine)
 
     # Restart sonrası yarıda kalan arka plan işlerini toparla
     await recover_stuck_jobs()

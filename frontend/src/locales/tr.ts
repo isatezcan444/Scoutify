@@ -224,6 +224,12 @@ export const tr = {
     msgDelivered: 'İletildi',
     msgRead: 'Okundu',
     msgFailed: 'Başarısız',
+    loadOlderMessages: 'Daha Eski Mesajları Yükle',
+    loadingOlderMessages: 'Eski mesajlar yükleniyor...',
+    noMoreMessages: 'Daha eski mesaj bulunmuyor',
+    newMessageAlert: 'Yeni Mesaj',
+    openLeadDetail: 'Müşteri Detayı',
+    markAsRead: 'Okundu Olarak İşaretle',
   },
   whatsapp: {
     sessionsTitle: 'WhatsApp Oturumları ve Numaralar',

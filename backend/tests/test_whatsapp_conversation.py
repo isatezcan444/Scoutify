@@ -13,7 +13,12 @@ from backend.app.services.whatsapp_cloud_service import WhatsAppCloudService
 from backend.app.schemas.whatsapp_cloud import ParsedIncomingMessage, ParsedStatusUpdate
 
 
+from backend.app.core.database import Base, engine, AsyncSessionLocal
+from backend.app.core.migrations import ensure_conversations_columns
+
+
 async def clean_db(db):
+    await ensure_conversations_columns(engine)
     await db.execute(Message.__table__.delete())
     await db.execute(Conversation.__table__.delete())
     await db.commit()
@@ -267,3 +272,139 @@ async def test_conversations_rest_api():
         res_detail = await client.get(f"/api/v1/conversations/{conv_id}")
         assert res_detail.status_code == 200
         assert res_detail.json()["id"] == conv_id
+
+
+@pytest.mark.asyncio
+async def test_conversation_message_pagination():
+    """Verifies cursor pagination on messages within a conversation."""
+    test_phone = "+905416667788"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(
+            name="Pagination Test Lead",
+            phone=test_phone,
+            phone_e164=test_phone,
+            status=LeadStatus.NEW,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        conv = Conversation(
+            lead_id=lead.id,
+            channel="WHATSAPP",
+            status=ConversationStatus.ACTIVE,
+        )
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+
+        # Create 15 messages (1 to 15)
+        for i in range(1, 16):
+            m = Message(
+                conversation_id=conv.id,
+                direction=MessageDirection.INBOUND if i % 2 == 1 else MessageDirection.OUTBOUND,
+                message_type=MessageType.TEXT,
+                body=f"Message {i:02d}",
+                wa_message_id=f"wamid.PAG_{i:02d}",
+                sender_phone=test_phone if i % 2 == 1 else "BUSINESS",
+                recipient_phone="BUSINESS" if i % 2 == 1 else test_phone,
+                status=ConversationMessageStatus.RECEIVED if i % 2 == 1 else ConversationMessageStatus.SENT,
+            )
+            db_session.add(m)
+        await db_session.commit()
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Page 1: Latest 5 messages (limit=5)
+        res1 = await client.get(f"/api/v1/conversations/{conv_id}?limit=5")
+        assert res1.status_code == 200
+        data1 = res1.json()
+        assert len(data1["messages"]) == 5
+        assert data1["has_more"] is True
+        # Chronological: Message 11, 12, 13, 14, 15
+        assert data1["messages"][0]["body"] == "Message 11"
+        assert data1["messages"][-1]["body"] == "Message 15"
+        oldest_id_p1 = data1["messages"][0]["id"]
+
+        # Page 2: Older messages before oldest_id_p1
+        res2 = await client.get(f"/api/v1/conversations/{conv_id}?limit=5&before={oldest_id_p1}")
+        assert res2.status_code == 200
+        data2 = res2.json()
+        assert len(data2["messages"]) == 5
+        assert data2["has_more"] is True
+        # Chronological: Message 06, 07, 08, 09, 10
+        assert data2["messages"][0]["body"] == "Message 06"
+        assert data2["messages"][-1]["body"] == "Message 10"
+        oldest_id_p2 = data2["messages"][0]["id"]
+
+        # Page 3: Oldest remaining messages
+        res3 = await client.get(f"/api/v1/conversations/{conv_id}?limit=5&before={oldest_id_p2}")
+        assert res3.status_code == 200
+        data3 = res3.json()
+        assert len(data3["messages"]) == 5
+        assert data3["has_more"] is False
+        assert data3["messages"][0]["body"] == "Message 01"
+        assert data3["messages"][-1]["body"] == "Message 05"
+
+
+@pytest.mark.asyncio
+async def test_conversation_unread_count_and_mark_as_read():
+    """Verifies that inbound messages increment unread_count and POST /read resets it to 0."""
+    test_phone = "+905417778899"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(
+            name="Unread Test Lead",
+            phone=test_phone,
+            phone_e164=test_phone,
+            status=LeadStatus.NEW,
+        )
+        db_session.add(lead)
+        await db_session.commit()
+        await db_session.refresh(lead)
+
+        # Inbound Message 1
+        msg1 = ParsedIncomingMessage(
+            message_id="wamid.UNREAD_001",
+            sender_phone=test_phone,
+            sender_name="Unread Test Lead",
+            text="First unread message",
+            timestamp=datetime.now(timezone.utc),
+        )
+        res1 = await WhatsAppCloudService.process_incoming_message(db_session, msg1)
+        conv_id = res1["conversation_id"]
+
+        # Inbound Message 2
+        msg2 = ParsedIncomingMessage(
+            message_id="wamid.UNREAD_002",
+            sender_phone=test_phone,
+            sender_name="Unread Test Lead",
+            text="Second unread message",
+            timestamp=datetime.now(timezone.utc),
+        )
+        await WhatsAppCloudService.process_incoming_message(db_session, msg2)
+
+        # Verify in DB unread_count == 2
+        conv = await db_session.get(Conversation, conv_id)
+        assert conv.unread_count == 2
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Mark as read via POST /api/v1/conversations/{conv_id}/read
+        res_read = await client.post(f"/api/v1/conversations/{conv_id}/read")
+        assert res_read.status_code == 200
+        assert res_read.json()["unread_count"] == 0
+
+        # Verify DB unread_count == 0
+        async with AsyncSessionLocal() as db_session:
+            conv_db = await db_session.get(Conversation, conv_id)
+            assert conv_db.unread_count == 0
+            assert conv_db.last_read_at is not None

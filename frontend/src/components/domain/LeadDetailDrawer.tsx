@@ -56,7 +56,13 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
   }, [isOpen, initialTab]);
 
   // Hook for live conversation data
-  const { messages, loading: chatLoading } = useWhatsAppConversation({
+  const {
+    messages,
+    hasMore,
+    loadingOlder,
+    loading: chatLoading,
+    loadOlderMessages,
+  } = useWhatsAppConversation({
     leadId: lead?.id,
     enabled: isOpen && activeTab === 'chat',
   });
@@ -316,6 +322,9 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             <ChatThread
               messages={messages}
               loading={chatLoading}
+              hasMore={hasMore}
+              loadingOlder={loadingOlder}
+              onLoadOlder={loadOlderMessages}
               leadName={lead.name}
               leadPhone={lead.phone_e164 || lead.phone}
             />

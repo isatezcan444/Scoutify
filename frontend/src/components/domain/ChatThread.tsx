@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, Loader2, ArrowUp } from 'lucide-react';
 import { Message } from '../../types';
 import { ChatBubble } from './ChatBubble';
 import { EmptyState } from '../ui/EmptyState';
@@ -9,6 +10,9 @@ import { useI18n } from '../../context/I18nContext';
 export interface ChatThreadProps {
   messages: Message[];
   loading?: boolean;
+  hasMore?: boolean;
+  loadingOlder?: boolean;
+  onLoadOlder?: () => void;
   leadName?: string;
   leadPhone?: string;
 }
@@ -16,14 +20,80 @@ export interface ChatThreadProps {
 export const ChatThread: React.FC<ChatThreadProps> = ({
   messages,
   loading = false,
+  hasMore = false,
+  loadingOlder = false,
+  onLoadOlder,
 }) => {
   const { t } = useI18n();
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom when messages update
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevScrollTopRef = useRef<number>(0);
+  const isPrependingRef = useRef<boolean>(false);
+  const prevMessagesCountRef = useRef<number>(messages.length);
+
+  const [isNearBottom, setIsNearBottom] = useState<boolean>(true);
+  const [showNewMessagePill, setShowNewMessagePill] = useState<boolean>(false);
+
+  // Monitor scroll position
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+    const nearBottom = distanceToBottom < 120;
+    setIsNearBottom(nearBottom);
+
+    if (nearBottom) {
+      setShowNewMessagePill(false);
+    }
+  };
+
+  // Trigger loading older messages and track previous scroll height
+  const handleLoadOlder = () => {
+    if (!onLoadOlder || loadingOlder || !containerRef.current) return;
+    isPrependingRef.current = true;
+    prevScrollHeightRef.current = containerRef.current.scrollHeight;
+    prevScrollTopRef.current = containerRef.current.scrollTop;
+    onLoadOlder();
+  };
+
+  // Restore scroll position after prepending older messages
+  useLayoutEffect(() => {
+    if (isPrependingRef.current && containerRef.current) {
+      const newScrollHeight = containerRef.current.scrollHeight;
+      const heightDiff = newScrollHeight - prevScrollHeightRef.current;
+      containerRef.current.scrollTop = prevScrollTopRef.current + heightDiff;
+      isPrependingRef.current = false;
+    }
+  }, [messages]);
+
+  // Smart Auto-Scroll when new messages arrive at the end
   useEffect(() => {
+    const isNewMessageAdded = messages.length > prevMessagesCountRef.current;
+    prevMessagesCountRef.current = messages.length;
+
+    if (isNewMessageAdded && !isPrependingRef.current) {
+      if (isNearBottom) {
+        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        setShowNewMessagePill(false);
+      } else {
+        setShowNewMessagePill(true);
+      }
+    }
+  }, [messages, isNearBottom]);
+
+  // Initial scroll to bottom on mount or load
+  useEffect(() => {
+    if (!loading && messages.length > 0 && isNearBottom) {
+      bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [loading]);
+
+  const scrollToBottom = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, loading]);
+    setShowNewMessagePill(false);
+  };
 
   const getDateLabel = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -73,32 +143,75 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
     );
   }
 
-  // Group messages by date
   let lastDate = '';
 
   return (
-    <div className="flex-1 p-4 overflow-y-auto space-y-1">
-      {messages.map((msg) => {
-        const currentDate = getDateLabel(msg.created_at || msg.external_timestamp);
-        const showDateSeparator = currentDate && currentDate !== lastDate;
-        if (showDateSeparator) {
-          lastDate = currentDate;
-        }
+    <div className="relative flex-1 flex flex-col min-h-0">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex-1 p-4 overflow-y-auto space-y-1 scroll-smooth"
+      >
+        {/* Load older messages button */}
+        {hasMore && (
+          <div className="flex justify-center my-2">
+            <button
+              type="button"
+              onClick={handleLoadOlder}
+              disabled={loadingOlder}
+              className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold text-[#7367F0] bg-[#7367F0]/10 hover:bg-[#7367F0]/20 border border-[#7367F0]/20 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {loadingOlder ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>{t('leads.loadingOlderMessages') || 'Eski mesajlar yükleniyor...'}</span>
+                </>
+              ) : (
+                <>
+                  <ArrowUp className="w-3.5 h-3.5" />
+                  <span>{t('leads.loadOlderMessages') || 'Daha Eski Mesajları Yükle'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
 
-        return (
-          <React.Fragment key={msg.wa_message_id || msg.id}>
-            {showDateSeparator && (
-              <div className="flex items-center justify-center my-4">
-                <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-white/[0.08] text-slate-500 dark:text-slate-400 select-none shadow-xs">
-                  {currentDate}
-                </span>
-              </div>
-            )}
-            <ChatBubble message={msg} />
-          </React.Fragment>
-        );
-      })}
-      <div ref={bottomRef} />
+        {messages.map((msg) => {
+          const currentDate = getDateLabel(msg.created_at || msg.external_timestamp);
+          const showDateSeparator = currentDate && currentDate !== lastDate;
+          if (showDateSeparator) {
+            lastDate = currentDate;
+          }
+
+          return (
+            <React.Fragment key={msg.wa_message_id || msg.id}>
+              {showDateSeparator && (
+                <div className="flex items-center justify-center my-4">
+                  <span className="px-3 py-1 rounded-full text-[10px] font-bold bg-slate-200/80 dark:bg-white/[0.08] text-slate-500 dark:text-slate-400 select-none shadow-xs">
+                    {currentDate}
+                  </span>
+                </div>
+              )}
+              <ChatBubble message={msg} />
+            </React.Fragment>
+          );
+        })}
+        <div ref={bottomRef} className="h-1" />
+      </div>
+
+      {/* Floating New Message Indicator */}
+      {showNewMessagePill && (
+        <div className="absolute bottom-4 right-4 z-10 animate-bounce">
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full bg-[#25D366] hover:bg-[#1EBE5D] text-white text-xs font-bold shadow-lg shadow-[#25D366]/30 transition-all cursor-pointer"
+          >
+            <span>{t('leads.newMessageAlert') || 'Yeni Mesaj'}</span>
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

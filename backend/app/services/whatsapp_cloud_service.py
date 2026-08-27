@@ -124,11 +124,13 @@ class WhatsAppCloudService:
                     channel="WHATSAPP",
                     status=ConversationStatus.ACTIVE,
                     last_message_at=msg.timestamp,
+                    unread_count=1,
                 )
                 db.add(conversation)
                 await db.flush()
             else:
                 conversation.last_message_at = msg.timestamp
+                conversation.unread_count = (conversation.unread_count or 0) + 1
 
             conversation_id = conversation.id
 
@@ -206,6 +208,7 @@ class WhatsAppCloudService:
             "message": msg.text,
             "direction": "INBOUND",
             "message_type": "TEXT",
+            "unread_count": conversation.unread_count if conversation else 1,
             "is_opt_out": is_opt_out,
             "timestamp": msg.timestamp.isoformat(),
         })
