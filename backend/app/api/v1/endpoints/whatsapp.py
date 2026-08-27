@@ -145,8 +145,18 @@ async def send_test_message(req: TestMessageRequest, db: AsyncSession = Depends(
     lead_res = await db.execute(lead_stmt)
     matching_lead = lead_res.scalar_one_or_none()
 
+    if not matching_lead:
+        matching_lead = Lead(
+            name=f"Test Alıcısı ({phone_data['e164']})",
+            phone=phone_data["e164"],
+            phone_e164=phone_data["e164"],
+            status=LeadStatus.NEW,
+        )
+        db.add(matching_lead)
+        await db.flush()
+
     log = MessageLog(
-        lead_id=matching_lead.id if matching_lead else None,
+        lead_id=matching_lead.id,
         session_id=session.id,
         target_phone=phone_data["e164"],
         rendered_message=req.message,
