@@ -156,9 +156,13 @@ class WhatsAppCloudService:
             f"message_id={status.message_id}, status={status.status.value}, recipient={status.recipient_phone}"
         )
 
-        stmt = select(MessageLog).where(MessageLog.wa_message_id == status.message_id)
+        stmt = (
+            select(MessageLog)
+            .where(MessageLog.wa_message_id == status.message_id)
+            .order_by(MessageLog.id.desc())
+        )
         res = await db.execute(stmt)
-        msg_log = res.scalar_one_or_none()
+        msg_log = res.scalars().first()
 
         if not msg_log:
             logger.debug(

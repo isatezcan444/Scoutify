@@ -17,6 +17,16 @@ from backend.app.services.whatsapp_cloud_client import WhatsAppCloudApiClient
 from backend.app.services.whatsapp_sender import CloudApiSender
 
 
+def _make_headers(payload_dict: dict, secret: str = "") -> dict:
+    body_bytes = json.dumps(payload_dict).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    app_secret = secret or settings.WHATSAPP_CLOUD_APP_SECRET
+    if app_secret:
+        sig_hash = hmac.new(app_secret.encode("utf-8"), body_bytes, hashlib.sha256).hexdigest()
+        headers["X-Hub-Signature-256"] = f"sha256={sig_hash}"
+    return headers
+
+
 # ==============================================================================
 # 1. GET Webhook Handshake Verification Tests
 # ==============================================================================
@@ -171,9 +181,12 @@ async def test_cloud_webhook_incoming_message_updates_lead_and_notes():
         ],
     }
 
+    body_bytes = json.dumps(webhook_payload).encode("utf-8")
+    headers = _make_headers(webhook_payload)
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.post("/api/v1/whatsapp/cloud-webhook", json=webhook_payload)
+        res = await client.post("/api/v1/whatsapp/cloud-webhook", content=body_bytes, headers=headers)
         assert res.status_code == 200
         assert res.json()["processed_messages"] == 1
 
@@ -236,9 +249,12 @@ async def test_cloud_webhook_incoming_message_opt_out_triggers_blacklist():
         ],
     }
 
+    body_bytes = json.dumps(webhook_payload).encode("utf-8")
+    headers = _make_headers(webhook_payload)
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.post("/api/v1/whatsapp/cloud-webhook", json=webhook_payload)
+        res = await client.post("/api/v1/whatsapp/cloud-webhook", content=body_bytes, headers=headers)
         assert res.status_code == 200
 
     async with AsyncSessionLocal() as db:
@@ -264,16 +280,21 @@ async def test_cloud_webhook_incoming_message_opt_out_triggers_blacklist():
 @pytest.mark.asyncio
 async def test_cloud_webhook_status_delivered_and_read_progression():
     test_wamid = "wamid.HBgLSTATUS_TEST_101"
+    test_phone = "+905321110022"
     async with AsyncSessionLocal() as db:
-        # Create a dummy lead first
-        lead = Lead(name="Status Test Lead", phone="+905321110022", phone_e164="+905321110022")
+        # Pre-cleanup
+        await db.execute(MessageLog.__table__.delete().where(MessageLog.wa_message_id == test_wamid))
+        await db.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db.commit()
+
+        lead = Lead(name="Status Test Lead", phone=test_phone, phone_e164=test_phone)
         db.add(lead)
         await db.commit()
         await db.refresh(lead)
 
         log = MessageLog(
             lead_id=lead.id,
-            target_phone="+905321110022",
+            target_phone=test_phone,
             rendered_message="Kampanya duyurusu",
             status=MessageStatus.SENT,
             wa_message_id=test_wamid,
@@ -311,7 +332,11 @@ async def test_cloud_webhook_status_delivered_and_read_progression():
                 }
             ],
         }
-        res_del = await client.post("/api/v1/whatsapp/cloud-webhook", json=payload_delivered)
+        res_del = await client.post(
+            "/api/v1/whatsapp/cloud-webhook",
+            content=json.dumps(payload_delivered).encode("utf-8"),
+            headers=_make_headers(payload_delivered),
+        )
         assert res_del.status_code == 200
         assert res_del.json()["processed_statuses"] == 1
 
@@ -344,7 +369,11 @@ async def test_cloud_webhook_status_delivered_and_read_progression():
                 }
             ],
         }
-        res_read = await client.post("/api/v1/whatsapp/cloud-webhook", json=payload_read)
+        res_read = await client.post(
+            "/api/v1/whatsapp/cloud-webhook",
+            content=json.dumps(payload_read).encode("utf-8"),
+            headers=_make_headers(payload_read),
+        )
         assert res_read.status_code == 200
 
         async with AsyncSessionLocal() as db:
@@ -352,7 +381,11 @@ async def test_cloud_webhook_status_delivered_and_read_progression():
             assert msg_log.status == MessageStatus.READ
 
             # 3. Monotonic protection: Re-sending "delivered" should NOT downgrade status from READ
-            await client.post("/api/v1/whatsapp/cloud-webhook", json=payload_delivered)
+            await client.post(
+                "/api/v1/whatsapp/cloud-webhook",
+                content=json.dumps(payload_delivered).encode("utf-8"),
+                headers=_make_headers(payload_delivered),
+            )
             await db.refresh(msg_log)
             assert msg_log.status == MessageStatus.READ
 
@@ -367,15 +400,21 @@ async def test_cloud_webhook_status_delivered_and_read_progression():
 @pytest.mark.asyncio
 async def test_cloud_webhook_status_failed_records_error():
     test_wamid = "wamid.HBgLSTATUS_FAIL_202"
+    test_phone = "+905321119900"
     async with AsyncSessionLocal() as db:
-        lead = Lead(name="Fail Lead", phone="+905321119900", phone_e164="+905321119900")
+        # Pre-cleanup
+        await db.execute(MessageLog.__table__.delete().where(MessageLog.wa_message_id == test_wamid))
+        await db.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db.commit()
+
+        lead = Lead(name="Fail Lead", phone=test_phone, phone_e164=test_phone)
         db.add(lead)
         await db.commit()
         await db.refresh(lead)
 
         log = MessageLog(
             lead_id=lead.id,
-            target_phone="+905321119900",
+            target_phone=test_phone,
             rendered_message="Test",
             status=MessageStatus.SENT,
             wa_message_id=test_wamid,
@@ -420,7 +459,11 @@ async def test_cloud_webhook_status_failed_records_error():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        res = await client.post("/api/v1/whatsapp/cloud-webhook", json=payload_failed)
+        res = await client.post(
+            "/api/v1/whatsapp/cloud-webhook",
+            content=json.dumps(payload_failed).encode("utf-8"),
+            headers=_make_headers(payload_failed),
+        )
         assert res.status_code == 200
 
     async with AsyncSessionLocal() as db:
