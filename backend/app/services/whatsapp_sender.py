@@ -127,9 +127,39 @@ class GatewaySender:
             }
 
 
+from backend.app.services.whatsapp_cloud_client import WhatsAppCloudApiClient
+
+
+class CloudApiSender:
+    """Meta WhatsApp Cloud API (Graph API) ile doğrudan mesaj gönderen gönderici."""
+
+    def __init__(self, client: Optional[WhatsAppCloudApiClient] = None):
+        self.client = client or WhatsAppCloudApiClient()
+
+    async def send_message(
+        self,
+        session_name: str,
+        phone_e164: str,
+        message_text: str,
+        typing_seconds: int = 4,
+    ) -> Dict[str, Any]:
+        res = await self.client.send_text_message(
+            to_phone=phone_e164,
+            message_text=message_text,
+        )
+        return {
+            "success": res.get("success", False),
+            "message_id": res.get("message_id"),
+            "is_simulated": False,
+            "error": res.get("error"),
+        }
+
+
 def get_whatsapp_sender(force_simulation: Optional[bool] = None) -> WhatsAppSender:
     """Mevcut ortam yapılandırmasına göre uygun göndericiyi üretir."""
     is_sim = settings.SIMULATION_MODE if force_simulation is None else force_simulation
     if is_sim:
         return SimulatedSender()
+    if settings.WHATSAPP_CLOUD_ENABLED:
+        return CloudApiSender()
     return GatewaySender()

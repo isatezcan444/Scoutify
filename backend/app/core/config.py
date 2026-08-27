@@ -67,6 +67,40 @@ class Settings(BaseSettings):
     # Boş bırakılırsa gateway auth istemez (yalnızca güvenli ağda çalıştırın).
     WA_GATEWAY_AUTH_TOKEN: str = ""
 
+    # WhatsApp Cloud API (Meta Graph API) Settings
+    WHATSAPP_CLOUD_ACCESS_TOKEN: str = Field(
+        default="",
+        description="Meta System User or User Permanent Access Token with whatsapp_business_messaging scope.",
+    )
+    WHATSAPP_CLOUD_PHONE_NUMBER_ID: str = Field(
+        default="",
+        description="Meta Phone Number ID from WhatsApp App Dashboard.",
+    )
+    WHATSAPP_CLOUD_BUSINESS_ACCOUNT_ID: str = Field(
+        default="",
+        description="Meta WhatsApp Business Account ID (WABA ID).",
+    )
+    WHATSAPP_CLOUD_API_VERSION: str = Field(
+        default="v21.0",
+        description="Meta Graph API Version (e.g. v21.0).",
+    )
+    WHATSAPP_CLOUD_GRAPH_API_BASE_URL: str = Field(
+        default="https://graph.facebook.com",
+        description="Base URL for Meta Graph API calls.",
+    )
+    WHATSAPP_CLOUD_WEBHOOK_VERIFY_TOKEN: str = Field(
+        default="scoutify-cloud-verify-token",
+        description="Custom verification token configured in Meta App Dashboard for webhook handshake.",
+    )
+    WHATSAPP_CLOUD_APP_SECRET: str = Field(
+        default="",
+        description="Meta App Secret used to verify X-Hub-Signature-256 HMAC on incoming webhooks.",
+    )
+    WHATSAPP_CLOUD_ENABLED: bool = Field(
+        default=False,
+        description="Set to True to route live WhatsApp outreach via Meta Cloud API.",
+    )
+
     # Default Outreach Anti-Ban Thresholds
     # Tek doğruluk kaynağı burasıdır; Campaign model varsayılanları ve
     # AntibanPolicy bu değerlerden beslenir.
