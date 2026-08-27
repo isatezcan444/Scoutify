@@ -5,13 +5,13 @@ import { IconTile } from './IconTile';
 import { cn } from '../../lib/utils';
 
 export interface EmptyStateProps {
-  icon?: LucideIcon;
+  icon?: LucideIcon | React.ComponentType<{ className?: string }>;
   title: string;
   description?: string;
   action?: {
     label: string;
     onClick: () => void;
-    icon?: LucideIcon;
+    icon?: LucideIcon | React.ComponentType<{ className?: string }>;
   };
   className?: string;
 }

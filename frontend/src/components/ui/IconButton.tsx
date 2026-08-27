@@ -3,7 +3,7 @@ import { LucideIcon } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   variant?: "default" | "outline" | "ghost" | "danger" | "warning" | "success" | "primary";
   size?: "xs" | "sm" | "md" | "lg";
   tooltip?: string;

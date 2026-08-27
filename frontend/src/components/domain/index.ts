@@ -3,3 +3,7 @@ export * from './SessionCard';
 export * from './CampaignCard';
 export * from './VerificationBadge';
 export * from './SpintaxPreviewCard';
+export * from './ChatBubble';
+export * from './ChatThread';
+export * from './ChatComposer';
+export * from './ConversationList';

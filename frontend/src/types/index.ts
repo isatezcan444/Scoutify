@@ -178,3 +178,42 @@ export interface BlacklistPaginationResponse {
   size: number;
   pages: number;
 }
+
+export type ConversationStatus = 'ACTIVE' | 'ARCHIVED' | 'CLOSED';
+export type MessageDirection = 'INBOUND' | 'OUTBOUND';
+export type MessageType = 'TEXT' | 'IMAGE' | 'DOCUMENT' | 'AUDIO' | 'VIDEO' | 'TEMPLATE' | 'OTHER';
+export type ConversationMessageStatus = 'RECEIVED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
+
+export interface Message {
+  id: number;
+  conversation_id: number;
+  direction: MessageDirection;
+  message_type: MessageType;
+  status: ConversationMessageStatus;
+  body?: string;
+  media_url?: string;
+  wa_message_id?: string;
+  sender_phone?: string;
+  recipient_phone?: string;
+  error_message?: string;
+  external_timestamp?: string;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: number;
+  lead_id: number;
+  channel: string;
+  status: ConversationStatus;
+  last_message_at?: string;
+  created_at: string;
+  updated_at: string;
+  lead_name?: string;
+  lead_phone?: string;
+  last_message_preview?: string;
+  unread_count: number;
+}
+
+export interface ConversationDetail extends Conversation {
+  messages: Message[];
+}

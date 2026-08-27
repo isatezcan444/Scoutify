@@ -69,6 +69,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   // Detail Drawer State
   const [selectedLeadForDrawer, setSelectedLeadForDrawer] = useState<Lead | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerInitialTab, setDrawerInitialTab] = useState<'overview' | 'chat'>('overview');
 
   // Selection state (Gmail style)
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
@@ -180,8 +181,9 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   };
 
   // --- Drawer Opener ---
-  const handleOpenLeadDrawer = (lead: Lead) => {
+  const handleOpenLeadDrawer = (lead: Lead, tab: 'overview' | 'chat' = 'overview') => {
     setSelectedLeadForDrawer(lead);
+    setDrawerInitialTab(tab);
     setIsDrawerOpen(true);
   };
 
@@ -790,7 +792,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </select>
                       </td>
 
-                      {/* Actions: View Details, Send, Google Maps, Blacklist, Delete */}
+                      {/* Actions: View Details, Chat, Send, Google Maps, Blacklist, Delete */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-1">
                           <IconButton
@@ -798,8 +800,21 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             variant="ghost"
                             size="sm"
                             tooltip={t('common.details')}
-                            onClick={() => handleOpenLeadDrawer(lead)}
+                            onClick={() => handleOpenLeadDrawer(lead, 'overview')}
                           />
+                          <div className="relative inline-flex">
+                            <IconButton
+                              icon={WhatsAppIcon}
+                              variant="ghost"
+                              size="sm"
+                              tooltip={t('leads.tabConversation')}
+                              onClick={() => handleOpenLeadDrawer(lead, 'chat')}
+                              className="text-[#25D366] hover:bg-[#25D366]/10"
+                            />
+                            {lead.status === 'REPLIED' && (
+                              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900 animate-pulse" />
+                            )}
+                          </div>
                           <IconButton
                             icon={Send}
                             variant="success"
@@ -859,6 +874,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       <LeadDetailDrawer
         lead={selectedLeadForDrawer}
         isOpen={isDrawerOpen}
+        initialTab={drawerInitialTab}
         onClose={() => setIsDrawerOpen(false)}
         onSendMessage={handleOpenSendModal}
         onBlacklist={handleOpenSingleBlacklist}

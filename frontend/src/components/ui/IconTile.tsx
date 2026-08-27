@@ -20,7 +20,7 @@ const sizeStyles: Record<IconTileSize, { box: string; icon: string; stroke?: num
 };
 
 export interface IconTileProps extends ToneVariantProps {
-  icon: LucideIcon;
+  icon: LucideIcon | React.ComponentType<{ className?: string }>;
   size?: IconTileSize;
   className?: string;
 }

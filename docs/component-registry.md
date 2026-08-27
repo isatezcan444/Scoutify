@@ -208,3 +208,24 @@ components/
 - **Purpose**: Verification trust badge with shield icon and score indicator.
 - **Props**: `status: string`, `isVerified: boolean`, `score?: number`.
 - **Import**: `import { VerificationBadge } from '@/components/domain';`
+
+### `ChatBubble`
+- **Purpose**: WhatsApp message bubble primitive with inbound/outbound styling, timestamps, and delivery/read checkmarks.
+- **Props**: `message: Message`.
+- **Import**: `import { ChatBubble } from '@/components/domain';`
+
+### `ChatThread`
+- **Purpose**: Interactive scrollable message timeline with date separators, loading skeletons, empty state, and auto-scroll to bottom.
+- **Props**: `messages: Message[]`, `loading?: boolean`, `leadName?: string`, `leadPhone?: string`.
+- **Import**: `import { ChatThread } from '@/components/domain';`
+
+### `ChatComposer`
+- **Purpose**: Bottom message composer bar equipped with safe preview mode protection and character helpers.
+- **Props**: `onSend?: (text: string) => void`, `disabled?: boolean`, `placeholder?: string`.
+- **Import**: `import { ChatComposer } from '@/components/domain';`
+
+### `ConversationList`
+- **Purpose**: Sidebar list of all active conversation threads with search filtering, avatar hashing, unread badges, and last message previews.
+- **Props**: `conversations: Conversation[]`, `selectedId?: number`, `onSelect: (conv: Conversation) => void`, `loading?: boolean`, `searchQuery?: string`, `onSearchChange?: (q: string) => void`.
+- **Import**: `import { ConversationList } from '@/components/domain';`
+

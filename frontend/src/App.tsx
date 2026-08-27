@@ -39,6 +39,9 @@ const AppContent: React.FC = () => {
     try {
       ws = createWebSocket((eventData) => {
         setIsWsConnected(true);
+        // Broadcast to hooks/subscribers
+        window.dispatchEvent(new CustomEvent('scoutify:ws_event', { detail: eventData }));
+
         // Handle Inbound Reply Event
         if (eventData.event === 'inbound_reply') {
           toast.reply(

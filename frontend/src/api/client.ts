@@ -1,4 +1,18 @@
-import { Lead, Campaign, WhatsAppSession, DashboardStats, ScraperJob, MessageLog, BlacklistEntry, BlacklistPaginationResponse, AntiBanConfig } from '../types';
+import { 
+  Lead, 
+  Campaign, 
+  WhatsAppSession, 
+  DashboardStats, 
+  ScraperJob, 
+  MessageLog, 
+  BlacklistEntry, 
+  BlacklistPaginationResponse, 
+  AntiBanConfig,
+  Conversation,
+  ConversationDetail,
+  ConversationStatus,
+  Message
+} from '../types';
 
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 const defaultApiPort = '8000';
@@ -381,6 +395,33 @@ export class ApiClient {
       body: JSON.stringify(body)
     });
     if (!res.ok) throw new Error('Toplu kara listeden silme işlemi başarısız oldu');
+    return res.json();
+  }
+
+  // --- Conversations & WhatsApp Chat ---
+  static async getConversations(params?: {
+    status?: ConversationStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<Conversation[]> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.offset) query.set('offset', params.offset.toString());
+    const res = await fetch(`${API_BASE}/conversations?${query.toString()}`);
+    if (!res.ok) throw new Error('Konuşmalar yüklenemedi');
+    return res.json();
+  }
+
+  static async getConversation(conversationId: number): Promise<ConversationDetail> {
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}`);
+    if (!res.ok) throw new Error('Konuşma detayı yüklenemedi');
+    return res.json();
+  }
+
+  static async getLeadConversation(leadId: number): Promise<ConversationDetail> {
+    const res = await fetch(`${API_BASE}/conversations/lead/${leadId}`);
+    if (!res.ok) throw new Error('Lead konuşması yüklenemedi');
     return res.json();
   }
 }

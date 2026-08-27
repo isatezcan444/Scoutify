@@ -21,14 +21,18 @@ import {
   Shield,
   Building2,
   Save,
-  Undo2
+  Undo2,
+  MessageSquare
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
-import { WhatsAppSession, MessageLog } from '../types';
+import { WhatsAppSession, MessageLog, Conversation } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
-import { SessionCard } from '../components/domain';
+import { EmptyState } from '../components/ui/EmptyState';
+import { Avatar } from '../components/ui/Avatar';
+import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
+import { SessionCard, ConversationList, ChatThread, ChatComposer } from '../components/domain';
 import { Slider, Switch } from '../components/forms';
 import { 
   AntiBanConfig, 
@@ -42,6 +46,7 @@ import {
 } from '../utils/antiBanSettings';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
+import { useWhatsAppConversation } from '../hooks/useWhatsAppConversation';
 
 interface WhatsAppHubPageProps {
   onRefreshStats: () => void;
@@ -53,6 +58,36 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [sessions, setSessions] = useState<WhatsAppSession[]>([]);
   const [, setLogs] = useState<MessageLog[]>([]);
   const [, setLoading] = useState(false);
+
+  // Tab State: 'conversations' | 'sessions' | 'antiban'
+  const [hubTab, setHubTab] = useState<'conversations' | 'sessions' | 'antiban'>('conversations');
+
+  // Live Conversations State
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
+  const [convsLoading, setConvsLoading] = useState<boolean>(false);
+  const [convSearch, setConvSearch] = useState<string>('');
+
+  // Active chat hook for selected conversation
+  const { messages: activeMessages, loading: activeChatLoading } = useWhatsAppConversation({
+    conversationId: selectedConv?.id,
+    enabled: hubTab === 'conversations' && !!selectedConv,
+  });
+
+  const fetchConversations = async () => {
+    setConvsLoading(true);
+    try {
+      const data = await ApiClient.getConversations();
+      setConversations(data);
+      if (data.length > 0 && !selectedConv) {
+        setSelectedConv(data[0]);
+      }
+    } catch (e) {
+      console.warn('Failed to load conversations:', e);
+    } finally {
+      setConvsLoading(false);
+    }
+  };
 
   // Anti-Ban Timing & Change-Tracking State
   const [savedConfig, setSavedConfig] = useState<AntiBanConfig>(getStoredAntiBanConfig());
@@ -91,6 +126,17 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   useEffect(() => {
     fetchSessionsAndLogs();
+    fetchConversations();
+
+    // Listen to real-time inbound messages to update conversation previews
+    const handleWs = (e: Event) => {
+      const eventData = (e as CustomEvent<any>).detail;
+      if (eventData?.event === 'inbound_reply') {
+        fetchConversations();
+      }
+    };
+    window.addEventListener('scoutify:ws_event', handleWs);
+
     // Load persisted Anti-Ban configuration from backend database
     ApiClient.getAntiBanSettings()
       .then((remote) => {
@@ -105,6 +151,10 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
       .catch((e) => {
         console.warn('Anti-ban config failed to load from backend, using local storage:', e);
       });
+
+    return () => {
+      window.removeEventListener('scoutify:ws_event', handleWs);
+    };
   }, []);
 
   const handlePresetSelect = (presetKey: 'ultra_safe' | 'standard_balanced' | 'fast_warmed') => {
@@ -257,48 +307,193 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
   return (
     <div className="space-y-6 pb-16 select-none animate-fade-in">
-      {/* Top Header & New Account Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Top Header & Tab Switcher */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-[#28C76F]" />
-            {t('whatsapp.sessionsTitle')}
+            {hubTab === 'conversations' ? (
+              <>
+                <MessageSquare className="w-5 h-5 text-[#25D366]" />
+                {t('whatsapp.conversationsTitle')}
+              </>
+            ) : hubTab === 'sessions' ? (
+              <>
+                <Smartphone className="w-5 h-5 text-[#28C76F]" />
+                {t('whatsapp.sessionsTitle')}
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-5 h-5 text-[#7367F0]" />
+                {t('whatsapp.antiBanTitle')}
+              </>
+            )}
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5 font-medium">
-            {t('whatsapp.sessionsSubtitle')}
+            {hubTab === 'conversations'
+              ? t('whatsapp.conversationsSubtitle')
+              : hubTab === 'sessions'
+              ? t('whatsapp.sessionsSubtitle')
+              : t('whatsapp.antiBanSubtitle')}
           </p>
         </div>
 
-        <Button
-          onClick={handleCreateSession}
-          size="sm"
-          className="space-x-2 font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
-        >
-          <QrCode className="w-4 h-4" />
-          <span>{t('whatsapp.addSession')}</span>
-        </Button>
-      </div>
+        {/* Segmented Tab Switcher */}
+        <div className="flex p-1 rounded-2xl bg-slate-200/80 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] w-full md:w-auto">
+          <button
+            type="button"
+            onClick={() => setHubTab('conversations')}
+            className={`flex-1 md:flex-initial py-1.5 px-3.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+              hubTab === 'conversations'
+                ? 'bg-white dark:bg-[#7367F0] text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>{t('whatsapp.tabConversations')}</span>
+            {conversations.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-[#25D366]/20 text-[#25D366] dark:text-[#25D366]">
+                {conversations.length}
+              </span>
+            )}
+          </button>
 
-      {/* Connected Sessions Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {sessions.map((sess) => (
-          <SessionCard
-            key={sess.id}
-            session={sess}
-            onDisconnect={handleDisconnect}
-            onScanQR={(id) => {
-              setPairingSessionId(id);
-              setIsQRModalOpen(true);
-            }}
-            onDelete={handleDelete}
-          />
-        ))}
+          <button
+            type="button"
+            onClick={() => setHubTab('sessions')}
+            className={`flex-1 md:flex-initial py-1.5 px-3.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+              hubTab === 'sessions'
+                ? 'bg-white dark:bg-[#7367F0] text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>{t('whatsapp.tabSessions')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHubTab('antiban')}
+            className={`flex-1 md:flex-initial py-1.5 px-3.5 rounded-xl text-xs font-extrabold transition-all flex items-center justify-center space-x-2 cursor-pointer ${
+              hubTab === 'antiban'
+                ? 'bg-white dark:bg-[#7367F0] text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>{t('whatsapp.tabAntiBan')}</span>
+            {hasUnsavedChanges && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* WHATSAPP ANTI-BAN YAPILANDIRMASI SUITE */}
+      {/* 1. CANLI DİYALOGLAR (CONVERSATIONS) PANELİ */}
       {/* ========================================================================= */}
-      <Card className="p-4 sm:p-6 space-y-6">
+      {hubTab === 'conversations' && (
+        <Card className="h-[650px] p-0 flex flex-col md:flex-row overflow-hidden border border-slate-200/80 dark:border-white/[0.08] shadow-sm">
+          {/* Left: Conversation List */}
+          <div className="w-full md:w-80 lg:w-96 shrink-0 h-full flex flex-col">
+            <ConversationList
+              conversations={conversations}
+              selectedId={selectedConv?.id}
+              loading={convsLoading}
+              searchQuery={convSearch}
+              onSearchChange={setConvSearch}
+              onSelect={(c) => setSelectedConv(c)}
+            />
+          </div>
+
+          {/* Right: Active Chat View */}
+          <div className="flex-1 flex flex-col h-full bg-white dark:bg-[#181C28]">
+            {selectedConv ? (
+              <>
+                {/* Active Chat Header */}
+                <div className="p-3.5 border-b border-slate-200/80 dark:border-white/[0.08] bg-slate-50/50 dark:bg-black/20 flex items-center justify-between shrink-0">
+                  <div className="flex items-center space-x-3">
+                    <Avatar name={selectedConv.lead_name || selectedConv.lead_phone || 'Lead'} size="md" shape="rounded" />
+                    <div>
+                      <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">
+                        {selectedConv.lead_name || selectedConv.lead_phone || `Lead #${selectedConv.lead_id}`}
+                      </h4>
+                      <p className="text-[11px] font-mono text-slate-400 font-medium">
+                        {selectedConv.lead_phone}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full bg-[#25D366]/15 text-[#25D366] font-bold text-xs">
+                      <WhatsAppIcon className="w-3.5 h-3.5" />
+                      <span>{t('leads.whatsappActive')}</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Chat Thread */}
+                <ChatThread
+                  messages={activeMessages}
+                  loading={activeChatLoading}
+                  leadName={selectedConv.lead_name}
+                  leadPhone={selectedConv.lead_phone}
+                />
+
+                {/* Safe Mock Composer */}
+                <ChatComposer />
+              </>
+            ) : (
+              <div className="flex-1 flex items-center justify-center p-8">
+                <EmptyState
+                  icon={MessageSquare}
+                  title={t('whatsapp.noConversations')}
+                  description={t('whatsapp.selectConversation')}
+                />
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 2. HAT VE OTURUM YÖNETİMİ */}
+      {/* ========================================================================= */}
+      {hubTab === 'sessions' && (
+        <div className="space-y-6">
+          <div className="flex justify-end">
+            <Button
+              onClick={handleCreateSession}
+              size="sm"
+              className="space-x-2 font-bold shadow-md shadow-[#7367F0]/30 cursor-pointer"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>{t('whatsapp.addSession')}</span>
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {sessions.map((sess) => (
+              <SessionCard
+                key={sess.id}
+                session={sess}
+                onDisconnect={handleDisconnect}
+                onScanQR={(id) => {
+                  setPairingSessionId(id);
+                  setIsQRModalOpen(true);
+                }}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. WHATSAPP ANTI-BAN YAPILANDIRMASI SUITE */}
+      {/* ========================================================================= */}
+      {hubTab === 'antiban' && (
+        <div className="space-y-6">
+          <Card className="p-4 sm:p-6 space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/[0.08] pb-4">
           <div className="flex items-center space-x-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#28C76F]/15 text-[#28C76F] flex items-center justify-center font-bold">
@@ -800,6 +995,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
           </Card>
         </div>
       </div>
+      </div>
+      )}
 
       {/* QR Pairing Modal */}
       {isQRModalOpen && typeof document !== 'undefined' && createPortal(
