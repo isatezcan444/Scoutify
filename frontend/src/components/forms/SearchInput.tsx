@@ -73,15 +73,15 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
     };
 
     const sizeClasses = {
-      sm: 'h-8 text-[11px] pl-8 pr-7',
-      md: 'h-10 text-xs pl-9 pr-8',
-      lg: 'h-11 text-sm pl-10 pr-9',
+      sm: 'h-8 text-[11px] pl-8 pr-7 font-medium',
+      md: 'h-11 text-xs pl-10 pr-9 font-medium',
+      lg: 'h-11 text-xs pl-10 pr-9 font-medium',
     };
 
     const iconSizes = {
       sm: 'w-3.5 h-3.5 left-2.5',
-      md: 'w-4 h-4 left-3',
-      lg: 'w-4.5 h-4.5 left-3.5',
+      md: 'w-4 h-4 left-3.5',
+      lg: 'w-4 h-4 left-3.5',
     };
 
     return (

@@ -292,11 +292,11 @@ export const LocationMultiSelect: React.FC<LocationMultiSelectProps> = ({
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
-        className="w-full h-11 flex items-center justify-between px-3.5 rounded-lg vuexy-input text-xs font-semibold bg-white dark:bg-[#25293C] text-left transition-all border border-slate-300 dark:border-white/[0.12] hover:border-[#7367F0] focus:outline-none"
+        className="w-full h-11 flex items-center justify-between px-3.5 rounded-lg vuexy-input text-xs font-medium bg-white dark:bg-[#25293C] text-left transition-all border border-slate-300 dark:border-white/[0.12] hover:border-[#7367F0] focus:outline-none"
       >
         <div className="flex items-center space-x-2 truncate">
           <MapPin className="w-3.5 h-3.5 text-[#00CFE8] shrink-0" />
-          <span className={`truncate font-semibold ${selectedCity ? 'text-slate-800 dark:text-white' : 'text-slate-400'}`}>
+          <span className={`truncate ${selectedCity ? 'font-medium text-slate-800 dark:text-white' : 'font-normal text-slate-400 dark:text-[#7E7F96]'}`}>
             {getSummaryLabel()}
           </span>
         </div>

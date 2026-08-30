@@ -12,7 +12,10 @@ import {
   ConversationDetail,
   ConversationMessagesResponse,
   ConversationStatus,
-  Message
+  Message,
+  WhatsAppTemplate,
+  GenerateMessagePayload,
+  GenerateMessageResponse,
 } from '../types';
 
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
@@ -233,6 +236,29 @@ export class ApiClient {
     return res.json();
   }
 
+  static async deleteCampaign(campaignId: number): Promise<void> {
+    const res = await fetch(`${API_BASE}/campaigns/${campaignId}`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Kampanya silinemedi');
+    }
+  }
+
+  static async generateCampaignMessage(payload: GenerateMessagePayload): Promise<GenerateMessageResponse> {
+    const res = await fetch(`${API_BASE}/campaigns/generate-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Mesaj oluşturulamadı');
+    }
+    return res.json();
+  }
+
   static async previewSpintax(template: string, count: number = 5): Promise<{ permutations_count: number; samples: string[] }> {
     const res = await fetch(`${API_BASE}/campaigns/spintax/preview`, {
       method: 'POST',
@@ -408,15 +434,32 @@ export class ApiClient {
   // --- Conversations & WhatsApp Chat ---
   static async getConversations(params?: {
     status?: ConversationStatus;
+    unread_only?: boolean;
+    search?: string;
     limit?: number;
     offset?: number;
   }): Promise<Conversation[]> {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
+    if (params?.unread_only) query.set('unread_only', 'true');
+    if (params?.search) query.set('search', params.search);
     if (params?.limit) query.set('limit', params.limit.toString());
     if (params?.offset) query.set('offset', params.offset.toString());
     const res = await fetch(`${API_BASE}/conversations?${query.toString()}`);
     if (!res.ok) throw new Error('Konuşmalar yüklenemedi');
+    return res.json();
+  }
+
+  static async updateConversationStatus(
+    conversationId: number,
+    status: ConversationStatus
+  ): Promise<Conversation> {
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error('Konuşma durumu güncellenemedi');
     return res.json();
   }
 
@@ -446,6 +489,27 @@ export class ApiClient {
     return res.json();
   }
 
+  static async sendMessage(
+    conversationId: number,
+    body: string,
+    idempotencyKey?: string
+  ): Promise<Message> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idempotencyKey) {
+      headers['X-Idempotency-Key'] = idempotencyKey;
+    }
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ body, type: 'text' }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Mesaj gönderilemedi');
+    }
+    return res.json();
+  }
+
   static async getLeadConversation(
     leadId: number,
     params?: { limit?: number; before?: number }
@@ -456,6 +520,69 @@ export class ApiClient {
     const qStr = query.toString() ? `?${query.toString()}` : '';
     const res = await fetch(`${API_BASE}/conversations/lead/${leadId}${qStr}`);
     if (!res.ok) throw new Error('Lead konuşması yüklenemedi');
+    return res.json();
+  }
+
+  static async getTemplates(): Promise<WhatsAppTemplate[]> {
+    const res = await fetch(`${API_BASE}/conversations/templates`);
+    if (!res.ok) throw new Error('Şablonlar yüklenemedi');
+    return res.json();
+  }
+
+  static async sendTemplate(
+    conversationId: number,
+    templateKey: string,
+    variables: Record<string, string> = {},
+    idempotencyKey?: string
+  ): Promise<Message> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idempotencyKey) {
+      headers['X-Idempotency-Key'] = idempotencyKey;
+    }
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/templates/send`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ template_key: templateKey, variables }),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Şablon mesajı gönderilemedi');
+    }
+    return res.json();
+  }
+
+  static async retryMessage(
+    conversationId: number,
+    messageId: number
+  ): Promise<Message> {
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/messages/${messageId}/retry`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Mesaj tekrar gönderilemedi');
+    }
+    return res.json();
+  }
+
+  static async sendMedia(
+    conversationId: number,
+    mediaData: { media_type: string; media_url: string; caption?: string; filename?: string },
+    idempotencyKey?: string
+  ): Promise<Message> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (idempotencyKey) {
+      headers['X-Idempotency-Key'] = idempotencyKey;
+    }
+    const res = await fetch(`${API_BASE}/conversations/${conversationId}/media`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(mediaData),
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || 'Medya gönderilemedi');
+    }
     return res.json();
   }
 
@@ -472,6 +599,88 @@ export class ApiClient {
       method: 'POST',
     });
     if (!res.ok) throw new Error('Lead konuşması okundu olarak işaretlenemedi');
+    return res.json();
+  }
+
+  // --- Smart Outreach & Category Confirmation ---
+  static async recommendCategories(payload: {
+    offer_title: string;
+    offer_description?: string;
+    business_goal?: string;
+    target_sector_hint?: string;
+  }): Promise<import('../types').CategoryRecommendationResponse> {
+    const res = await fetch(`${API_BASE}/smart-outreach/recommend-categories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Kategori önerisi alınamadı' }));
+      throw new Error(err.detail || 'Kategori önerisi alınamadı');
+    }
+    return res.json();
+  }
+
+  static async matchLeads(payload: {
+    offer_title: string;
+    offer_description?: string;
+    business_goal?: string;
+    approved_target_categories?: string[];
+    lead_ids?: number[];
+    city?: string;
+    category_filter?: string;
+    min_fit_score?: number;
+  }): Promise<import('../types').MatchLeadsResponse> {
+    const res = await fetch(`${API_BASE}/smart-outreach/match-leads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Müşteri eşleştirmesi yapılamadı' }));
+      throw new Error(err.detail || 'Müşteri eşleştirmesi yapılamadı');
+    }
+    return res.json();
+  }
+
+  static async recommendMessage(payload: {
+    lead_id: number;
+    offer_title: string;
+    offer_description?: string;
+    business_goal?: string;
+    target_category?: string;
+  }): Promise<import('../types').MessageRecommendationResponse> {
+    const res = await fetch(`${API_BASE}/smart-outreach/recommend-message`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Mesaj önerisi alınamadı' }));
+      throw new Error(err.detail || 'Mesaj önerisi alınamadı');
+    }
+    return res.json();
+  }
+
+  static async startTargetedDiscovery(payload: {
+    offer_title: string;
+    offer_description?: string;
+    business_goal?: string;
+    city: string;
+    districts?: string[];
+    approved_target_categories: string[];
+    user_added_categories?: string[];
+    max_results_per_category?: number;
+  }): Promise<{ status: string; approved_categories_count: number; job_ids: number[]; message: string }> {
+    const res = await fetch(`${API_BASE}/smart-outreach/start-targeted-discovery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Hedefli arama başlatılamadı' }));
+      throw new Error(err.detail || 'Hedefli arama başlatılamadı');
+    }
     return res.json();
   }
 }

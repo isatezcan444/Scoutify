@@ -21,8 +21,10 @@ import { WhatsAppIcon } from '../ui/whatsapp-icon';
 import { GoogleMapsIcon } from '../ui/google-maps-icon';
 import { ChatThread } from './ChatThread';
 import { ChatComposer } from './ChatComposer';
+import { TemplateSelectModal } from './TemplateSelectModal';
 import { useWhatsAppConversation } from '../../hooks/useWhatsAppConversation';
 import { useI18n } from '../../context/I18nContext';
+import { useToast } from '../../context/ToastContext';
 
 export interface LeadDetailDrawerProps {
   lead: Lead | null;
@@ -46,7 +48,10 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
   onStatusChange,
 }) => {
   const { t } = useI18n();
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState<'overview' | 'chat'>(initialTab);
+
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState<boolean>(false);
 
   // Sync initialTab when drawer opens
   useEffect(() => {
@@ -57,11 +62,17 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
 
   // Hook for live conversation data
   const {
+    conversation,
     messages,
     hasMore,
     loadingOlder,
     loading: chatLoading,
     loadOlderMessages,
+    updateStatus,
+    sendMessage,
+    sendTemplate,
+    retryMessage,
+    sendMedia,
   } = useWhatsAppConversation({
     leadId: lead?.id,
     enabled: isOpen && activeTab === 'chat',
@@ -124,7 +135,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
             >
               {t('common.close')}
             </Button>
-            {activeTab === 'overview' ? (
+            {activeTab === 'overview' && (
               <Button
                 size="sm"
                 onClick={() => setActiveTab('chat')}
@@ -133,19 +144,7 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
                 <WhatsAppIcon className="w-3.5 h-3.5" />
                 <span>{t('leads.tabConversation')}</span>
               </Button>
-            ) : onSendMessage ? (
-              <Button
-                size="sm"
-                onClick={() => {
-                  onSendMessage(lead);
-                  onClose();
-                }}
-                className="bg-[#7367F0] hover:bg-[#685dd8] text-white font-bold space-x-1.5 cursor-pointer shadow-md shadow-[#7367F0]/20"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{t('leads.sendNow')}</span>
-              </Button>
-            ) : null}
+            )}
           </div>
         </div>
       }
@@ -327,10 +326,66 @@ export const LeadDetailDrawer: React.FC<LeadDetailDrawerProps> = ({
               onLoadOlder={loadOlderMessages}
               leadName={lead.name}
               leadPhone={lead.phone_e164 || lead.phone}
+              onRetry={async (msgId) => {
+                try {
+                  await retryMessage(msgId);
+                  toast.success(t('whatsapp.messageSent') || 'Mesaj tekrar gönderildi', t('common.success'));
+                } catch (err: any) {
+                  toast.error(t('whatsapp.msgFailed') || 'Tekrar gönderim başarısız', t('common.error'));
+                }
+              }}
             />
 
-            {/* Protected Composer */}
-            <ChatComposer />
+            {/* Live Composer */}
+            <ChatComposer
+              onSend={async (text) => {
+                try {
+                  await sendMessage(text);
+                  toast.success(t('whatsapp.messageSent') || 'Mesaj başarıyla gönderildi', t('common.success'));
+                } catch (err: any) {
+                  const msg = (err?.message || '').toLowerCase();
+                  if (msg.includes('24 saat') || msg.includes('window')) {
+                    toast.error(t('whatsapp.windowExpiredNotice') || 'Bu konuşmaya devam etmek için bir şablon kullanın.', t('common.error'));
+                  } else {
+                    toast.error(t('whatsapp.msgFailed') || 'Mesaj gönderilemedi', t('common.error'));
+                  }
+                }
+              }}
+              onSendTemplate={() => setIsTemplateModalOpen(true)}
+              onSendMedia={async (mediaType, mediaUrl, caption, filename) => {
+                try {
+                  await sendMedia(mediaType, mediaUrl, caption, filename);
+                  toast.success(t('whatsapp.mediaSent') || 'Medya başarıyla gönderildi', t('common.success'));
+                } catch (err: any) {
+                  toast.error(t('whatsapp.mediaFailed') || 'Medya gönderilemedi', t('common.error'));
+                }
+              }}
+              onReopenConversation={async () => {
+                try {
+                  await updateStatus('ACTIVE');
+                  toast.success(t('whatsapp.statusUpdated') || 'Diyalog yeniden açıldı', t('common.success'));
+                } catch (err: any) {
+                  toast.error(t('common.error'), t('common.error'));
+                }
+              }}
+              isClosed={conversation?.status === 'CLOSED'}
+              isWindowOpen={conversation?.is_window_open ?? true}
+            />
+
+            {/* Template Select Modal */}
+            <TemplateSelectModal
+              isOpen={isTemplateModalOpen}
+              onClose={() => setIsTemplateModalOpen(false)}
+              leadName={lead.name}
+              onSendTemplate={async (templateKey, variables) => {
+                try {
+                  await sendTemplate(templateKey, variables);
+                  toast.success(t('whatsapp.templateSent') || 'Şablon başarıyla gönderildi', t('common.success'));
+                } catch (err: any) {
+                  toast.error(t('whatsapp.templateFailed') || 'Şablon gönderilemedi', t('common.error'));
+                }
+              }}
+            />
           </div>
         )}
       </div>

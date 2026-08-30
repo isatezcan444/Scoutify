@@ -58,3 +58,25 @@ class CampaignLaunchRequest(BaseModel):
     lead_ids: Optional[List[int]] = None
     filter_status: Optional[str] = "NEW"
     limit: Optional[int] = 50
+
+class GenerateMessageRequest(BaseModel):
+    communication_goal: str
+    target_category: Optional[str] = None
+    offer_title: Optional[str] = None
+    key_benefit: Optional[str] = None
+    extra_information: Optional[str] = None
+    preferred_channel: Optional[str] = None
+    lead_need: Optional[str] = None
+    specific_question: Optional[str] = None
+    pricing_info: Optional[str] = None
+    meeting_purpose: Optional[str] = None
+    previous_topic: Optional[str] = None
+    language: str = "tr"
+    variation_seed: Optional[int] = None
+
+class GenerateMessageResponse(BaseModel):
+    generated_message: str
+    communication_goal: str
+    language: str
+    strategy_summary: Optional[str] = None
+

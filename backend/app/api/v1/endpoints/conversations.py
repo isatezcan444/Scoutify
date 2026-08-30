@@ -1,8 +1,8 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from backend.app.core.database import get_db
@@ -10,10 +10,18 @@ from backend.app.api.v1.websocket import ws_manager
 from backend.app.models.conversation import Conversation, ConversationStatus
 from backend.app.models.message import Message
 from backend.app.models.lead import Lead
+from backend.app.services.whatsapp_outbound_service import WhatsAppOutboundService
+from backend.app.services.whatsapp_template_service import WhatsAppTemplateService
 from backend.app.schemas.conversation import (
     ConversationResponse,
     ConversationDetailResponse,
     ConversationMessagesResponse,
+    ConversationStatusUpdateRequest,
+    MessageSendRequest,
+    TemplateSendRequest,
+    TemplateDefinitionResponse,
+    OutboundMediaSendRequest,
+    MediaInfoResponse,
     MessageResponse,
 )
 
@@ -27,7 +35,7 @@ async def _fetch_paginated_messages(
     before: Optional[int] = None,
 ):
     """
-    Fetches messages for a conversation with cursor pagination.
+    Fetches messages for a conversation with cursor pagination using composite index.
     Returns (messages in chronological order, has_more, oldest_id, newest_id).
     """
     stmt = select(Message).where(Message.conversation_id == conversation_id)
@@ -52,27 +60,53 @@ async def _fetch_paginated_messages(
 @router.get("", response_model=List[ConversationResponse])
 async def list_conversations(
     status: Optional[ConversationStatus] = None,
+    unread_only: bool = Query(False, description="Filter conversations with unread_count > 0"),
+    search: Optional[str] = Query(None, description="Search lead name or phone number"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
 ):
-    """Lists conversations ordered by most recent message."""
+    """
+    Thin, high-performance conversation list query.
+    Eliminates loading full message histories in memory using correlated SQL subquery for preview.
+    """
+    latest_msg_subq = (
+        select(Message.body)
+        .where(Message.conversation_id == Conversation.id)
+        .order_by(Message.id.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+
     stmt = (
-        select(Conversation)
-        .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+        select(Conversation, latest_msg_subq.label("last_preview"))
+        .join(Conversation.lead)
+        .options(selectinload(Conversation.lead))
         .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
         .offset(offset)
         .limit(limit)
     )
+
     if status:
         stmt = stmt.where(Conversation.status == status)
 
+    if unread_only:
+        stmt = stmt.where(Conversation.unread_count > 0)
+
+    if search and search.strip():
+        q_clean = search.strip()
+        search_filter = or_(
+            Lead.name.ilike(f"%{q_clean}%"),
+            Lead.phone_e164.ilike(f"%{q_clean}%"),
+            Lead.phone.ilike(f"%{q_clean}%"),
+        )
+        stmt = stmt.where(search_filter)
+
     res = await db.execute(stmt)
-    conversations = res.scalars().all()
+    rows = res.all()
 
     result = []
-    for conv in conversations:
-        latest_msg = conv.messages[-1] if conv.messages else None
+    for conv, last_preview in rows:
         item = ConversationResponse(
             id=conv.id,
             lead_id=conv.lead_id,
@@ -85,11 +119,21 @@ async def list_conversations(
             updated_at=conv.updated_at,
             lead_name=conv.lead.name if conv.lead else None,
             lead_phone=conv.lead.phone_e164 if conv.lead else None,
-            last_message_preview=latest_msg.body if latest_msg else None,
+            last_message_preview=last_preview,
         )
         result.append(item)
 
     return result
+
+
+@router.get("/templates", response_model=List[TemplateDefinitionResponse])
+async def list_conversation_templates():
+    """
+    Returns available business WhatsApp templates with simple variable definitions
+    for clean UI selection.
+    """
+    templates = WhatsAppTemplateService.list_templates()
+    return [TemplateDefinitionResponse(**t) for t in templates]
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
@@ -99,11 +143,11 @@ async def get_conversation(
     before: Optional[int] = Query(None, description="Cursor: message ID before which to fetch older messages"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetches a specific conversation with cursor-paginated messages."""
+    """Fetches a specific conversation with cursor-paginated messages and 24h window status."""
     stmt = (
         select(Conversation)
         .where(Conversation.id == conversation_id)
-        .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+        .options(selectinload(Conversation.lead))
     )
     res = await db.execute(stmt)
     conv = res.scalar_one_or_none()
@@ -114,7 +158,8 @@ async def get_conversation(
     messages_dto, has_more, oldest_id, newest_id = await _fetch_paginated_messages(
         db=db, conversation_id=conv.id, limit=limit, before=before
     )
-    latest_msg = conv.messages[-1] if conv.messages else None
+    latest_msg_body = messages_dto[-1].body if messages_dto else None
+    window_info = await WhatsAppOutboundService.check_24h_window(conv.id, db)
 
     return ConversationDetailResponse(
         id=conv.id,
@@ -128,7 +173,10 @@ async def get_conversation(
         updated_at=conv.updated_at,
         lead_name=conv.lead.name if conv.lead else None,
         lead_phone=conv.lead.phone_e164 if conv.lead else None,
-        last_message_preview=latest_msg.body if latest_msg else None,
+        last_message_preview=latest_msg_body,
+        is_window_open=window_info["is_window_open"],
+        last_inbound_at=window_info["last_inbound_at"],
+        seconds_remaining=window_info["seconds_remaining"],
         messages=messages_dto,
         has_more=has_more,
         oldest_message_id=oldest_id,
@@ -160,6 +208,87 @@ async def get_conversation_messages(
     )
 
 
+@router.post("/{conversation_id}/messages", response_model=MessageResponse, status_code=201)
+async def send_message_to_conversation(
+    conversation_id: int,
+    payload: MessageSendRequest,
+    idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sends an outbound WhatsApp message to the lead within the specified conversation.
+    Validates conversation state, dispatches via Meta Cloud API or simulation,
+    persists OUTBOUND Message entity, and broadcasts WebSocket event.
+    """
+    msg = await WhatsAppOutboundService.send_conversation_message(
+        db=db,
+        conversation_id=conversation_id,
+        text=payload.body,
+        idempotency_key=idempotency_key,
+    )
+    return MessageResponse.model_validate(msg)
+
+
+@router.post("/{conversation_id}/templates/send", response_model=MessageResponse, status_code=201)
+async def send_template_to_conversation(
+    conversation_id: int,
+    payload: TemplateSendRequest,
+    idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sends a business WhatsApp template message to the conversation.
+    Renders variables, dispatches via Meta Cloud API or simulation, and broadcasts WebSocket event.
+    """
+    msg = await WhatsAppTemplateService.send_template_message(
+        db=db,
+        conversation_id=conversation_id,
+        template_key=payload.template_key,
+        variables=payload.variables,
+        idempotency_key=idempotency_key,
+    )
+    return MessageResponse.model_validate(msg)
+
+
+@router.post("/{conversation_id}/messages/{message_id}/retry", response_model=MessageResponse)
+async def retry_failed_message(
+    conversation_id: int,
+    message_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Retries sending a FAILED message with complete audit preservation and idempotency.
+    """
+    msg = await WhatsAppOutboundService.retry_failed_message(
+        db=db,
+        conversation_id=conversation_id,
+        message_id=message_id,
+    )
+    return MessageResponse.model_validate(msg)
+
+
+@router.post("/{conversation_id}/media", response_model=MessageResponse, status_code=201)
+async def send_media_to_conversation(
+    conversation_id: int,
+    payload: OutboundMediaSendRequest,
+    idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Sends an outbound media message (Image / Document / PDF) to the conversation.
+    """
+    msg = await WhatsAppOutboundService.send_outbound_media(
+        db=db,
+        conversation_id=conversation_id,
+        media_type=payload.media_type,
+        media_url=payload.media_url,
+        caption=payload.caption,
+        filename=payload.filename,
+        idempotency_key=idempotency_key,
+    )
+    return MessageResponse.model_validate(msg)
+
+
 @router.get("/lead/{lead_id}", response_model=ConversationDetailResponse)
 async def get_lead_conversation(
     lead_id: int,
@@ -167,7 +296,7 @@ async def get_lead_conversation(
     before: Optional[int] = Query(None, description="Cursor: message ID before which to fetch older messages"),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetches or initializes the active conversation thread for a given lead."""
+    """Fetches or initializes the active conversation thread for a given lead with 24h window status."""
     lead = await db.get(Lead, lead_id)
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -175,7 +304,7 @@ async def get_lead_conversation(
     stmt = (
         select(Conversation)
         .where(Conversation.lead_id == lead_id, Conversation.channel == "WHATSAPP")
-        .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+        .options(selectinload(Conversation.lead))
         .order_by(Conversation.id.desc())
         .limit(1)
     )
@@ -195,14 +324,15 @@ async def get_lead_conversation(
         stmt = (
             select(Conversation)
             .where(Conversation.id == conv.id)
-            .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+            .options(selectinload(Conversation.lead))
         )
         conv = (await db.execute(stmt)).scalar_one()
 
     messages_dto, has_more, oldest_id, newest_id = await _fetch_paginated_messages(
         db=db, conversation_id=conv.id, limit=limit, before=before
     )
-    latest_msg = conv.messages[-1] if conv.messages else None
+    latest_msg_body = messages_dto[-1].body if messages_dto else None
+    window_info = await WhatsAppOutboundService.check_24h_window(conv.id, db)
 
     return ConversationDetailResponse(
         id=conv.id,
@@ -216,11 +346,64 @@ async def get_lead_conversation(
         updated_at=conv.updated_at,
         lead_name=conv.lead.name if conv.lead else None,
         lead_phone=conv.lead.phone_e164 if conv.lead else None,
-        last_message_preview=latest_msg.body if latest_msg else None,
+        last_message_preview=latest_msg_body,
+        is_window_open=window_info["is_window_open"],
+        last_inbound_at=window_info["last_inbound_at"],
+        seconds_remaining=window_info["seconds_remaining"],
         messages=messages_dto,
         has_more=has_more,
         oldest_message_id=oldest_id,
         newest_message_id=newest_id,
+    )
+
+
+@router.patch("/{conversation_id}/status", response_model=ConversationResponse)
+async def update_conversation_status(
+    conversation_id: int,
+    payload: ConversationStatusUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Updates the lifecycle status of a conversation (ACTIVE, ARCHIVED, CLOSED).
+    Broadcasts conversation_status_updated event over WebSocket.
+    """
+    stmt = (
+        select(Conversation)
+        .where(Conversation.id == conversation_id)
+        .options(selectinload(Conversation.lead))
+    )
+    res = await db.execute(stmt)
+    conv = res.scalar_one_or_none()
+
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    old_status = conv.status
+    conv.status = payload.status
+    conv.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(conv)
+
+    if old_status != conv.status:
+        await ws_manager.broadcast({
+            "event": "conversation_status_updated",
+            "conversation_id": conv.id,
+            "lead_id": conv.lead_id,
+            "status": conv.status.value,
+        })
+
+    return ConversationResponse(
+        id=conv.id,
+        lead_id=conv.lead_id,
+        channel=conv.channel,
+        status=conv.status,
+        last_message_at=conv.last_message_at,
+        unread_count=conv.unread_count or 0,
+        last_read_at=conv.last_read_at,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+        lead_name=conv.lead.name if conv.lead else None,
+        lead_phone=conv.lead.phone_e164 if conv.lead else None,
     )
 
 
@@ -233,7 +416,7 @@ async def mark_conversation_as_read(
     stmt = (
         select(Conversation)
         .where(Conversation.id == conversation_id)
-        .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+        .options(selectinload(Conversation.lead))
     )
     res = await db.execute(stmt)
     conv = res.scalar_one_or_none()
@@ -255,7 +438,6 @@ async def mark_conversation_as_read(
         "last_read_at": conv.last_read_at.isoformat() if conv.last_read_at else None,
     })
 
-    latest_msg = conv.messages[-1] if conv.messages else None
     return ConversationResponse(
         id=conv.id,
         lead_id=conv.lead_id,
@@ -268,7 +450,6 @@ async def mark_conversation_as_read(
         updated_at=conv.updated_at,
         lead_name=conv.lead.name if conv.lead else None,
         lead_phone=conv.lead.phone_e164 if conv.lead else None,
-        last_message_preview=latest_msg.body if latest_msg else None,
     )
 
 
@@ -281,7 +462,7 @@ async def mark_lead_conversation_as_read(
     stmt = (
         select(Conversation)
         .where(Conversation.lead_id == lead_id, Conversation.channel == "WHATSAPP")
-        .options(selectinload(Conversation.lead), selectinload(Conversation.messages))
+        .options(selectinload(Conversation.lead))
         .order_by(Conversation.id.desc())
         .limit(1)
     )
@@ -304,7 +485,6 @@ async def mark_lead_conversation_as_read(
         "last_read_at": conv.last_read_at.isoformat() if conv.last_read_at else None,
     })
 
-    latest_msg = conv.messages[-1] if conv.messages else None
     return ConversationResponse(
         id=conv.id,
         lead_id=conv.lead_id,
@@ -317,5 +497,39 @@ async def mark_lead_conversation_as_read(
         updated_at=conv.updated_at,
         lead_name=conv.lead.name if conv.lead else None,
         lead_phone=conv.lead.phone_e164 if conv.lead else None,
-        last_message_preview=latest_msg.body if latest_msg else None,
+    )
+
+
+@router.get("/{conversation_id}/media/{media_id}", response_model=MediaInfoResponse)
+async def get_conversation_media_info(
+    conversation_id: int,
+    media_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    IDOR-Protected Media Access Endpoint.
+    Verifies that the requested media_id strictly belongs to a message in the given conversation.
+    """
+    conv = await db.get(Conversation, conversation_id)
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    stmt = select(Message).where(
+        Message.conversation_id == conversation_id,
+        Message.media_id == media_id,
+    )
+    res = await db.execute(stmt)
+    msg = res.scalar_one_or_none()
+
+    if not msg:
+        raise HTTPException(status_code=404, detail="Media not found in this conversation")
+
+    return MediaInfoResponse(
+        media_id=msg.media_id,
+        conversation_id=conversation_id,
+        mime_type=msg.media_mime_type,
+        filename=msg.media_filename,
+        caption=msg.media_caption,
+        download_ready=False,
+        message="Media metadata verified. Direct download isolated during safe testing mode.",
     )

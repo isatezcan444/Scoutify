@@ -5,6 +5,7 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { SECTORS } from '../../data/sectors';
 import { ApiClient } from '../../api/client';
+import { useI18n } from '../../context/I18nContext';
 
 interface CategoryMultiSelectProps {
   selectedCategories: string[];
@@ -17,6 +18,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
   onChange,
   disabled = false,
 }) => {
+  const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [localCategories, setLocalCategories] = useState<string[]>(selectedCategories || []);
@@ -67,10 +69,10 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
   };
 
   const getSummaryLabel = () => {
-    if (!selectedCategories || selectedCategories.length === 0) return 'Tüm Kategoriler';
+    if (!selectedCategories || selectedCategories.length === 0) return t('leads.filterByCategory') || 'Kategori ve Sektörler';
     if (selectedCategories.length === 1) return selectedCategories[0];
     if (selectedCategories.length === 2) return `${selectedCategories[0]}, ${selectedCategories[1]}`;
-    return `${selectedCategories.length} Kategori Seçili (${selectedCategories.slice(0, 2).join(', ')}...)`;
+    return `${selectedCategories.length} ${t('common.category') || 'Kategori'} (${selectedCategories.slice(0, 2).join(', ')}...)`;
   };
 
   const modalContent = isOpen && mounted ? (
@@ -229,15 +231,15 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(true)}
-        className="w-full h-10 px-3 rounded-lg vuexy-input text-xs font-medium flex items-center justify-between text-left hover:border-[#7367F0] transition-colors group cursor-pointer"
+        className="w-full h-11 px-3.5 rounded-lg vuexy-input text-xs font-medium flex items-center justify-between text-left hover:border-[#7367F0] transition-colors group cursor-pointer"
       >
         <div className="flex items-center space-x-2 truncate">
           <Layers className="w-3.5 h-3.5 text-[#7367F0] shrink-0" />
           <span
             className={`truncate text-xs ${
               selectedCategories.length > 0
-                ? 'font-bold text-slate-800 dark:text-white'
-                : 'text-slate-400'
+                ? 'font-medium text-slate-800 dark:text-white'
+                : 'font-normal text-slate-400 dark:text-[#7E7F96]'
             }`}
           >
             {getSummaryLabel()}

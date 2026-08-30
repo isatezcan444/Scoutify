@@ -50,20 +50,44 @@ class SpintaxService:
         # Step 1: Spin variations
         spun_text = cls.spin(template)
 
-        # Step 2: Inject Lead Variables
+        # Step 2: Inject Lead Variables (supporting both English and Turkish aliases)
+        name_val = lead_data.get("name") or "Yetkili"
+        cat_val = lead_data.get("category") or "İşletme"
+        city_val = lead_data.get("city") or "bölgeniz"
+        dist_val = lead_data.get("district") or ""
+        addr_val = lead_data.get("address") or ""
+        rating_val = str(lead_data.get("rating") or "")
+        web_val = lead_data.get("website") or ""
+        phone_val = lead_data.get("phone") or ""
+
         variables = {
-            "name": lead_data.get("name") or "Yetkili",
-            "category": lead_data.get("category") or "İşletme",
-            "city": lead_data.get("city") or "bölgeniz",
-            "district": lead_data.get("district") or "",
-            "address": lead_data.get("address") or "",
-            "rating": str(lead_data.get("rating") or ""),
-            "website": lead_data.get("website") or "",
-            "phone": lead_data.get("phone") or "",
+            "name": name_val,
+            "isim": name_val,
+            "ad": name_val,
+            "category": cat_val,
+            "kategori": cat_val,
+            "sektor": cat_val,
+            "sektör": cat_val,
+            "city": city_val,
+            "sehir": city_val,
+            "şehir": city_val,
+            "district": dist_val,
+            "ilce": dist_val,
+            "ilçe": dist_val,
+            "address": addr_val,
+            "adres": addr_val,
+            "rating": rating_val,
+            "puan": rating_val,
+            "website": web_val,
+            "web": web_val,
+            "phone": phone_val,
+            "telefon": phone_val,
         }
 
         for var_name, var_value in variables.items():
             spun_text = spun_text.replace(f"{{{var_name}}}", str(var_value))
+            spun_text = spun_text.replace(f"{{{var_name.lower()}}}", str(var_value))
+            spun_text = spun_text.replace(f"{{{var_name.upper()}}}", str(var_value))
 
         # Clean multiple spaces and normalize line breaks
         cleaned_text = re.sub(r'[ \t]+', ' ', spun_text)

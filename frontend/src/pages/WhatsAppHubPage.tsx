@@ -23,17 +23,19 @@ import {
   Save,
   Undo2,
   MessageSquare,
+  Archive,
   ExternalLink
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
-import { WhatsAppSession, MessageLog, Conversation, Lead } from '../types';
+import { WhatsAppSession, MessageLog, Conversation, ConversationStatus, Lead } from '../types';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { Card } from '../components/ui/card';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Avatar } from '../components/ui/Avatar';
 import { WhatsAppIcon } from '../components/ui/whatsapp-icon';
-import { SessionCard, ConversationList, ChatThread, ChatComposer, LeadDetailDrawer } from '../components/domain';
+import { SessionCard, ConversationList, ChatThread, ChatComposer, LeadDetailDrawer, TemplateSelectModal } from '../components/domain';
+import { FilterTab } from '../components/domain/ConversationList';
 import { Slider, Switch } from '../components/forms';
 import { 
   AntiBanConfig, 
@@ -68,19 +70,26 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [selectedConv, setSelectedConv] = useState<Conversation | null>(null);
   const [convsLoading, setConvsLoading] = useState<boolean>(false);
   const [convSearch, setConvSearch] = useState<string>('');
+  const [convFilter, setConvFilter] = useState<FilterTab>('ALL');
 
   // Lead Detail Drawer State for Conversation -> Lead navigation
   const [drawerLead, setDrawerLead] = useState<Lead | null>(null);
   const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState<boolean>(false);
   const [leadLoading, setLeadLoading] = useState<boolean>(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState<boolean>(false);
 
   // Active chat hook for selected conversation
   const {
+    conversation: activeConv,
     messages: activeMessages,
     hasMore: activeHasMore,
     loadingOlder: activeLoadingOlder,
     loading: activeChatLoading,
     loadOlderMessages: activeLoadOlder,
+    sendMessage: activeSendMessage,
+    sendTemplate: activeSendTemplate,
+    retryMessage: activeRetryMessage,
+    sendMedia: activeSendMedia,
   } = useWhatsAppConversation({
     conversationId: selectedConv?.id,
     enabled: hubTab === 'conversations' && !!selectedConv,
@@ -100,6 +109,21 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     }
   };
 
+  const handleStatusChange = async (convId: number, newStatus: ConversationStatus) => {
+    try {
+      await ApiClient.updateConversationStatus(convId, newStatus);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === convId ? { ...c, status: newStatus } : c))
+      );
+      if (selectedConv && selectedConv.id === convId) {
+        setSelectedConv((prev) => (prev ? { ...prev, status: newStatus } : prev));
+      }
+      toast.success(t('whatsapp.statusUpdated') || 'Durum güncellendi', t('common.success'));
+    } catch (err: any) {
+      toast.error(err.message || 'Durum güncellenemedi', t('common.error'));
+    }
+  };
+
   const fetchConversations = async () => {
     setConvsLoading(true);
     try {
@@ -115,7 +139,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
     }
   };
 
-  // Real-time listener for conversation list unread and preview updates
+  // Real-time listener for conversation list unread, status and preview updates
   useEffect(() => {
     const handleWsEvent = (e: Event) => {
       const customEvent = e as CustomEvent<any>;
@@ -132,10 +156,14 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             const existing = prev[idx];
             const updated: Conversation = {
               ...existing,
+              status: 'ACTIVE',
               last_message_preview: eventData.message,
               last_message_at: eventData.timestamp || new Date().toISOString(),
               unread_count: isCurrentSelected ? 0 : (existing.unread_count || 0) + 1,
             };
+            if (selectedConv && selectedConv.id === convId) {
+              setSelectedConv(updated);
+            }
             // Move updated conversation to top of list
             const rest = prev.filter((c) => c.id !== convId);
             return [updated, ...rest];
@@ -145,6 +173,17 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
             return prev;
           }
         });
+      }
+
+      if (eventData.event === 'conversation_status_updated') {
+        const convId = eventData.conversation_id;
+        const newStatus = eventData.status;
+        setConversations((prev) =>
+          prev.map((c) => (c.id === convId ? { ...c, status: newStatus } : c))
+        );
+        if (selectedConv && selectedConv.id === convId) {
+          setSelectedConv((prev) => (prev ? { ...prev, status: newStatus } : prev));
+        }
       }
 
       if (eventData.event === 'conversation_read') {
@@ -473,6 +512,8 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               loading={convsLoading}
               searchQuery={convSearch}
               onSearchChange={setConvSearch}
+              activeFilter={convFilter}
+              onFilterChange={setConvFilter}
               onSelect={(c) => {
                 setSelectedConv(c);
                 if (c.unread_count > 0) {
@@ -494,9 +535,16 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   <div className="flex items-center space-x-3">
                     <Avatar name={selectedConv.lead_name || selectedConv.lead_phone || 'Lead'} size="md" shape="rounded" />
                     <div>
-                      <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">
-                        {selectedConv.lead_name || selectedConv.lead_phone || `Lead #${selectedConv.lead_id}`}
-                      </h4>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="font-extrabold text-sm text-slate-800 dark:text-white">
+                          {selectedConv.lead_name || selectedConv.lead_phone || t('common.unnamedLead') || 'İsimsiz Müşteri'}
+                        </h4>
+                        {selectedConv.status !== 'ACTIVE' && (
+                          <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400">
+                            {selectedConv.status === 'ARCHIVED' ? (t('whatsapp.statusArchived') || 'Arşiv') : (t('whatsapp.statusClosed') || 'Kapalı')}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] font-mono text-slate-400 font-medium">
                         {selectedConv.lead_phone}
                       </p>
@@ -504,6 +552,40 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   </div>
 
                   <div className="flex items-center space-x-2">
+                    {/* Lifecycle Status Action */}
+                    {selectedConv.status === 'ACTIVE' ? (
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleStatusChange(selectedConv.id, 'ARCHIVED')}
+                          className="space-x-1 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.06] cursor-pointer"
+                        >
+                          <Archive className="w-3.5 h-3.5" />
+                          <span>{t('whatsapp.archive') || 'Arşivle'}</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleStatusChange(selectedConv.id, 'CLOSED')}
+                          className="space-x-1 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.06] cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{t('whatsapp.close') || 'Kapat'}</span>
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleStatusChange(selectedConv.id, 'ACTIVE')}
+                        className="space-x-1 text-xs font-bold text-[#7367F0] border-[#7367F0]/30 hover:bg-[#7367F0]/10 cursor-pointer"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        <span>{t('whatsapp.reopen') || 'Yeniden Aç'}</span>
+                      </Button>
+                    )}
+
                     <Button
                       variant="outline"
                       size="sm"
@@ -531,17 +613,78 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   onLoadOlder={activeLoadOlder}
                   leadName={selectedConv.lead_name}
                   leadPhone={selectedConv.lead_phone}
+                  onRetry={async (msgId) => {
+                    try {
+                      await activeRetryMessage(msgId);
+                      toast.success(t('whatsapp.messageSent') || 'Mesaj tekrar gönderildi', t('common.success'));
+                    } catch (err: any) {
+                      toast.error(t('whatsapp.msgFailed') || 'Tekrar gönderim başarısız', t('common.error'));
+                      throw err;
+                    }
+                  }}
                 />
 
-                {/* Safe Mock Composer */}
-                <ChatComposer />
+                {/* Active Chat Composer */}
+                <ChatComposer
+                  onSend={async (text) => {
+                    try {
+                      await activeSendMessage(text);
+                      toast.success(t('whatsapp.messageSent') || 'Mesaj başarıyla gönderildi', t('common.success'));
+                    } catch (err: any) {
+                      const msg = (err?.message || '').toLowerCase();
+                      if (msg.includes('24 saat') || msg.includes('window')) {
+                        toast.error(t('whatsapp.windowExpiredNotice') || 'Bu konuşmaya devam etmek için bir WhatsApp şablonu kullanın.', t('common.error'));
+                      } else {
+                        toast.error(t('whatsapp.msgFailed') || 'Mesaj gönderilemedi', t('common.error'));
+                      }
+                      throw err;
+                    }
+                  }}
+                  onSendTemplate={() => setIsTemplateModalOpen(true)}
+                  onSendMedia={async (type, url, caption, filename) => {
+                    try {
+                      await activeSendMedia(type, url, caption, filename);
+                      toast.success(t('whatsapp.mediaSent') || 'Medya başarıyla gönderildi', t('common.success'));
+                    } catch (err: any) {
+                      toast.error(t('whatsapp.mediaFailed') || 'Medya gönderilemedi', t('common.error'));
+                      throw err;
+                    }
+                  }}
+                  onReopenConversation={() => handleStatusChange(selectedConv.id, 'ACTIVE')}
+                  isClosed={selectedConv.status === 'CLOSED'}
+                  isWindowOpen={activeConv?.is_window_open ?? selectedConv.is_window_open ?? true}
+                />
+
+                {/* Template Select Modal */}
+                <TemplateSelectModal
+                  isOpen={isTemplateModalOpen}
+                  onClose={() => setIsTemplateModalOpen(false)}
+                  leadName={selectedConv.lead_name}
+                  onSendTemplate={async (templateKey, variables) => {
+                    try {
+                      await activeSendTemplate(templateKey, variables);
+                      toast.success(t('whatsapp.templateSent') || 'Şablon mesajı başarıyla gönderildi', t('common.success'));
+                    } catch (err: any) {
+                      toast.error(t('whatsapp.templateFailed') || 'Şablon gönderilemedi', t('common.error'));
+                      throw err;
+                    }
+                  }}
+                />
               </>
             ) : (
               <div className="flex-1 flex items-center justify-center p-8">
                 <EmptyState
                   icon={MessageSquare}
-                  title={t('whatsapp.noConversations')}
-                  description={t('whatsapp.selectConversation')}
+                  title={
+                    conversations.length > 0
+                      ? (t('whatsapp.selectConversationTitle') || 'Bir Konuşma Seçin')
+                      : (t('whatsapp.noConversations') || 'Henüz Konuşma Yok')
+                  }
+                  description={
+                    conversations.length > 0
+                      ? (t('whatsapp.selectConversation') || 'Mesaj geçmişini görüntülemek ve yanıt vermek için soldaki listeden bir konuşma seçin.')
+                      : (t('whatsapp.noConversationsDesc') || 'Gelen müşteri yanıtları veya başlatılan diyaloglar burada listelenir.')
+                  }
                 />
               </div>
             )}

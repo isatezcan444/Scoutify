@@ -1,5 +1,13 @@
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'REPLIED' | 'INTERESTED' | 'UNSUBSCRIBED' | 'INVALID_NUMBER';
 
+export type CommunicationGoal = 
+  | 'FIRST_CONTACT'       // İlk Tanışma
+  | 'SERVICE_PROMOTION'   // Ürün / Hizmet Tanıtımı
+  | 'DISCOVERY'           // İhtiyaç Keşfi
+  | 'OFFER'               // Teklif Sunma
+  | 'MEETING'             // Görüşme Talebi
+  | 'FOLLOW_UP';          // Takip Mesajı
+
 export interface Lead {
   id: number;
   name: string;
@@ -62,6 +70,30 @@ export interface Campaign {
   created_at: string;
   updated_at: string;
 }
+
+export interface GenerateMessagePayload {
+  communication_goal: CommunicationGoal;
+  target_category?: string;
+  offer_title?: string;
+  key_benefit?: string;
+  extra_information?: string;
+  preferred_channel?: string;
+  lead_need?: string;
+  specific_question?: string;
+  pricing_info?: string;
+  meeting_purpose?: string;
+  previous_topic?: string;
+  language?: string;
+  variation_seed?: number;
+}
+
+export interface GenerateMessageResponse {
+  generated_message: string;
+  communication_goal: string;
+  language: string;
+  strategy_summary?: string;
+}
+
 
 export type SessionStatus = 'DISCONNECTED' | 'SCAN_QR' | 'CONNECTING' | 'CONNECTED' | 'BANNED';
 
@@ -191,6 +223,10 @@ export interface Message {
   message_type: MessageType;
   status: ConversationMessageStatus;
   body?: string;
+  media_id?: string | null;
+  media_mime_type?: string | null;
+  media_filename?: string | null;
+  media_caption?: string | null;
   media_url?: string;
   wa_message_id?: string;
   sender_phone?: string;
@@ -198,6 +234,23 @@ export interface Message {
   error_message?: string;
   external_timestamp?: string;
   created_at: string;
+}
+
+export interface WhatsAppTemplateVariable {
+  key: string;
+  label: string;
+  default_from?: string;
+  default_value?: string;
+}
+
+export interface WhatsAppTemplate {
+  key: string;
+  name: string;
+  name_en?: string;
+  description?: string;
+  category?: string;
+  body_pattern: string;
+  variables: WhatsAppTemplateVariable[];
 }
 
 export interface Conversation {
@@ -213,6 +266,9 @@ export interface Conversation {
   lead_name?: string;
   lead_phone?: string;
   last_message_preview?: string;
+  is_window_open?: boolean;
+  last_inbound_at?: string;
+  seconds_remaining?: number;
 }
 
 export interface ConversationDetail extends Conversation {
@@ -228,3 +284,70 @@ export interface ConversationMessagesResponse {
   oldest_message_id?: number;
   newest_message_id?: number;
 }
+
+export type CategoryFitLevel = 'HIGH' | 'MEDIUM' | 'LOW' | 'ALTERNATIVE';
+export type BusinessGoal = 'DISCOVERY' | 'INTRO' | 'OFFER' | 'FOLLOW_UP' | 'MEETING';
+export type CategorySource = 'DISCOVERED' | 'USER_ADDED';
+
+export interface DiscoveredCategory {
+  category_id: string;
+  display_name: string;
+  rationale: string;
+  fit_level: CategoryFitLevel;
+  search_keywords: string[];
+  source: CategorySource;
+  is_recommended: boolean;
+  estimated_volume?: string;
+}
+
+export interface CategoryRecommendationResponse {
+  offer_title: string;
+  business_goal: BusinessGoal;
+  discovered_categories: DiscoveredCategory[];
+  suggested_custom_categories: string[];
+}
+
+export interface FitAssessment {
+  fit_score: number;
+  fit_level: CategoryFitLevel;
+  target_category: string;
+  category_approved_by_user: boolean;
+  positive_signals: string[];
+  risk_factors: string[];
+  recommended_intent: BusinessGoal;
+  recommended_message_snippet?: string;
+}
+
+export interface SmartMatchedLead {
+  lead_id: number;
+  name: string;
+  phone: string;
+  phone_e164?: string;
+  is_whatsapp_eligible: boolean;
+  city?: string;
+  district?: string;
+  website?: string;
+  rating?: number;
+  target_category: string;
+  category_source: CategorySource;
+  fit_assessment: FitAssessment;
+}
+
+export interface MatchLeadsResponse {
+  total_evaluated: number;
+  high_fit_count: number;
+  medium_fit_count: number;
+  low_fit_count: number;
+  leads: SmartMatchedLead[];
+}
+
+export interface MessageRecommendationResponse {
+  lead_id: number;
+  lead_name: string;
+  target_category: string;
+  business_goal: BusinessGoal;
+  strategy_summary: string;
+  recommended_message: string;
+  alternative_message?: string;
+}
+

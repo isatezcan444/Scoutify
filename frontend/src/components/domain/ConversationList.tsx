@@ -1,11 +1,13 @@
-import React from 'react';
-import { MessageSquare, Clock } from 'lucide-react';
-import { Conversation } from '../../types';
+import React, { useState } from 'react';
+import { MessageSquare, Archive, CheckCircle2, Inbox, Mail } from 'lucide-react';
+import { Conversation, ConversationStatus } from '../../types';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/badge';
 import { SearchInput } from '../forms/SearchInput';
 import { Skeleton } from '../ui/Skeleton';
 import { useI18n } from '../../context/I18nContext';
+
+export type FilterTab = 'ALL' | 'ACTIVE' | 'ARCHIVED' | 'CLOSED' | 'UNREAD';
 
 export interface ConversationListProps {
   conversations: Conversation[];
@@ -14,6 +16,8 @@ export interface ConversationListProps {
   loading?: boolean;
   searchQuery?: string;
   onSearchChange?: (query: string) => void;
+  activeFilter?: FilterTab;
+  onFilterChange?: (filter: FilterTab) => void;
 }
 
 export const ConversationList: React.FC<ConversationListProps> = ({
@@ -23,8 +27,20 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   loading = false,
   searchQuery = '',
   onSearchChange,
+  activeFilter = 'ALL',
+  onFilterChange,
 }) => {
   const { t } = useI18n();
+  const [internalFilter, setInternalFilter] = useState<FilterTab>(activeFilter);
+  const currentFilter = onFilterChange ? activeFilter : internalFilter;
+
+  const handleFilterClick = (tab: FilterTab) => {
+    if (onFilterChange) {
+      onFilterChange(tab);
+    } else {
+      setInternalFilter(tab);
+    }
+  };
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -41,6 +57,13 @@ export const ConversationList: React.FC<ConversationListProps> = ({
   };
 
   const filtered = conversations.filter((c) => {
+    // 1. Tab filter
+    if (currentFilter === 'ACTIVE' && c.status !== 'ACTIVE') return false;
+    if (currentFilter === 'ARCHIVED' && c.status !== 'ARCHIVED') return false;
+    if (currentFilter === 'CLOSED' && c.status !== 'CLOSED') return false;
+    if (currentFilter === 'UNREAD' && (c.unread_count || 0) <= 0) return false;
+
+    // 2. Search query filter
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -50,17 +73,48 @@ export const ConversationList: React.FC<ConversationListProps> = ({
     );
   });
 
+  const filterTabs: { id: FilterTab; label: string; icon: React.FC<{ className?: string }> }[] = [
+    { id: 'ALL', label: t('whatsapp.tabAll') || 'Tümü', icon: Inbox },
+    { id: 'ACTIVE', label: t('whatsapp.tabActive') || 'Aktif', icon: MessageSquare },
+    { id: 'UNREAD', label: t('whatsapp.tabUnread') || 'Okunmamış', icon: Mail },
+    { id: 'ARCHIVED', label: t('whatsapp.tabArchived') || 'Arşiv', icon: Archive },
+    { id: 'CLOSED', label: t('whatsapp.tabClosed') || 'Kapatılan', icon: CheckCircle2 },
+  ];
+
   return (
     <div className="flex flex-col h-full border-r border-slate-200/80 dark:border-white/[0.08] bg-slate-50/50 dark:bg-black/10">
       {/* Search Header */}
       {onSearchChange && (
-        <div className="p-3 border-b border-slate-200/80 dark:border-white/[0.08]">
+        <div className="p-3 border-b border-slate-200/80 dark:border-white/[0.08] space-y-2.5">
           <SearchInput
             value={searchQuery}
             onChange={onSearchChange}
             placeholder={t('whatsapp.searchConversations')}
             sizeVariant="sm"
           />
+
+          {/* Filter Pills */}
+          <div className="flex items-center space-x-1 overflow-x-auto pb-0.5 scrollbar-none">
+            {filterTabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = currentFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleFilterClick(tab.id)}
+                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    isActive
+                      ? 'bg-[#7367F0] text-white shadow-sm shadow-[#7367F0]/25'
+                      : 'bg-slate-200/50 dark:bg-white/[0.06] text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/[0.1]'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -102,7 +156,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
-                      {conv.lead_name || conv.lead_phone || `Lead #${conv.lead_id}`}
+                      {conv.lead_name || conv.lead_phone || t('common.unnamedLead') || 'İsimsiz Müşteri'}
                     </h4>
                     <span className="text-[10px] text-slate-400 font-medium shrink-0 ml-1">
                       {formatTime(conv.last_message_at || conv.created_at)}
@@ -117,11 +171,18 @@ export const ConversationList: React.FC<ConversationListProps> = ({
                     <span className="text-[10px] font-mono text-slate-400">
                       {conv.lead_phone}
                     </span>
-                    {conv.unread_count > 0 && (
-                      <Badge variant="primary">
-                        {conv.unread_count}
-                      </Badge>
-                    )}
+                    <div className="flex items-center space-x-1.5">
+                      {conv.status !== 'ACTIVE' && (
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-500 dark:text-slate-400">
+                          {conv.status === 'ARCHIVED' ? (t('whatsapp.statusArchived') || 'Arşiv') : (t('whatsapp.statusClosed') || 'Kapalı')}
+                        </span>
+                      )}
+                      {conv.unread_count > 0 && (
+                        <Badge variant="primary">
+                          {conv.unread_count}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </button>

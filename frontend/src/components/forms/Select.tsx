@@ -19,7 +19,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, options, leftIcon: LeftIcon, error, sizeVariant = 'md', ...props }, ref) => {
     const sizeClasses = {
       sm: 'h-8 text-[11px] py-1',
-      md: 'h-10 text-xs py-2',
+      md: 'h-11 text-xs py-2.5',
       lg: 'h-11 text-xs py-2.5',
     };
 
@@ -34,8 +34,8 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
         <select
           ref={ref}
           className={cn(
-            'w-full font-semibold rounded-lg vuexy-input cursor-pointer appearance-none transition-all pr-8 text-slate-700 dark:text-slate-200',
-            LeftIcon ? 'pl-9' : 'pl-3.5',
+            'w-full font-medium rounded-lg vuexy-input cursor-pointer appearance-none transition-all pr-8 text-slate-700 dark:text-slate-200',
+            LeftIcon ? 'pl-10' : 'pl-3.5',
             sizeClasses[sizeVariant],
             error && 'border-[#EA5455] focus:border-[#EA5455] focus:ring-[#EA5455]/20',
             className

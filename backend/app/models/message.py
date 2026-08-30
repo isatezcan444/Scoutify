@@ -44,6 +44,12 @@ class Message(Base):
     
     # Meta WhatsApp Message ID (e.g. wamid.HBgM...) with strict UNIQUE constraint
     wa_message_id = Column(String(150), unique=True, index=True, nullable=True)
+
+    # Media metadata (for IMAGE, DOCUMENT, AUDIO, VIDEO, STICKER)
+    media_id = Column(String(255), nullable=True, index=True)
+    media_mime_type = Column(String(100), nullable=True)
+    media_filename = Column(String(255), nullable=True)
+    media_caption = Column(Text, nullable=True)
     
     sender_phone = Column(String(50), nullable=False, index=True)
     recipient_phone = Column(String(50), nullable=False, index=True)
@@ -61,4 +67,5 @@ class Message(Base):
 
     __table_args__ = (
         Index("idx_msg_conv_created", "conversation_id", "created_at"),
+        Index("idx_msg_conv_id", "conversation_id", "id"),
     )

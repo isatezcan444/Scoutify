@@ -15,6 +15,7 @@ export interface ChatThreadProps {
   onLoadOlder?: () => void;
   leadName?: string;
   leadPhone?: string;
+  onRetry?: (messageId: number) => Promise<void> | void;
 }
 
 export const ChatThread: React.FC<ChatThreadProps> = ({
@@ -23,6 +24,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
   hasMore = false,
   loadingOlder = false,
   onLoadOlder,
+  onRetry,
 }) => {
   const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -192,7 +194,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({
                   </span>
                 </div>
               )}
-              <ChatBubble message={msg} />
+              <ChatBubble message={msg} onRetry={onRetry} />
             </React.Fragment>
           );
         })}

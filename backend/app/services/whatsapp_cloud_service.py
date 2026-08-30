@@ -109,11 +109,10 @@ class WhatsAppCloudService:
         conversation_id = None
 
         if lead:
-            # 3. Find or Create Active Conversation for Lead
+            # 3. Find or Create Active Conversation for Lead (or Reopen Archived/Closed)
             conv_stmt = select(Conversation).where(
                 Conversation.lead_id == lead.id,
                 Conversation.channel == "WHATSAPP",
-                Conversation.status == ConversationStatus.ACTIVE,
             ).order_by(Conversation.id.desc()).limit(1)
             conv_res = await db.execute(conv_stmt)
             conversation = conv_res.scalar_one_or_none()
@@ -129,18 +128,38 @@ class WhatsAppCloudService:
                 db.add(conversation)
                 await db.flush()
             else:
+                # Reopen archived or closed conversation on new inbound message
+                if conversation.status != ConversationStatus.ACTIVE:
+                    conversation.status = ConversationStatus.ACTIVE
                 conversation.last_message_at = msg.timestamp
                 conversation.unread_count = (conversation.unread_count or 0) + 1
 
             conversation_id = conversation.id
 
-            # 4. Insert Inbound Message Entity
+            # 4. Insert Inbound Message Entity with Rich Media support
+            type_map = {
+                "text": MessageType.TEXT,
+                "image": MessageType.IMAGE,
+                "document": MessageType.DOCUMENT,
+                "audio": MessageType.AUDIO,
+                "video": MessageType.VIDEO,
+                "sticker": MessageType.OTHER,
+                "location": MessageType.OTHER,
+                "button": MessageType.TEXT,
+                "interactive": MessageType.TEXT,
+            }
+            mapped_type = type_map.get(msg.raw_type.lower(), MessageType.OTHER)
+
             message_entity = Message(
                 conversation_id=conversation.id,
                 direction=MessageDirection.INBOUND,
-                message_type=MessageType.TEXT,
+                message_type=mapped_type,
                 body=msg.text,
                 wa_message_id=msg.message_id,
+                media_id=msg.media_id,
+                media_mime_type=msg.media_mime_type,
+                media_filename=msg.media_filename,
+                media_caption=msg.media_caption,
                 sender_phone=e164,
                 recipient_phone="BUSINESS",
                 status=ConversationMessageStatus.RECEIVED,
@@ -195,11 +214,12 @@ class WhatsAppCloudService:
 
         await db.commit()
 
-        # 7. Broadcast Realtime WebSocket Event (Fully Backward Compatible)
+        # 7. Broadcast Realtime WebSocket Event with Media Metadata
         await ws_manager.broadcast({
             "event": "inbound_reply",
             "provider": "meta_cloud",
             "message_id": msg.message_id,
+            "wa_message_id": msg.message_id,
             "conversation_id": conversation_id,
             "lead_id": lead.id if lead else None,
             "lead_name": lead.name if lead else (msg.sender_name or "Bilinmeyen"),
@@ -207,7 +227,11 @@ class WhatsAppCloudService:
             "sender_name": msg.sender_name or (lead.name if lead else "Bilinmeyen"),
             "message": msg.text,
             "direction": "INBOUND",
-            "message_type": "TEXT",
+            "message_type": message_entity.message_type.value if lead else "TEXT",
+            "media_id": msg.media_id,
+            "media_mime_type": msg.media_mime_type,
+            "media_filename": msg.media_filename,
+            "media_caption": msg.media_caption,
             "unread_count": conversation.unread_count if conversation else 1,
             "is_opt_out": is_opt_out,
             "timestamp": msg.timestamp.isoformat(),

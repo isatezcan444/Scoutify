@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ApiClient } from '../api/client';
-import { ConversationDetail, Message } from '../types';
+import { ConversationDetail, Message, ConversationStatus } from '../types';
 
 interface UseWhatsAppConversationOptions {
   leadId?: number;
@@ -120,6 +120,99 @@ export function useWhatsAppConversation({
     }
   }, [conversation]);
 
+  // Update status helper
+  const updateStatus = useCallback(async (status: ConversationStatus) => {
+    if (!conversation) return;
+    try {
+      await ApiClient.updateConversationStatus(conversation.id, status);
+      setConversation((prev) => (prev ? { ...prev, status } : null));
+    } catch (e) {
+      console.warn('[useWhatsAppConversation] Update status failed:', e);
+    }
+  }, [conversation]);
+
+  // Send message helper
+  const sendMessage = useCallback(async (text: string) => {
+    if (!conversation) return;
+    const resMsg = await ApiClient.sendMessage(conversation.id, text);
+    setConversation((prev) => {
+      if (!prev) return prev;
+      const isDuplicate = prev.messages.some(
+        (m) => (resMsg.wa_message_id && m.wa_message_id === resMsg.wa_message_id) || m.id === resMsg.id
+      );
+      if (isDuplicate) return prev;
+      return {
+        ...prev,
+        status: 'ACTIVE',
+        last_message_at: resMsg.created_at,
+        last_message_preview: resMsg.body,
+        messages: [...prev.messages, resMsg],
+      };
+    });
+    return resMsg;
+  }, [conversation]);
+
+  // Send template helper
+  const sendTemplate = useCallback(async (templateKey: string, variables: Record<string, string> = {}) => {
+    if (!conversation) return;
+    const resMsg = await ApiClient.sendTemplate(conversation.id, templateKey, variables);
+    setConversation((prev) => {
+      if (!prev) return prev;
+      const isDuplicate = prev.messages.some(
+        (m) => (resMsg.wa_message_id && m.wa_message_id === resMsg.wa_message_id) || m.id === resMsg.id
+      );
+      if (isDuplicate) return prev;
+      return {
+        ...prev,
+        status: 'ACTIVE',
+        last_message_at: resMsg.created_at,
+        last_message_preview: resMsg.body,
+        messages: [...prev.messages, resMsg],
+      };
+    });
+    return resMsg;
+  }, [conversation]);
+
+  // Retry failed message helper
+  const retryMessage = useCallback(async (messageId: number) => {
+    if (!conversation) return;
+    const resMsg = await ApiClient.retryMessage(conversation.id, messageId);
+    setConversation((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        messages: prev.messages.map((m) => (m.id === messageId ? resMsg : m)),
+      };
+    });
+    return resMsg;
+  }, [conversation]);
+
+  // Send outbound media helper
+  const sendMedia = useCallback(async (mediaType: 'IMAGE' | 'DOCUMENT', mediaUrl: string, caption?: string, filename?: string) => {
+    if (!conversation) return;
+    const resMsg = await ApiClient.sendMedia(conversation.id, {
+      media_type: mediaType,
+      media_url: mediaUrl,
+      caption,
+      filename,
+    });
+    setConversation((prev) => {
+      if (!prev) return prev;
+      const isDuplicate = prev.messages.some(
+        (m) => (resMsg.wa_message_id && m.wa_message_id === resMsg.wa_message_id) || m.id === resMsg.id
+      );
+      if (isDuplicate) return prev;
+      return {
+        ...prev,
+        status: 'ACTIVE',
+        last_message_at: resMsg.created_at,
+        last_message_preview: resMsg.body,
+        messages: [...prev.messages, resMsg],
+      };
+    });
+    return resMsg;
+  }, [conversation]);
+
   // Real-time Event Listener via CustomEvent bus
   useEffect(() => {
     const handleWsEvent = (e: Event) => {
@@ -127,7 +220,47 @@ export function useWhatsAppConversation({
       const eventData = customEvent.detail;
       if (!eventData) return;
 
-      // Handle incoming message
+      // Handle outbound message sent event
+      if (eventData.event === 'outbound_message_sent') {
+        const matchesConv =
+          (conversationId && eventData.conversation_id === conversationId) ||
+          (conversation && eventData.conversation_id === conversation.id);
+
+        if (matchesConv) {
+          setConversation((prev) => {
+            if (!prev) return prev;
+            const msgId = eventData.message_id;
+            const waId = eventData.wa_message_id;
+            const isDuplicate = prev.messages.some(
+              (m) => (waId && m.wa_message_id === waId) || (msgId && m.id === msgId)
+            );
+            if (isDuplicate) return prev;
+
+            const newMsg: Message = {
+              id: eventData.message_id || Date.now(),
+              conversation_id: prev.id,
+              direction: 'OUTBOUND',
+              message_type: 'TEXT',
+              status: 'SENT',
+              body: eventData.message,
+              wa_message_id: eventData.wa_message_id,
+              sender_phone: 'BUSINESS',
+              recipient_phone: eventData.recipient_phone,
+              created_at: eventData.created_at || new Date().toISOString(),
+            };
+
+            return {
+              ...prev,
+              status: 'ACTIVE',
+              last_message_at: newMsg.created_at,
+              last_message_preview: newMsg.body,
+              messages: [...prev.messages, newMsg],
+            };
+          });
+        }
+      }
+
+      // Handle incoming message (TEXT or RICH MEDIA)
       if (eventData.event === 'inbound_reply') {
         const matchesLead = leadId && eventData.lead_id === leadId;
         const matchesConvId = conversationId && eventData.conversation_id === conversationId;
@@ -154,6 +287,10 @@ export function useWhatsAppConversation({
               message_type: eventData.message_type || 'TEXT',
               status: eventData.status || 'RECEIVED',
               body: eventData.message,
+              media_id: eventData.media_id,
+              media_mime_type: eventData.media_mime_type,
+              media_filename: eventData.media_filename,
+              media_caption: eventData.media_caption,
               wa_message_id: eventData.wa_message_id,
               sender_phone: eventData.phone,
               created_at: eventData.created_at || new Date().toISOString(),
@@ -161,6 +298,7 @@ export function useWhatsAppConversation({
 
             return {
               ...prev,
+              status: 'ACTIVE',
               last_message_at: newMsg.created_at,
               last_message_preview: newMsg.body,
               unread_count: autoMarkAsRead ? 0 : (prev.unread_count || 0) + 1,
@@ -195,6 +333,17 @@ export function useWhatsAppConversation({
         });
       }
 
+      // Handle conversation lifecycle status updates
+      if (eventData.event === 'conversation_status_updated') {
+        const matchesConv =
+          (conversationId && eventData.conversation_id === conversationId) ||
+          (conversation && eventData.conversation_id === conversation.id);
+
+        if (matchesConv) {
+          setConversation((prev) => (prev ? { ...prev, status: eventData.status } : null));
+        }
+      }
+
       // Handle conversation read event
       if (eventData.event === 'conversation_read') {
         const matchesConv =
@@ -207,11 +356,21 @@ export function useWhatsAppConversation({
       }
     };
 
+    // Reconnect Recovery: silently refresh active conversation if connection drops and recovers
+    const handleReconnect = () => {
+      if (enabled && (leadId || conversationId)) {
+        console.log('[useWhatsAppConversation] WebSocket reconnected. Performing silent sync recovery...');
+        fetchConversation();
+      }
+    };
+
     window.addEventListener('scoutify:ws_event', handleWsEvent);
+    window.addEventListener('scoutify:ws_connected', handleReconnect);
     return () => {
       window.removeEventListener('scoutify:ws_event', handleWsEvent);
+      window.removeEventListener('scoutify:ws_connected', handleReconnect);
     };
-  }, [leadId, conversationId, conversation, autoMarkAsRead]);
+  }, [leadId, conversationId, conversation, autoMarkAsRead, enabled, fetchConversation]);
 
   return {
     conversation,
@@ -223,5 +382,10 @@ export function useWhatsAppConversation({
     refresh: fetchConversation,
     loadOlderMessages,
     markAsRead,
+    updateStatus,
+    sendMessage,
+    sendTemplate,
+    retryMessage,
+    sendMedia,
   };
 }

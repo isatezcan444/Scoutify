@@ -12,13 +12,72 @@ from backend.app.schemas.campaign import (
     CampaignUpdate,
     CampaignLaunchRequest,
     SpintaxPreviewRequest,
-    SpintaxPreviewResponse
+    SpintaxPreviewResponse,
+    GenerateMessageRequest,
+    GenerateMessageResponse
 )
 from backend.app.services.spintax_service import SpintaxService
 from backend.app.services.campaign_runner import CampaignRunner
+from backend.app.services.message_strategy_service import MessageStrategyService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+@router.post("/generate-message", response_model=GenerateMessageResponse)
+async def generate_campaign_message(req: GenerateMessageRequest):
+    """
+    Generates a natural, category-aware, and goal-specific B2B WhatsApp outreach message template.
+    Validates required fields depending on communication_goal.
+    """
+    goal = req.communication_goal.upper().strip()
+    
+    # Required validations based on goal
+    if goal == "SERVICE_PROMOTION":
+        if not (req.offer_title and req.offer_title.strip()):
+            raise HTTPException(status_code=400, detail="Tanıtılacak ürün / hizmet alanı zorunludur.")
+    elif goal == "DISCOVERY":
+        if not (req.offer_title and req.offer_title.strip()):
+            raise HTTPException(status_code=400, detail="Sunduğunuz ürün / hizmet alanı zorunludur.")
+        if not (req.lead_need and req.lead_need.strip()):
+            raise HTTPException(status_code=400, detail="Öğrenmek istediğiniz ihtiyaç alanı zorunludur.")
+    elif goal == "OFFER":
+        if not (req.offer_title and req.offer_title.strip()):
+            raise HTTPException(status_code=400, detail="Ürün / hizmet alanı zorunludur.")
+        if not (req.key_benefit and req.key_benefit.strip()):
+            raise HTTPException(status_code=400, detail="Teklifinizin kısa özeti zorunludur.")
+    elif goal == "MEETING":
+        if not (req.offer_title and req.offer_title.strip()):
+            raise HTTPException(status_code=400, detail="Ürün / hizmet alanı zorunludur.")
+        if not (req.meeting_purpose and req.meeting_purpose.strip()):
+            raise HTTPException(status_code=400, detail="Görüşme amacı alanı zorunludur.")
+    elif goal == "FOLLOW_UP":
+        if not (req.previous_topic and req.previous_topic.strip()):
+            raise HTTPException(status_code=400, detail="Önceki iletişimin konusu zorunludur.")
+
+    msg, summary = MessageStrategyService.generate_campaign_message(
+        communication_goal=goal,
+        target_category=req.target_category,
+        offer_title=req.offer_title,
+        key_benefit=req.key_benefit,
+        extra_information=req.extra_information,
+        preferred_channel=req.preferred_channel,
+        lead_need=req.lead_need,
+        specific_question=req.specific_question,
+        pricing_info=req.pricing_info,
+        meeting_purpose=req.meeting_purpose,
+        previous_topic=req.previous_topic,
+        language=req.language,
+        variation_seed=req.variation_seed
+    )
+
+    return GenerateMessageResponse(
+        generated_message=msg,
+        communication_goal=goal,
+        language=req.language,
+        strategy_summary=summary
+    )
+
 
 
 @router.get("", response_model=List[CampaignResponse])

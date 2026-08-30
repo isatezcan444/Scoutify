@@ -1,4 +1,3 @@
-import * as React from 'react';
 import { 
   Play, 
   Pause, 
@@ -7,13 +6,15 @@ import {
   Users, 
   Send, 
   MessageSquareReply, 
-  AlertCircle 
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
 import { Campaign } from '../../types';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/Progress';
 import { Button } from '../ui/button';
+import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../context/I18nContext';
 
@@ -22,6 +23,7 @@ export interface CampaignCardProps {
   onStart?: (campaignId: number) => void;
   onPause?: (campaignId: number) => void;
   onCancel?: (campaignId: number) => void;
+  onDelete?: (campaignId: number) => void;
   className?: string;
 }
 
@@ -30,6 +32,7 @@ export const CampaignCard: React.FC<CampaignCardProps> = ({
   onStart,
   onPause,
   onCancel,
+  onDelete,
   className,
 }) => {
   const { t } = useI18n();
@@ -108,6 +111,18 @@ export const CampaignCard: React.FC<CampaignCardProps> = ({
         </div>
 
         <div className="flex items-center space-x-1.5">
+          {onDelete && (
+            <IconButton
+              icon={Trash2}
+              size="sm"
+              variant="ghost"
+              data-testid={`delete-campaign-btn-${campaign.id}`}
+              tooltip={t('campaigns.deleteCampaign') || 'Kampanyayı Sil'}
+              onClick={() => onDelete(campaign.id)}
+              className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/15 h-8 w-8 cursor-pointer transition-colors"
+            />
+          )}
+
           {(isDraft || isPaused) && onStart && (
             <Button
               size="sm"

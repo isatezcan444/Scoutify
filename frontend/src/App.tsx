@@ -64,6 +64,9 @@ const AppContent: React.FC = () => {
           }
         },
         (connected) => {
+          if (connected) {
+            window.dispatchEvent(new CustomEvent('scoutify:ws_connected'));
+          }
           setIsWsConnected(connected);
         }
       );
@@ -157,7 +160,7 @@ const AppContent: React.FC = () => {
             <LeadCRMPage onRefreshStats={refreshStats} />
           )}
           {activeTab === 'campaigns' && (
-            <CampaignsPage onRefreshStats={refreshStats} />
+            <CampaignsPage onRefreshStats={refreshStats} onNavigate={setActiveTab} />
           )}
           {activeTab === 'whatsapp' && (
             <WhatsAppHubPage onRefreshStats={refreshStats} />

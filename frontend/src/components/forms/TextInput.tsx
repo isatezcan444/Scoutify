@@ -25,9 +25,9 @@ export const TextInput = React.forwardRef<HTMLInputElement, TextInputProps>(
           ref={ref}
           value={value}
           className={cn(
-            'w-full py-2 text-xs font-medium rounded-lg vuexy-input transition-all',
-            LeftIcon ? 'pl-9' : 'pl-3',
-            showClear || RightIcon ? 'pr-9' : 'pr-3',
+            'w-full h-11 text-xs font-medium placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-[#7E7F96] rounded-lg vuexy-input transition-all',
+            LeftIcon ? 'pl-10' : 'pl-3.5',
+            showClear || RightIcon ? 'pr-10' : 'pr-3.5',
             error && 'border-[#EA5455] focus:border-[#EA5455] focus:ring-[#EA5455]/20',
             className
           )}

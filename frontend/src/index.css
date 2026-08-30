@@ -41,6 +41,12 @@
   transition: all 0.2s ease;
 }
 
+.vuexy-input::placeholder {
+  color: #94A3B8;
+  font-weight: 400;
+  opacity: 1;
+}
+
 .vuexy-input:focus {
   outline: none;
   border-color: #7367F0;
@@ -51,6 +57,12 @@
   background-color: #25293C;
   border-color: rgba(255, 255, 255, 0.12);
   color: #DBD7EC;
+}
+
+.dark .vuexy-input::placeholder {
+  color: #7E7F96;
+  font-weight: 400;
+  opacity: 1;
 }
 
 .dark .vuexy-input:focus {

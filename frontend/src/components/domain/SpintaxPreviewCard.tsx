@@ -1,12 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Sparkles, RefreshCw, Copy, Check } from 'lucide-react';
 import { Card } from '../ui/card';
-import { Button } from '../ui/button';
 import { IconButton } from '../ui/IconButton';
+import { useI18n } from '../../context/I18nContext';
 import { cn } from '../../lib/utils';
 
 export interface SpintaxPreviewCardProps {
   template: string;
+  targetCategory?: string;
   sampleLead?: {
     name?: string;
     city?: string;
@@ -19,84 +20,141 @@ export interface SpintaxPreviewCardProps {
 
 export const SpintaxPreviewCard: React.FC<SpintaxPreviewCardProps> = ({
   template,
-  sampleLead = {
-    name: 'Özel DentaLine Polikliniği',
-    city: 'İstanbul',
-    district: 'Ataşehir',
-    category: 'Diş Kliniği',
-    rating: 4.9,
-  },
+  targetCategory,
+  sampleLead,
   className,
 }) => {
+  const { language, t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [iteration, setIteration] = useState(0);
 
-  // Spintax Resolver: {opt1|opt2|opt3}
-  const resolveSpintax = (text: string) => {
-    let resolved = text;
-    const spintaxRegex = /\{([^{}]+)\}/g;
-    resolved = resolved.replace(spintaxRegex, (_, choices) => {
-      const options = choices.split('|');
-      return options[Math.floor(Math.random() * options.length)];
-    });
+  const activeSampleLead = useMemo(() => {
+    if (sampleLead) {
+      return {
+        ...sampleLead,
+        category: targetCategory || sampleLead.category,
+      };
+    }
+    if (language === 'en') {
+      return {
+        name: 'Apex Health Partners',
+        city: 'London',
+        district: 'Westminster',
+        category: targetCategory || 'Dental Clinics',
+        rating: 4.9,
+      };
+    }
+    return {
+      name: 'Özel DentaLine Polikliniği',
+      city: 'İstanbul',
+      district: 'Kadıköy',
+      category: targetCategory || 'Diş Klinikleri',
+      rating: 4.9,
+    };
+  }, [sampleLead, targetCategory, language]);
 
-    // Replace place tags
-    resolved = resolved
-      .replace(/\{name\}/gi, sampleLead.name || 'Yetkili')
-      .replace(/\{city\}/gi, sampleLead.city || 'İstanbul')
-      .replace(/\{district\}/gi, sampleLead.district || 'Merkez')
-      .replace(/\{category\}/gi, sampleLead.category || 'İşletme')
-      .replace(/\{rating\}/gi, String(sampleLead.rating || 5.0));
+  // Spintax Resolver: {opt1|opt2|opt3} and {name}/{isim}, {city}/{şehir}, {district}/{ilçe}, {category}/{kategori}, {rating}/{puan}
+  const resolveSpintax = (text: string) => {
+    if (!text || !text.trim()) return '';
+
+    // 1. Replace template variables (supporting both TR and EN tokens)
+    let resolved = text
+      .replace(/\{(name|isim|ad)\}/gi, activeSampleLead.name || (language === 'tr' ? 'Yetkili' : 'Director'))
+      .replace(/\{(city|sehir|şehir)\}/gi, activeSampleLead.city || (language === 'tr' ? 'İstanbul' : 'London'))
+      .replace(/\{(district|ilce|ilçe)\}/gi, activeSampleLead.district || (language === 'tr' ? 'Kadıköy' : 'Westminster'))
+      .replace(/\{(category|kategori|sektor|sektör)\}/gi, activeSampleLead.category || targetCategory || (language === 'tr' ? 'İşletme' : 'Business'))
+      .replace(/\{(rating|puan)\}/gi, String(activeSampleLead.rating || 4.9))
+      .replace(/\{(address|adres)\}/gi, language === 'tr' ? 'Atatürk Cad. No:12' : '10 Downing St')
+      .replace(/\{(phone|telefon)\}/gi, language === 'tr' ? '+90 532 000 00 00' : '+44 7700 900077')
+      .replace(/\{(website|web)\}/gi, language === 'tr' ? 'www.isletme.com' : 'www.business.com');
+
+    // 2. Resolve Spintax syntax {choice1|choice2|choice3}
+    const spintaxRegex = /\{([^{}]+)\}/g;
+    resolved = resolved.replace(spintaxRegex, (match, choices) => {
+      if (choices.includes('|')) {
+        const options = choices.split('|');
+        return options[Math.floor(Math.random() * options.length)];
+      }
+      return match;
+    });
 
     return resolved;
   };
 
-  const previewText = React.useMemo(() => {
-    return resolveSpintax(template || 'Merhaba {name} yetkilisi, {city} {district} lokasyonundaki {category} profilinizi inceledik.');
-  }, [template, iteration, sampleLead]);
+  const previewText = useMemo(() => {
+    if (!template || !template.trim()) {
+      return t('campaigns.templateEmptyNotice') || (language === 'tr' 
+        ? 'İletişim amacınızı seçip bilgileri doldurduğunuzda mesajınız burada otomatik olarak görünecek.' 
+        : 'Once you select a communication goal and fill in details, your live preview will appear here.');
+    }
+    return resolveSpintax(template);
+  }, [template, iteration, activeSampleLead, language, t]);
 
   const handleCopy = () => {
+    if (!previewText) return;
     navigator.clipboard.writeText(previewText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const isPlaceholder = !template || !template.trim();
+
   return (
-    <Card className={cn('p-4 sm:p-5 space-y-3.5 bg-gradient-to-br from-slate-50 to-indigo-50/20 dark:from-[#25293C] dark:to-indigo-950/10 border border-indigo-100/60 dark:border-indigo-500/20', className)}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <Sparkles className="w-4 h-4 text-[#7367F0]" />
-          <h4 className="text-xs font-extrabold text-slate-800 dark:text-white uppercase tracking-wider">
-            Spintax Canlı Önizleme
-          </h4>
+    <Card className={cn('p-6 space-y-4', className)}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-white/[0.06]">
+        <div className="flex items-center space-x-2.5">
+          <div className="w-8 h-8 rounded-lg bg-[#7367F0]/15 text-[#7367F0] flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-tight">
+              {t('campaigns.livePreview') || 'Canlı Önizleme'}
+            </h4>
+            <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] mt-0.5">
+              {t('campaigns.livePreviewSubtitle') || 'Oluşturulan mesajın anlık görünümü'}
+            </p>
+          </div>
         </div>
 
-        <div className="flex items-center space-x-1">
+        <div className="flex items-center space-x-1 shrink-0 self-end sm:self-center">
           <IconButton
             icon={RefreshCw}
             size="sm"
             variant="ghost"
-            tooltip="Farklı Varyasyon Üret"
+            tooltip={t('campaigns.regenerateTemplateBtn') || 'Farklı Varyasyon Üret'}
             onClick={() => setIteration((i) => i + 1)}
           />
           <IconButton
             icon={copied ? Check : Copy}
             size="sm"
             variant={copied ? 'success' : 'ghost'}
-            tooltip={copied ? 'Kopyalandı' : 'Metni Kopyala'}
+            tooltip={copied ? (t('common.copied') || 'Kopyalandı') : (t('common.copy') || 'Metni Kopyala')}
             onClick={handleCopy}
+            disabled={isPlaceholder}
           />
         </div>
       </div>
 
       {/* WhatsApp Message Balloon Preview */}
-      <div className="p-3.5 rounded-xl bg-white dark:bg-[#2F3349] border border-slate-200/80 dark:border-white/[0.08] shadow-sm relative text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap font-sans leading-relaxed">
+      <div 
+        data-testid="spintax-preview-balloon"
+        className={cn(
+          'p-3.5 rounded-xl border shadow-sm relative text-xs whitespace-pre-wrap font-sans leading-relaxed transition-colors',
+          isPlaceholder 
+            ? 'bg-slate-100/70 dark:bg-[#25293C]/70 border-dashed border-slate-300 dark:border-white/10 text-slate-400 dark:text-slate-500 italic'
+            : 'bg-white dark:bg-[#2F3349] border-slate-200/80 dark:border-white/[0.08] text-slate-700 dark:text-slate-200'
+        )}
+      >
         {previewText}
       </div>
 
       <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
-        <span>Örnek Veri: {sampleLead.name} ({sampleLead.district})</span>
-        <span>Varyasyon: #{iteration + 1}</span>
+        <span>
+          {language === 'tr' ? 'Örnek Veri' : 'Sample Lead'}: {activeSampleLead.name}
+        </span>
+        <span>
+          {language === 'tr' ? 'Varyasyon' : 'Variation'}: #{iteration + 1}
+        </span>
       </div>
     </Card>
   );

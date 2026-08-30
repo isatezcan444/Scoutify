@@ -139,6 +139,10 @@ class ParsedIncomingMessage(BaseModel):
     text: str
     timestamp: datetime
     raw_type: str = "text"
+    media_id: Optional[str] = None
+    media_mime_type: Optional[str] = None
+    media_filename: Optional[str] = None
+    media_caption: Optional[str] = None
 
 
 class ParsedStatusUpdate(BaseModel):
@@ -177,6 +181,7 @@ def parse_meta_webhook_payload(
 ) -> Tuple[List[ParsedIncomingMessage], List[ParsedStatusUpdate]]:
     """
     Parses a raw Meta webhook dictionary into normalized domain event lists.
+    Supports TEXT, IMAGE, DOCUMENT, AUDIO, VIDEO, STICKER, LOCATION and INTERACTIVE replies.
     
     Returns:
         Tuple of (incoming_messages, status_updates)
@@ -227,16 +232,58 @@ def parse_meta_webhook_payload(
 
                     msg_type = msg.get("type", "text")
                     text_body = ""
+                    media_id = None
+                    media_mime_type = None
+                    media_filename = None
+                    media_caption = None
+
                     if msg_type == "text" and isinstance(msg.get("text"), dict):
                         text_body = msg["text"].get("body", "")
                     elif msg_type == "button" and isinstance(msg.get("button"), dict):
                         text_body = msg["button"].get("text", "")
                     elif msg_type == "interactive" and isinstance(msg.get("interactive"), dict):
                         interactive = msg["interactive"]
-                        if "button_reply" in interactive:
+                        if "button_reply" in interactive and isinstance(interactive["button_reply"], dict):
                             text_body = interactive["button_reply"].get("title", "")
-                        elif "list_reply" in interactive:
+                        elif "list_reply" in interactive and isinstance(interactive["list_reply"], dict):
                             text_body = interactive["list_reply"].get("title", "")
+                    elif msg_type == "image" and isinstance(msg.get("image"), dict):
+                        img = msg["image"]
+                        media_id = str(img.get("id", "")) if img.get("id") else None
+                        media_mime_type = img.get("mime_type", "image/jpeg")
+                        media_caption = img.get("caption")
+                        text_body = media_caption or "[Görsel]"
+                    elif msg_type == "document" and isinstance(msg.get("document"), dict):
+                        doc = msg["document"]
+                        media_id = str(doc.get("id", "")) if doc.get("id") else None
+                        media_mime_type = doc.get("mime_type", "application/pdf")
+                        media_filename = doc.get("filename", "belge.pdf")
+                        media_caption = doc.get("caption")
+                        text_body = media_caption or media_filename or "[Belge]"
+                    elif msg_type == "audio" and isinstance(msg.get("audio"), dict):
+                        aud = msg["audio"]
+                        media_id = str(aud.get("id", "")) if aud.get("id") else None
+                        media_mime_type = aud.get("mime_type", "audio/ogg")
+                        text_body = "[Sesli Mesaj]"
+                    elif msg_type == "video" and isinstance(msg.get("video"), dict):
+                        vid = msg["video"]
+                        media_id = str(vid.get("id", "")) if vid.get("id") else None
+                        media_mime_type = vid.get("mime_type", "video/mp4")
+                        media_caption = vid.get("caption")
+                        text_body = media_caption or "[Video]"
+                    elif msg_type == "sticker" and isinstance(msg.get("sticker"), dict):
+                        stk = msg["sticker"]
+                        media_id = str(stk.get("id", "")) if stk.get("id") else None
+                        media_mime_type = stk.get("mime_type", "image/webp")
+                        text_body = "[Çıkartma]"
+                    elif msg_type == "location" and isinstance(msg.get("location"), dict):
+                        loc = msg["location"]
+                        lat = loc.get("latitude")
+                        lng = loc.get("longitude")
+                        loc_title = loc.get("name") or loc.get("address") or f"{lat}, {lng}"
+                        text_body = f"Konum: {loc_title}"
+                    else:
+                        text_body = "[Desteklenmeyen Mesaj]"
 
                     incoming_messages.append(
                         ParsedIncomingMessage(
@@ -246,6 +293,10 @@ def parse_meta_webhook_payload(
                             text=text_body,
                             timestamp=_safe_parse_timestamp(msg.get("timestamp")),
                             raw_type=msg_type,
+                            media_id=media_id,
+                            media_mime_type=media_mime_type,
+                            media_filename=media_filename,
+                            media_caption=media_caption,
                         )
                     )
 

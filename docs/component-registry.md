@@ -210,22 +210,28 @@ components/
 - **Import**: `import { VerificationBadge } from '@/components/domain';`
 
 ### `ChatBubble`
-- **Purpose**: WhatsApp message bubble primitive with inbound/outbound styling, timestamps, and delivery/read checkmarks.
-- **Props**: `message: Message`.
+- **Purpose**: WhatsApp message bubble primitive with inbound/outbound styling, timestamps, delivery/read checkmarks, and inline retry button for FAILED messages.
+- **Props**: `message: Message`, `onRetry?: (messageId: number) => Promise<void> | void`.
 - **Import**: `import { ChatBubble } from '@/components/domain';`
 
 ### `ChatThread`
-- **Purpose**: Interactive scrollable message timeline with date separators, loading skeletons, empty state, and auto-scroll to bottom.
-- **Props**: `messages: Message[]`, `loading?: boolean`, `leadName?: string`, `leadPhone?: string`.
+- **Purpose**: Interactive scrollable message timeline with date separators, loading skeletons, empty state, smart auto-scroll, and failure retry dispatching.
+- **Props**: `messages: Message[]`, `loading?: boolean`, `hasMore?: boolean`, `loadingOlder?: boolean`, `onLoadOlder?: () => void`, `leadName?: string`, `leadPhone?: string`, `onRetry?: (messageId: number) => Promise<void> | void`.
 - **Import**: `import { ChatThread } from '@/components/domain';`
 
 ### `ChatComposer`
-- **Purpose**: Bottom message composer bar equipped with safe preview mode protection and character helpers.
-- **Props**: `onSend?: (text: string) => void`, `disabled?: boolean`, `placeholder?: string`.
+- **Purpose**: Bottom message composer bar with 24-hour window status alerts, closed conversation notice with one-click reopen, attachment popover (Photo/Document), and template shortcuts.
+- **Props**: `onSend?: (text: string) => Promise<void> | void`, `onSendTemplate?: () => void`, `onSendMedia?: (mediaType: 'IMAGE' | 'DOCUMENT', mediaUrl: string, caption?: string, filename?: string) => Promise<void>`, `onReopenConversation?: () => void`, `disabled?: boolean`, `isClosed?: boolean`, `isWindowOpen?: boolean`, `placeholder?: string`.
 - **Import**: `import { ChatComposer } from '@/components/domain';`
+
+### `TemplateSelectModal`
+- **Purpose**: Modal for selecting pre-approved WhatsApp business templates with automated recipient variable pre-filling, real-time message preview, and one-click dispatch.
+- **Props**: `isOpen: boolean`, `onClose: () => void`, `leadName?: string`, `onSendTemplate: (templateKey: string, variables: Record<string, string>) => Promise<void>`.
+- **Import**: `import { TemplateSelectModal } from '@/components/domain';`
 
 ### `ConversationList`
 - **Purpose**: Sidebar list of all active conversation threads with search filtering, avatar hashing, unread badges, and last message previews.
 - **Props**: `conversations: Conversation[]`, `selectedId?: number`, `onSelect: (conv: Conversation) => void`, `loading?: boolean`, `searchQuery?: string`, `onSearchChange?: (q: string) => void`.
 - **Import**: `import { ConversationList } from '@/components/domain';`
+
 

@@ -172,6 +172,105 @@ class WhatsAppCloudApiClient:
             logger.error(f"[WhatsAppCloudApiClient] {error_msg}")
             return {"success": False, "message_id": None, "error": error_msg}
 
+    async def send_template_message(
+        self,
+        to_phone: str,
+        template_name: str,
+        language_code: str = "tr",
+        parameters: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Sends a registered WhatsApp template message via Meta Cloud API.
+        Does NOT fall back to standard text message to strictly enforce Meta's 24-hour customer window policy.
+        """
+        if not self.phone_number_id:
+            return {"success": False, "message_id": None, "error": "WHATSAPP_CLOUD_PHONE_NUMBER_ID is not configured."}
+
+        clean_phone = to_phone.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+
+        effective_lang = "en_US" if template_name == "hello_world" else (language_code or "tr")
+
+        template_obj: Dict[str, Any] = {
+            "name": template_name,
+            "language": {"code": effective_lang},
+        }
+
+        if parameters and len(parameters) > 0:
+            template_obj["components"] = [
+                {
+                    "type": "body",
+                    "parameters": [{"type": "text", "text": str(p)} for p in parameters],
+                }
+            ]
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_phone,
+            "type": "template",
+            "template": template_obj,
+        }
+
+        try:
+            headers = self._get_headers()
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(self.messages_endpoint_url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    messages = data.get("messages", [])
+                    wa_message_id = messages[0].get("id") if messages else None
+                    logger.info(f"[WhatsAppCloudApiClient] Template '{template_name}' sent to {clean_phone}: {wa_message_id}")
+                    return {"success": True, "message_id": wa_message_id, "error": None}
+
+                return self._handle_meta_error_response(resp)
+        except Exception as e:
+            error_msg = f"Unexpected error during Meta Cloud API template dispatch: {str(e)}"
+            logger.error(f"[WhatsAppCloudApiClient] {error_msg}")
+            return {"success": False, "message_id": None, "error": error_msg}
+
+    async def send_media_message(
+        self,
+        to_phone: str,
+        media_type: str,  # "image" or "document"
+        media_url: str,
+        caption: Optional[str] = None,
+        filename: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Sends an outbound media message (IMAGE or DOCUMENT) to a recipient.
+        """
+        if not self.phone_number_id:
+            return {"success": False, "message_id": None, "error": "WHATSAPP_CLOUD_PHONE_NUMBER_ID is not configured."}
+
+        clean_phone = to_phone.replace("+", "").replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+        m_type = media_type.lower()
+        media_obj: Dict[str, Any] = {"link": media_url}
+        if caption:
+            media_obj["caption"] = caption
+        if filename and m_type == "document":
+            media_obj["filename"] = filename
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "to": clean_phone,
+            "type": m_type,
+            m_type: media_obj,
+        }
+
+        try:
+            headers = self._get_headers()
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(self.messages_endpoint_url, json=payload, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    messages = data.get("messages", [])
+                    wa_message_id = messages[0].get("id") if messages else None
+                    return {"success": True, "message_id": wa_message_id, "error": None}
+                return self._handle_meta_error_response(resp)
+        except Exception as e:
+            return {"success": False, "message_id": None, "error": str(e)}
+
     async def mark_as_read(self, message_id: str) -> bool:
         """
         Marks an incoming WhatsApp message as READ in Meta Cloud API.

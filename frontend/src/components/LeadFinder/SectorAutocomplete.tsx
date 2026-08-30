@@ -1,28 +1,48 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Search, Sparkles, Check, X } from 'lucide-react';
 import { SECTORS } from '../../data/sectors';
+import { ApiClient } from '../../api/client';
 import { useI18n } from '../../context/I18nContext';
 
-interface SectorAutocompleteProps {
+export interface SectorAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
+  placeholder?: string;
   disabled?: boolean;
 }
 
 export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
   value,
   onChange,
+  placeholder,
   disabled = false,
 }) => {
   const { t } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [availableSectors, setAvailableSectors] = useState<string[]>(SECTORS);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Only filter when user has typed something
+  // Fetch distinct categories from database to combine with sector presets
+  useEffect(() => {
+    const fetchDBCategories = async () => {
+      try {
+        const dbCats = await ApiClient.getLeadCategories();
+        if (dbCats && dbCats.length > 0) {
+          const combined = Array.from(new Set([...dbCats, ...SECTORS])).filter(Boolean);
+          setAvailableSectors(combined);
+        }
+      } catch (e) {
+        // Fallback to static SECTORS
+      }
+    };
+    fetchDBCategories();
+  }, []);
+
+  // Filter when user has typed something, or show top sectors when focused
   const filteredSectors = value.trim()
-    ? SECTORS.filter((s) => s.toLowerCase().includes(value.toLowerCase().trim()))
-    : [];
+    ? availableSectors.filter((s) => s.toLowerCase().includes(value.toLowerCase().trim()))
+    : availableSectors.slice(0, 20);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -65,7 +85,9 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
   return (
     <div ref={wrapperRef} className="relative z-50 w-full">
       <div className="relative flex items-center w-full">
-        <Search className="w-4 h-4 text-[#7367F0] absolute left-3.5 pointer-events-none" />
+        <div className="absolute left-3 text-slate-400 pointer-events-none flex items-center justify-center">
+          <Search className="w-4 h-4" />
+        </div>
         <input
           type="text"
           value={value}
@@ -75,12 +97,15 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
             setHighlightedIndex(-1);
           }}
           onFocus={() => {
-            if (value.trim().length > 0) setIsOpen(true);
+            setIsOpen(true);
+          }}
+          onClick={() => {
+            setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder={t('leadFinder.keywordPlaceholder')}
+          placeholder={placeholder || t('leadFinder.keywordPlaceholder')}
           disabled={disabled}
-          className="w-full h-11 pl-10 pr-9 rounded-lg vuexy-input text-xs font-semibold transition-all border border-slate-300 dark:border-white/[0.12] focus:border-[#7367F0]"
+          className="w-full h-11 pl-10 pr-10 text-xs font-medium placeholder:font-normal placeholder:text-slate-400 dark:placeholder:text-[#7E7F96] rounded-lg vuexy-input transition-all"
         />
         {value && (
           <button
@@ -89,7 +114,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
               onChange('');
               setIsOpen(false);
             }}
-            className="absolute right-3 text-slate-400 hover:text-slate-600 dark:hover:text-white p-0.5"
+            className="absolute right-2.5 p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors cursor-pointer"
           >
             <X className="w-3.5 h-3.5" />
           </button>

@@ -408,3 +408,692 @@ async def test_conversation_unread_count_and_mark_as_read():
             conv_db = await db_session.get(Conversation, conv_id)
             assert conv_db.unread_count == 0
             assert conv_db.last_read_at is not None
+
+
+@pytest.mark.asyncio
+async def test_inbound_image_webhook_parsing():
+    """Verifies that an incoming IMAGE webhook parses and persists media metadata."""
+    test_phone = "+905418889900"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Image Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.NEW)
+        db_session.add(lead)
+        await db_session.commit()
+
+        from backend.app.schemas.whatsapp_cloud import parse_meta_webhook_payload
+        raw_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [{
+                "id": "WABA_123",
+                "changes": [{
+                    "value": {
+                        "messaging_product": "whatsapp",
+                        "contacts": [{"wa_id": "905418889900", "profile": {"name": "Image Sender"}}],
+                        "messages": [{
+                            "id": "wamid.IMG_TEST_001",
+                            "from": "905418889900",
+                            "timestamp": "1700000000",
+                            "type": "image",
+                            "image": {
+                                "id": "MEDIA_IMG_999",
+                                "mime_type": "image/jpeg",
+                                "caption": "İşte ürün görseli",
+                            }
+                        }]
+                    },
+                    "field": "messages"
+                }]
+            }]
+        }
+
+        incoming_msgs, _ = parse_meta_webhook_payload(raw_payload)
+        assert len(incoming_msgs) == 1
+        parsed = incoming_msgs[0]
+        assert parsed.raw_type == "image"
+        assert parsed.media_id == "MEDIA_IMG_999"
+        assert parsed.media_mime_type == "image/jpeg"
+        assert parsed.media_caption == "İşte ürün görseli"
+
+        res = await WhatsAppCloudService.process_incoming_message(db_session, parsed)
+        assert res["status"] == "processed"
+
+        stmt = select(Message).where(Message.wa_message_id == "wamid.IMG_TEST_001")
+        msg_entity = (await db_session.execute(stmt)).scalar_one()
+        assert msg_entity.message_type == MessageType.IMAGE
+        assert msg_entity.media_id == "MEDIA_IMG_999"
+        assert msg_entity.media_mime_type == "image/jpeg"
+        assert msg_entity.media_caption == "İşte ürün görseli"
+
+
+@pytest.mark.asyncio
+async def test_inbound_document_and_audio_webhook_parsing():
+    """Verifies that incoming DOCUMENT and AUDIO webhooks parse and persist properly."""
+    test_phone = "+905419990011"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Doc Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.NEW)
+        db_session.add(lead)
+        await db_session.commit()
+
+        from backend.app.schemas.whatsapp_cloud import parse_meta_webhook_payload
+        raw_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [{
+                "id": "WABA_123",
+                "changes": [{
+                    "value": {
+                        "messaging_product": "whatsapp",
+                        "contacts": [{"wa_id": "905419990011", "profile": {"name": "Doc Sender"}}],
+                        "messages": [
+                            {
+                                "id": "wamid.DOC_TEST_001",
+                                "from": "905419990011",
+                                "timestamp": "1700000001",
+                                "type": "document",
+                                "document": {
+                                    "id": "MEDIA_DOC_111",
+                                    "mime_type": "application/pdf",
+                                    "filename": "teklif_proforma.pdf",
+                                    "caption": "Fiyat teklifimiz ektedir.",
+                                }
+                            },
+                            {
+                                "id": "wamid.AUD_TEST_001",
+                                "from": "905419990011",
+                                "timestamp": "1700000002",
+                                "type": "audio",
+                                "audio": {
+                                    "id": "MEDIA_AUD_222",
+                                    "mime_type": "audio/ogg",
+                                }
+                            }
+                        ]
+                    },
+                    "field": "messages"
+                }]
+            }]
+        }
+
+        incoming_msgs, _ = parse_meta_webhook_payload(raw_payload)
+        assert len(incoming_msgs) == 2
+
+        # Process document
+        res_doc = await WhatsAppCloudService.process_incoming_message(db_session, incoming_msgs[0])
+        assert res_doc["status"] == "processed"
+
+        # Process audio
+        res_aud = await WhatsAppCloudService.process_incoming_message(db_session, incoming_msgs[1])
+        assert res_aud["status"] == "processed"
+
+        doc_msg = (await db_session.execute(select(Message).where(Message.wa_message_id == "wamid.DOC_TEST_001"))).scalar_one()
+        assert doc_msg.message_type == MessageType.DOCUMENT
+        assert doc_msg.media_id == "MEDIA_DOC_111"
+        assert doc_msg.media_filename == "teklif_proforma.pdf"
+
+        aud_msg = (await db_session.execute(select(Message).where(Message.wa_message_id == "wamid.AUD_TEST_001"))).scalar_one()
+        assert aud_msg.message_type == MessageType.AUDIO
+        assert aud_msg.media_id == "MEDIA_AUD_222"
+
+
+@pytest.mark.asyncio
+async def test_conversation_archive_close_and_reopen():
+    """Verifies lifecycle status transitions: ACTIVE -> ARCHIVED -> CLOSED and auto REOPEN on new inbound."""
+    test_phone = "+905410001122"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Lifecycle Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.NEW)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Archive conversation
+        res_arch = await client.patch(f"/api/v1/conversations/{conv_id}/status", json={"status": "ARCHIVED"})
+        assert res_arch.status_code == 200
+        assert res_arch.json()["status"] == "ARCHIVED"
+
+        # 2. Close conversation
+        res_close = await client.patch(f"/api/v1/conversations/{conv_id}/status", json={"status": "CLOSED"})
+        assert res_close.status_code == 200
+        assert res_close.json()["status"] == "CLOSED"
+
+    # 3. New inbound message arrives while CLOSED -> Should reopen to ACTIVE and increment unread_count
+    async with AsyncSessionLocal() as db_session:
+        new_msg = ParsedIncomingMessage(
+            message_id="wamid.REOPEN_001",
+            sender_phone=test_phone,
+            sender_name="Lifecycle Lead",
+            text="I want to buy now",
+            timestamp=datetime.now(timezone.utc),
+        )
+        res_reopen = await WhatsAppCloudService.process_incoming_message(db_session, new_msg)
+        assert res_reopen["status"] == "processed"
+
+        conv_reopened = await db_session.get(Conversation, conv_id)
+        assert conv_reopened.status == ConversationStatus.ACTIVE
+        assert conv_reopened.unread_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_conversation_list_filters_and_media_idor():
+    """Verifies thin list filters (status, search, unread_only) and IDOR protection on media endpoint."""
+    test_phone = "+905419998877"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Filter Test Acme", phone=test_phone, phone_e164=test_phone, status=LeadStatus.NEW)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE, unread_count=3)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+
+        msg = Message(
+            conversation_id=conv.id,
+            direction=MessageDirection.INBOUND,
+            message_type=MessageType.IMAGE,
+            body="[Görsel]",
+            media_id="MEDIA_SECRET_123",
+            sender_phone=test_phone,
+            recipient_phone="BUSINESS",
+            status=ConversationMessageStatus.RECEIVED,
+        )
+        db_session.add(msg)
+        await db_session.commit()
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Search by lead name
+        res_search = await client.get("/api/v1/conversations?search=Acme")
+        assert res_search.status_code == 200
+        assert len(res_search.json()) == 1
+
+        # Search by unread
+        res_unread = await client.get("/api/v1/conversations?unread_only=true")
+        assert res_unread.status_code == 200
+        assert len(res_unread.json()) == 1
+
+        # Valid media request
+        res_media_ok = await client.get(f"/api/v1/conversations/{conv_id}/media/MEDIA_SECRET_123")
+        assert res_media_ok.status_code == 200
+        assert res_media_ok.json()["media_id"] == "MEDIA_SECRET_123"
+
+        # IDOR attempt: wrong media ID in this conversation -> 404
+        res_media_idor = await client.get(f"/api/v1/conversations/{conv_id}/media/WRONG_MEDIA_ID")
+        assert res_media_idor.status_code == 404
+
+
+from unittest.mock import patch
+from backend.app.services.whatsapp_cloud_client import WhatsAppCloudApiClient
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_text_message_success():
+    """Verifies that POST /conversations/{id}/messages dispatches an outbound text message and persists it."""
+    test_phone = "+905412229988"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Outbound Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    with patch.object(
+        WhatsAppCloudApiClient,
+        "send_text_message",
+        return_value={"success": True, "message_id": "wamid.MOCK_DISPATCH_001", "error": None}
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                json={"body": "Hello from Scoutify Outbound Engine!"}
+            )
+            assert res.status_code == 201
+            data = res.json()
+            assert data["direction"] == "OUTBOUND"
+            assert data["status"] == "SENT"
+            assert data["body"] == "Hello from Scoutify Outbound Engine!"
+            assert data["wa_message_id"] == "wamid.MOCK_DISPATCH_001"
+            assert data["recipient_phone"] == test_phone
+
+    # Verify in DB
+    async with AsyncSessionLocal() as db_session:
+        conv_db = await db_session.get(Conversation, conv_id)
+        assert conv_db.last_message_at is not None
+
+        stmt = select(Message).where(Message.conversation_id == conv_id)
+        msgs = (await db_session.execute(stmt)).scalars().all()
+        assert len(msgs) == 1
+        assert msgs[0].direction == MessageDirection.OUTBOUND
+        assert msgs[0].status == ConversationMessageStatus.SENT
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_message_closed_and_archived_behaviors():
+    """Verifies that CLOSED conversation blocks outbound sending, while ARCHIVED auto-reopens to ACTIVE."""
+    test_phone = "+905413338877"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Closed/Archived Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.CLOSED)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    with patch.object(
+        WhatsAppCloudApiClient,
+        "send_text_message",
+        return_value={"success": True, "message_id": "wamid.MOCK_DISPATCH_002", "error": None}
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # 1. Closed conversation should be blocked (400)
+            res_closed = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                json={"body": "This should be blocked"}
+            )
+            assert res_closed.status_code == 400
+            assert "Kapalı" in res_closed.json()["detail"]
+
+            # 2. Change status to ARCHIVED
+            await client.patch(f"/api/v1/conversations/{conv_id}/status", json={"status": "ARCHIVED"})
+
+            # 3. Sending to ARCHIVED should succeed and auto-reopen to ACTIVE
+            res_archived = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                json={"body": "This should reopen the thread"}
+            )
+            assert res_archived.status_code == 201
+
+            res_conv = await client.get(f"/api/v1/conversations/{conv_id}")
+            assert res_conv.json()["status"] == "ACTIVE"
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_message_idempotency():
+    """Verifies that repeated requests with the same X-Idempotency-Key return the existing message."""
+    test_phone = "+905414447766"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Idempotent Outbound Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    with patch.object(
+        WhatsAppCloudApiClient,
+        "send_text_message",
+        return_value={"success": True, "message_id": "idemp_outbound_unique_key_123", "error": None}
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            idempotency_key = "idemp_outbound_unique_key_123"
+
+            # Request 1
+            res1 = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                headers={"X-Idempotency-Key": idempotency_key},
+                json={"body": "Hello once"}
+            )
+            assert res1.status_code == 201
+            msg1_id = res1.json()["id"]
+
+            # Request 2 (replay)
+            res2 = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                headers={"X-Idempotency-Key": idempotency_key},
+                json={"body": "Hello once"}
+            )
+            assert res2.status_code == 201
+            assert res2.json()["id"] == msg1_id
+
+    # Verify only 1 message exists in DB
+    async with AsyncSessionLocal() as db_session:
+        stmt = select(Message).where(Message.conversation_id == conv_id)
+        msgs = (await db_session.execute(stmt)).scalars().all()
+        assert len(msgs) == 1
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_message_meta_error_normalization():
+    """Verifies that Meta API error responses are translated into 502 without leaking secrets."""
+    test_phone = "+905415554433"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Meta Error Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    with patch.object(
+        WhatsAppCloudApiClient,
+        "send_text_message",
+        return_value={"success": False, "message_id": None, "error": "Meta Rate Limit Exceeded (HTTP 429)"}
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                json={"body": "Test rate limit"}
+            )
+            assert res.status_code == 502
+            assert "Rate Limit" in res.json()["detail"]
+
+    # Verify 0 messages exist in DB on failure
+    async with AsyncSessionLocal() as db_session:
+        stmt = select(Message).where(Message.conversation_id == conv_id)
+        msgs = (await db_session.execute(stmt)).scalars().all()
+        assert len(msgs) == 0
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_message_meta_auth_expired_token():
+    """Verifies that Meta 401 Session Expired error is gracefully handled without creating phantom messages."""
+    test_phone = "+905416665544"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Expired Auth Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    with patch.object(
+        WhatsAppCloudApiClient,
+        "send_text_message",
+        return_value={"success": False, "message_id": None, "error": "Meta Error (HTTP 401, code 190, subcode 463): Session has expired"}
+    ):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            res = await client.post(
+                f"/api/v1/conversations/{conv_id}/messages",
+                json={"body": "Hello with expired token"}
+            )
+            assert res.status_code == 502
+            assert "Session has expired" in res.json()["detail"]
+
+    # Invariant: No phantom Message created
+    async with AsyncSessionLocal() as db_session:
+        stmt = select(Message).where(Message.conversation_id == conv_id)
+        msgs = (await db_session.execute(stmt)).scalars().all()
+        assert len(msgs) == 0
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_message_lead_missing_phone():
+    """Verifies that attempting to send to a lead with no phone number returns 400 Bad Request."""
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+
+        lead = Lead(name="No Phone Lead", phone="", phone_e164=None, status=LeadStatus.NEW)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post(
+            f"/api/v1/conversations/{conv_id}/messages",
+            json={"body": "Message to lead without phone"}
+        )
+        assert res.status_code == 400
+        assert "telefon numarası" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_list_and_send_templates():
+    """Verifies listing business templates and sending a template with variable rendering."""
+    test_phone = "+905417778899"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Dr. Mehmet Öz", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. List templates
+        res_list = await client.get("/api/v1/conversations/templates")
+        assert res_list.status_code == 200
+        templates = res_list.json()
+        assert len(templates) >= 4
+        keys = [t["key"] for t in templates]
+        assert "welcome_intro" in keys
+        assert "offer_followup" in keys
+
+        # 2. Send template
+        with patch.object(
+            WhatsAppCloudApiClient,
+            "send_template_message",
+            return_value={"success": True, "message_id": "wamid.TMPL_TEST_001", "error": None}
+        ):
+            res_send = await client.post(
+                f"/api/v1/conversations/{conv_id}/templates/send",
+                json={"template_key": "welcome_intro", "variables": {"name": "Dr. Mehmet"}}
+            )
+            assert res_send.status_code == 201
+            data = res_send.json()
+            assert data["direction"] == "OUTBOUND"
+            assert data["status"] == "SENT"
+            assert "Dr. Mehmet" in data["body"]
+            assert data["wa_message_id"] == "wamid.TMPL_TEST_001"
+
+
+@pytest.mark.asyncio
+async def test_check_24h_window_and_retry_failed_message():
+    """Verifies 24h window calculation and retrying a FAILED message."""
+    test_phone = "+905418889900"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Window Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+        # Insert a FAILED outbound message
+        failed_msg = Message(
+            conversation_id=conv.id,
+            direction=MessageDirection.OUTBOUND,
+            message_type=MessageType.TEXT,
+            body="Retry me please",
+            sender_phone="BUSINESS",
+            recipient_phone=test_phone,
+            status=ConversationMessageStatus.FAILED,
+            error_message="Network Error",
+        )
+        db_session.add(failed_msg)
+        await db_session.commit()
+        await db_session.refresh(failed_msg)
+        msg_id = failed_msg.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Check conversation 24h window info
+        res_conv = await client.get(f"/api/v1/conversations/{conv_id}")
+        assert res_conv.status_code == 200
+        conv_data = res_conv.json()
+        assert conv_data["is_window_open"] is True
+
+        # Retry failed message
+        with patch.object(
+            WhatsAppCloudApiClient,
+            "send_text_message",
+            return_value={"success": True, "message_id": "wamid.RETRY_SUCCESS_001", "error": None}
+        ):
+            res_retry = await client.post(f"/api/v1/conversations/{conv_id}/messages/{msg_id}/retry")
+            assert res_retry.status_code == 200
+            data_retry = res_retry.json()
+            assert data_retry["status"] == "SENT"
+            assert data_retry["wa_message_id"] == "wamid.RETRY_SUCCESS_001"
+
+    # Now simulate an expired inbound message (>24 hours ago)
+    from datetime import timedelta
+    async with AsyncSessionLocal() as db_session:
+        old_time = datetime.now(timezone.utc) - timedelta(hours=25)
+        expired_inbound = Message(
+            conversation_id=conv_id,
+            direction=MessageDirection.INBOUND,
+            message_type=MessageType.TEXT,
+            body="Old message from yesterday",
+            sender_phone=test_phone,
+            recipient_phone="BUSINESS",
+            status=ConversationMessageStatus.READ,
+            external_timestamp=old_time,
+            created_at=old_time,
+        )
+        db_session.add(expired_inbound)
+        await db_session.commit()
+
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Check conversation 24h window is now closed
+        res_expired = await client.get(f"/api/v1/conversations/{conv_id}")
+        assert res_expired.status_code == 200
+        assert res_expired.json()["is_window_open"] is False
+
+        # 2. Regular text message must be REJECTED (HTTP 400)
+        res_text_rejected = await client.post(
+            f"/api/v1/conversations/{conv_id}/messages",
+            json={"body": "This should be blocked due to expired window"}
+        )
+        assert res_text_rejected.status_code == 400
+        assert "24 saatlik müşteri iletişim süresi dolmuştur" in res_text_rejected.json()["detail"]
+
+        # 3. Template message must be ALLOWED (HTTP 200)
+        with patch.object(
+            WhatsAppCloudApiClient,
+            "send_template_message",
+            return_value={"success": True, "message_id": "wamid.TMPL_AFTER_EXPIRED_001", "error": None}
+        ):
+            res_tmpl = await client.post(
+                f"/api/v1/conversations/{conv_id}/templates/send",
+                json={"template_key": "welcome_intro", "variables": {"name": "Expired Window Lead"}}
+            )
+            assert res_tmpl.status_code == 201
+            assert res_tmpl.json()["wa_message_id"] == "wamid.TMPL_AFTER_EXPIRED_001"
+
+
+@pytest.mark.asyncio
+async def test_send_outbound_media():
+    """Verifies sending outbound image and document messages."""
+    test_phone = "+905419990011"
+    async with AsyncSessionLocal() as db_session:
+        await clean_db(db_session)
+        await db_session.execute(Lead.__table__.delete().where(Lead.phone_e164 == test_phone))
+        await db_session.commit()
+
+        lead = Lead(name="Media Lead", phone=test_phone, phone_e164=test_phone, status=LeadStatus.CONTACTED)
+        db_session.add(lead)
+        await db_session.commit()
+
+        conv = Conversation(lead_id=lead.id, channel="WHATSAPP", status=ConversationStatus.ACTIVE)
+        db_session.add(conv)
+        await db_session.commit()
+        await db_session.refresh(conv)
+        conv_id = conv.id
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        with patch.object(
+            WhatsAppCloudApiClient,
+            "send_media_message",
+            return_value={"success": True, "message_id": "wamid.MEDIA_SUCCESS_001", "error": None}
+        ):
+            res_media = await client.post(
+                f"/api/v1/conversations/{conv_id}/media",
+                json={
+                    "media_type": "IMAGE",
+                    "media_url": "https://example.com/catalog.jpg",
+                    "caption": "Yeni Ürün Kataloğu"
+                }
+            )
+            assert res_media.status_code == 201
+            data = res_media.json()
+            assert data["direction"] == "OUTBOUND"
+            assert data["message_type"] == "IMAGE"
+            assert data["media_caption"] == "Yeni Ürün Kataloğu"
+            assert data["wa_message_id"] == "wamid.MEDIA_SUCCESS_001"
+
+
+
+
