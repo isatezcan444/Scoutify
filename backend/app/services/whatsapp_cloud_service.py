@@ -99,82 +99,93 @@ class WhatsAppCloudService:
                 "message_id": msg.message_id,
             }
 
-        # 2. Correlate with Lead
+        # 2. Correlate with Lead (or auto-provision for inbound new prospect)
         lead_stmt = select(Lead).where(
             (Lead.phone_e164 == e164) | (Lead.phone == e164)
         )
         lead_res = await db.execute(lead_stmt)
         lead = lead_res.scalar_one_or_none()
 
-        conversation_id = None
-
-        if lead:
-            # 3. Find or Create Active Conversation for Lead (or Reopen Archived/Closed)
-            conv_stmt = select(Conversation).where(
-                Conversation.lead_id == lead.id,
-                Conversation.channel == "WHATSAPP",
-            ).order_by(Conversation.id.desc()).limit(1)
-            conv_res = await db.execute(conv_stmt)
-            conversation = conv_res.scalar_one_or_none()
-
-            if not conversation:
-                conversation = Conversation(
-                    lead_id=lead.id,
-                    channel="WHATSAPP",
-                    status=ConversationStatus.ACTIVE,
-                    last_message_at=msg.timestamp,
-                    unread_count=1,
-                )
-                db.add(conversation)
-                await db.flush()
-            else:
-                # Reopen archived or closed conversation on new inbound message
-                if conversation.status != ConversationStatus.ACTIVE:
-                    conversation.status = ConversationStatus.ACTIVE
-                conversation.last_message_at = msg.timestamp
-                conversation.unread_count = (conversation.unread_count or 0) + 1
-
-            conversation_id = conversation.id
-
-            # 4. Insert Inbound Message Entity with Rich Media support
-            type_map = {
-                "text": MessageType.TEXT,
-                "image": MessageType.IMAGE,
-                "document": MessageType.DOCUMENT,
-                "audio": MessageType.AUDIO,
-                "video": MessageType.VIDEO,
-                "sticker": MessageType.OTHER,
-                "location": MessageType.OTHER,
-                "button": MessageType.TEXT,
-                "interactive": MessageType.TEXT,
-            }
-            mapped_type = type_map.get(msg.raw_type.lower(), MessageType.OTHER)
-
-            message_entity = Message(
-                conversation_id=conversation.id,
-                direction=MessageDirection.INBOUND,
-                message_type=mapped_type,
-                body=msg.text,
-                wa_message_id=msg.message_id,
-                media_id=msg.media_id,
-                media_mime_type=msg.media_mime_type,
-                media_filename=msg.media_filename,
-                media_caption=msg.media_caption,
-                sender_phone=e164,
-                recipient_phone="BUSINESS",
-                status=ConversationMessageStatus.RECEIVED,
-                external_timestamp=msg.timestamp,
+        if not lead:
+            contact_name = (msg.sender_name or "").strip() or f"WhatsApp İletişim ({e164})"
+            lead = Lead(
+                name=contact_name,
+                phone=e164,
+                phone_e164=e164,
+                is_mobile=True,
+                is_whatsapp_eligible=True,
+                status=LeadStatus.NEW,
+                notes=f"Otomatik WhatsApp Webhook Girişi ({msg.timestamp.strftime('%Y-%m-%d %H:%M')})",
             )
-            db.add(message_entity)
+            db.add(lead)
+            await db.flush()
 
-            # Backward-compatible notes update
-            ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
-            new_note_entry = f"WhatsApp Yanıtı ({ts_str}): {msg.text}"
-            if not lead.notes or new_note_entry not in lead.notes:
-                lead.notes = f"{lead.notes}\n{new_note_entry}" if lead.notes else new_note_entry
+        # 3. Find or Create Active Conversation for Lead (or Reopen Archived/Closed)
+        conv_stmt = select(Conversation).where(
+            Conversation.lead_id == lead.id,
+            Conversation.channel == "WHATSAPP",
+        ).order_by(Conversation.id.desc()).limit(1)
+        conv_res = await db.execute(conv_stmt)
+        conversation = conv_res.scalar_one_or_none()
 
-            if lead.status not in (LeadStatus.INTERESTED, LeadStatus.UNSUBSCRIBED):
-                lead.status = LeadStatus.REPLIED
+        if not conversation:
+            conversation = Conversation(
+                lead_id=lead.id,
+                channel="WHATSAPP",
+                status=ConversationStatus.ACTIVE,
+                last_message_at=msg.timestamp,
+                unread_count=1,
+            )
+            db.add(conversation)
+            await db.flush()
+        else:
+            # Reopen archived or closed conversation on new inbound message
+            if conversation.status != ConversationStatus.ACTIVE:
+                conversation.status = ConversationStatus.ACTIVE
+            conversation.last_message_at = msg.timestamp
+            conversation.unread_count = (conversation.unread_count or 0) + 1
+
+        conversation_id = conversation.id
+
+        # 4. Insert Inbound Message Entity with Rich Media support
+        type_map = {
+            "text": MessageType.TEXT,
+            "image": MessageType.IMAGE,
+            "document": MessageType.DOCUMENT,
+            "audio": MessageType.AUDIO,
+            "video": MessageType.VIDEO,
+            "sticker": MessageType.OTHER,
+            "location": MessageType.OTHER,
+            "button": MessageType.TEXT,
+            "interactive": MessageType.TEXT,
+        }
+        mapped_type = type_map.get(msg.raw_type.lower(), MessageType.OTHER)
+
+        message_entity = Message(
+            conversation_id=conversation.id,
+            direction=MessageDirection.INBOUND,
+            message_type=mapped_type,
+            body=msg.text,
+            wa_message_id=msg.message_id,
+            media_id=msg.media_id,
+            media_mime_type=msg.media_mime_type,
+            media_filename=msg.media_filename,
+            media_caption=msg.media_caption,
+            sender_phone=e164,
+            recipient_phone="BUSINESS",
+            status=ConversationMessageStatus.RECEIVED,
+            external_timestamp=msg.timestamp,
+        )
+        db.add(message_entity)
+
+        # Backward-compatible notes update
+        ts_str = msg.timestamp.strftime("%Y-%m-%d %H:%M")
+        new_note_entry = f"WhatsApp Yanıtı ({ts_str}): {msg.text}"
+        if not lead.notes or new_note_entry not in lead.notes:
+            lead.notes = f"{lead.notes}\n{new_note_entry}" if lead.notes else new_note_entry
+
+        if lead.status not in (LeadStatus.INTERESTED, LeadStatus.UNSUBSCRIBED):
+            lead.status = LeadStatus.REPLIED
 
         # 5. Correlate with most recent MessageLog for this phone (Backward Compatibility)
         log_stmt = (

@@ -10,6 +10,7 @@ import {
 import { WhatsAppSession } from '../../types';
 import { Card } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { IconButton } from '../ui/IconButton';
 import { cn } from '../../lib/utils';
 import { useI18n } from '../../context/I18nContext';
 
@@ -125,14 +126,14 @@ export const SessionCard: React.FC<SessionCardProps> = ({
         )}
 
         {onDelete && (
-          <button
-            type="button"
+          <IconButton
+            icon={Trash2}
+            size="sm"
+            variant="ghost"
+            tooltip={t('whatsapp.deleteSession')}
             onClick={() => onDelete(session.id)}
-            className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
-            title={t('whatsapp.deleteSession')}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+            className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/10"
+          />
         )}
       </div>
     </Card>

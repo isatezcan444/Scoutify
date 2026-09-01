@@ -70,10 +70,27 @@ class CategoryRelevanceEngine:
         if candidate_category_node:
             candidate_cat_id = candidate_category_node.id
             if candidate_cat_id != profile.canonical_id:
-                if TaxonomyRegistry.are_mutually_exclusive(profile.canonical_id, candidate_cat_id):
+                if not profile.is_dynamic:
+                    if TaxonomyRegistry.are_mutually_exclusive(profile.canonical_id, candidate_cat_id):
+                        neg_reason = (
+                            f"Kategori uyuşmazlığı (MUTUALLY_EXCLUSIVE): Aday '{candidate_category_node.display_name}' ({candidate_cat_id}) "
+                            f"kategorisine ait, hedef '{profile.display_name}' ({profile.canonical_id}) ile çelişiyor."
+                        )
+                        negative_evidence.append(neg_reason)
+                        return CategoryAssessment(
+                            score=0.0,
+                            classification=CategoryMatchClassification.MISMATCH,
+                            matched_category_id=candidate_cat_id,
+                            positive_evidence=[],
+                            negative_evidence=negative_evidence,
+                            confidence=1.0,
+                            reason=neg_reason
+                        )
+                else:
+                    # Dynamic profile: Candidate matches a distinct established static category
                     neg_reason = (
-                        f"Kategori uyuşmazlığı (MUTUALLY_EXCLUSIVE): Aday '{candidate_category_node.display_name}' ({candidate_cat_id}) "
-                        f"kategorisine ait, hedef '{profile.display_name}' ({profile.canonical_id}) ile çelişiyor."
+                        f"Kategori çelişkisi: Aday '{candidate_category_node.display_name}' ({candidate_cat_id}) "
+                        f"yerleşik statik kategorisine ait, dinamik '{profile.display_name}' hedefiyle uyuşmuyor."
                     )
                     negative_evidence.append(neg_reason)
                     return CategoryAssessment(
@@ -125,17 +142,32 @@ class CategoryRelevanceEngine:
         score = 0.0
 
         if matched_positives:
-            # Score proportional to positive evidence strength
-            base_score = min(0.6 + (len(matched_positives) * 0.15), 0.95)
-            if candidate.raw_category and any(normalize_turkish(pos) in normalize_turkish(candidate.raw_category) for pos in profile.positive_concepts):
-                base_score = min(base_score + 0.1, 1.0)
-            score = base_score
-            classification = CategoryMatchClassification.MATCH if score >= 0.7 else CategoryMatchClassification.PARTIAL_MATCH
-            reason = f"Hedef kategori kavramlarıyla güçlü uyum ({len(matched_positives)} pozitif sinyal)."
+            # Separate non-generic concepts from generic tokens
+            non_generic_positives = [
+                p for p in matched_positives 
+                if normalize_turkish(p) not in TaxonomyRegistry.GENERIC_WORDS or len(p.split()) > 1
+            ]
+            has_full_phrase = any(len(p.split()) >= 2 and normalize_turkish(p) in norm_corpus for p in profile.positive_concepts)
+
+            if non_generic_positives or has_full_phrase:
+                base_score = min(0.65 + (len(non_generic_positives) * 0.15), 0.95)
+                if candidate.raw_category and any(normalize_turkish(pos) in normalize_turkish(candidate.raw_category) for pos in profile.positive_concepts):
+                    base_score = min(base_score + 0.1, 1.0)
+                score = base_score
+                classification = CategoryMatchClassification.MATCH if score >= 0.7 else CategoryMatchClassification.PARTIAL_MATCH
+                reason = f"Hedef kategori kavramlarıyla güçlü uyum ({len(non_generic_positives)} nitelikli pozitif sinyal)."
+            else:
+                # Only generic concepts matched (cannot grant MATCH)
+                score = 0.35
+                classification = CategoryMatchClassification.AMBIGUOUS
+                reason = "Aday yalnızca genel (generic) kavramlar içeriyor; yeterli alan kanıtı bulunamadı."
         elif profile.is_dynamic:
-            # Dynamic profile: fallback to token overlap
+            # Dynamic profile: token overlap check strictly excluding generic words
             tokens = set(normalize_turkish(profile.display_name).split())
-            overlap = corpus_tokens.intersection(tokens)
+            non_generic_target_tokens = {t for t in tokens if t not in TaxonomyRegistry.GENERIC_WORDS and len(t) > 2}
+            non_generic_corpus_tokens = {t for t in corpus_tokens if t not in TaxonomyRegistry.GENERIC_WORDS and len(t) > 2}
+            
+            overlap = non_generic_corpus_tokens.intersection(non_generic_target_tokens)
             if overlap:
                 score = 0.75
                 classification = CategoryMatchClassification.MATCH

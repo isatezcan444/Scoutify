@@ -16,6 +16,10 @@ import {
   WhatsAppTemplate,
   GenerateMessagePayload,
   GenerateMessageResponse,
+  CampaignGroup,
+  CampaignGroupDetail,
+  CampaignGroupCreatePayload,
+  AddLeadsToGroupResponse,
 } from '../types';
 
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
@@ -244,6 +248,108 @@ export class ApiClient {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Kampanya silinemedi');
     }
+  }
+
+  static async bulkDeleteCampaigns(campaignIds: number[]): Promise<{ deleted_count: number; message: string }> {
+    const res = await fetch(`${API_BASE}/campaigns/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ campaign_ids: campaignIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Toplu kampanya silme işlemi başarısız oldu');
+    }
+    return res.json();
+  }
+
+  // --- Campaign Groups ---
+  static async getCampaignGroups(): Promise<CampaignGroup[]> {
+    const res = await fetch(`${API_BASE}/campaign-groups`);
+    if (!res.ok) throw new Error('Kampanya grupları yüklenemedi');
+    return res.json();
+  }
+
+  static async getCampaignGroup(id: number): Promise<CampaignGroupDetail> {
+    const res = await fetch(`${API_BASE}/campaign-groups/${id}`);
+    if (!res.ok) throw new Error('Kampanya grubu detayı yüklenemedi');
+    return res.json();
+  }
+
+  static async createCampaignGroup(data: CampaignGroupCreatePayload): Promise<CampaignGroup> {
+    const res = await fetch(`${API_BASE}/campaign-groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Kampanya grubu oluşturulamadı');
+    }
+    return res.json();
+  }
+
+  static async updateCampaignGroup(id: number, data: Partial<CampaignGroupCreatePayload>): Promise<CampaignGroup> {
+    const res = await fetch(`${API_BASE}/campaign-groups/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Kampanya grubu güncellenemedi');
+    }
+    return res.json();
+  }
+
+  static async deleteCampaignGroup(id: number): Promise<void> {
+    const res = await fetch(`${API_BASE}/campaign-groups/${id}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Kampanya grubu silinemedi');
+    }
+  }
+
+  static async bulkDeleteCampaignGroups(groupIds: number[]): Promise<{ deleted_count: number; message: string }> {
+    const res = await fetch(`${API_BASE}/campaign-groups/bulk-delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_ids: groupIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Toplu kampanya grubu silme işlemi başarısız oldu');
+    }
+    return res.json();
+  }
+
+  static async addLeadsToCampaignGroup(groupId: number, leadIds: number[]): Promise<AddLeadsToGroupResponse> {
+    const res = await fetch(`${API_BASE}/campaign-groups/${groupId}/leads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_ids: leadIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'İşletmeler gruba eklenemedi');
+    }
+    return res.json();
+  }
+
+  static async removeLeadFromCampaignGroup(
+    groupId: number,
+    leadId: number
+  ): Promise<{ message: string; total_leads_count: number; whatsapp_eligible_count: number }> {
+    const res = await fetch(`${API_BASE}/campaign-groups/${groupId}/leads/${leadId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'İşletme gruptan çıkarılamadı');
+    }
+    return res.json();
   }
 
   static async generateCampaignMessage(payload: GenerateMessagePayload): Promise<GenerateMessageResponse> {

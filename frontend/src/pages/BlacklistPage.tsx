@@ -17,6 +17,7 @@ import { ApiClient } from '../api/client';
 import { BlacklistEntry, Lead } from '../types';
 import {
   Button,
+  IconButton,
   Badge,
   Card,
   PageHeader,
@@ -511,13 +512,14 @@ export const BlacklistPage: React.FC = () => {
 
                       {/* 5. Actions */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
-                        <button
+                        <IconButton
+                          icon={Trash2}
+                          size="sm"
+                          variant="ghost"
+                          tooltip={t('blacklist.confirmRemoveTitle')}
                           onClick={() => handleRemove(entry.id, entry.phone_e164, entry.lead_name)}
-                          className="text-slate-400 hover:text-[#EA5455] p-1.5 rounded-lg hover:bg-[#EA5455]/10 transition-colors cursor-pointer"
-                          title={t('blacklist.confirmRemoveTitle')}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/10"
+                        />
                       </td>
                     </tr>
                   );

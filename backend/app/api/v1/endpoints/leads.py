@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, delete
 
 from backend.app.core.database import get_db
+from backend.app.core.search_utils import build_tr_search_filter, generate_tr_search_terms
 from backend.app.models.lead import Lead, LeadStatus
 from backend.app.models.blacklist import Blacklist
 from backend.app.schemas.lead import (
@@ -31,21 +32,20 @@ def build_lead_filter_conditions(
     status: Optional[LeadStatus] = None,
     whatsapp_eligible_only: bool = False,
 ) -> list:
-    """Builds a unified list of SQLAlchemy filter expressions for Lead queries."""
+    """Builds a unified list of SQLAlchemy filter expressions for Lead queries with Turkish case-folding."""
     conditions = []
     if search:
-        search_filter = or_(
-            Lead.name.ilike(f"%{search}%"),
-            Lead.phone.ilike(f"%{search}%"),
-            Lead.phone_e164.ilike(f"%{search}%"),
-            Lead.category.ilike(f"%{search}%"),
-            Lead.address.ilike(f"%{search}%"),
-            Lead.notes.ilike(f"%{search}%")
+        search_filter = build_tr_search_filter(
+            [Lead.name, Lead.phone, Lead.phone_e164, Lead.category, Lead.address, Lead.notes],
+            search
         )
-        conditions.append(search_filter)
+        if search_filter is not None:
+            conditions.append(search_filter)
 
     if city:
-        conditions.append(Lead.city.ilike(f"%{city}%"))
+        city_filter = build_tr_search_filter([Lead.city], city)
+        if city_filter is not None:
+            conditions.append(city_filter)
 
     # Multi-district filtering
     all_districts = []
@@ -59,7 +59,13 @@ def build_lead_filter_conditions(
         all_districts.append(district.strip())
 
     if all_districts:
-        conditions.append(or_(*[Lead.district.ilike(f"%{d}%") for d in set(all_districts)]))
+        district_clauses = []
+        for d in set(all_districts):
+            df = build_tr_search_filter([Lead.district], d)
+            if df is not None:
+                district_clauses.append(df)
+        if district_clauses:
+            conditions.append(or_(*district_clauses))
 
     # Multi-category filtering
     all_categories = []
@@ -73,7 +79,13 @@ def build_lead_filter_conditions(
         all_categories.append(category.strip())
 
     if all_categories:
-        conditions.append(or_(*[Lead.category.ilike(f"%{c}%") for c in set(all_categories)]))
+        category_clauses = []
+        for c in set(all_categories):
+            cf = build_tr_search_filter([Lead.category], c)
+            if cf is not None:
+                category_clauses.append(cf)
+        if category_clauses:
+            conditions.append(or_(*category_clauses))
 
     if status:
         conditions.append(Lead.status == status)

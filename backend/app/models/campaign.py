@@ -38,6 +38,10 @@ class Campaign(Base):
     # Session Association (Optional: specific session or round-robin all active)
     session_id = Column(Integer, ForeignKey("whatsapp_sessions.id", ondelete="SET NULL"), nullable=True)
     session = relationship("WhatsAppSession", backref="campaigns")
+
+    # Campaign Group Association (Optional)
+    group_id = Column(Integer, ForeignKey("campaign_groups.id", ondelete="SET NULL"), nullable=True)
+    group = relationship("CampaignGroup", backref="campaigns")
     
     # Counters
     total_leads_target = Column(Integer, default=0)

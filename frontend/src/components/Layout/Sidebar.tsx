@@ -4,6 +4,7 @@ import {
   Search, 
   Users, 
   Send, 
+  FolderKanban,
   Smartphone, 
   ShieldAlert, 
   Settings,
@@ -49,13 +50,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: t('nav.sectionOutreach'),
       items: [
         { id: 'campaigns', label: t('nav.campaigns'), icon: Send, badge: activeCampaignsCount > 0 ? `${activeCampaignsCount}` : null, badgeVariant: 'warning' as const },
-        { id: 'whatsapp', label: t('nav.whatsappHub'), icon: Smartphone, badge: null },
-        { id: 'blacklist', label: t('nav.blacklist'), icon: ShieldAlert, badge: null },
+        { id: 'campaign-groups', label: t('nav.campaignGroups'), icon: FolderKanban, badge: null },
       ]
     },
     {
       title: t('nav.sectionConfig'),
       items: [
+        { id: 'whatsapp', label: t('nav.whatsappHub'), icon: Smartphone, badge: null },
+        { id: 'blacklist', label: t('nav.blacklist'), icon: ShieldAlert, badge: null },
         { id: 'settings', label: t('nav.settings'), icon: Settings, badge: null },
       ]
     }

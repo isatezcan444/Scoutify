@@ -10,7 +10,10 @@ import {
   Loader2, 
   Sparkles, 
   MapPin, 
-  Search 
+  Search,
+  FolderKanban,
+  Plus,
+  CheckCircle2
 } from 'lucide-react';
 import { ApiClient, createWebSocket } from '../api/client';
 import { 
@@ -23,18 +26,23 @@ import {
   WhatsAppIcon, 
   GoogleMapsIcon 
 } from '../components/ui';
+import { Modal } from '../components/ui/Modal';
+import { TextInput } from '../components/forms/TextInput';
 import { Select } from '../components/forms';
 import { SectorAutocomplete } from '../components/LeadFinder/SectorAutocomplete';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { useI18n } from '../context/I18nContext';
+import { useToast } from '../context/ToastContext';
+import { CampaignGroup } from '../types';
 
 interface LeadFinderPageProps {
-  onNavigate: (tab: string) => void;
+  onNavigate: (tab: string, prefillData?: any) => void;
   onRefreshStats: () => void;
 }
 
 export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRefreshStats }) => {
   const { t } = useI18n();
+  const toast = useToast();
   const [keyword, setKeyword] = useState('');
   const [selectedCity, setSelectedCity] = useState('');
   const [selectedDistricts, setSelectedDistricts] = useState<string[]>([]);
@@ -44,9 +52,70 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   const [discoveredLeads, setDiscoveredLeads] = useState<any[]>([]);
   const [progress, setProgress] = useState(0);
 
+  // Save to Group State
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [saveMode, setSaveMode] = useState<'NEW' | 'EXISTING'>('NEW');
+  const [saveGroupName, setSaveGroupName] = useState('');
+  const [saveGroupId, setSaveGroupId] = useState<number | null>(null);
+  const [existingGroups, setExistingGroups] = useState<CampaignGroup[]>([]);
+  const [isSavingGroup, setIsSavingGroup] = useState(false);
+
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const resultsSectionRef = useRef<HTMLDivElement>(null);
   const activeJobIdRef = useRef<number | null>(null);
+
+  const handleOpenSaveModal = async (initialMode: 'NEW' | 'EXISTING') => {
+    setSaveMode(initialMode);
+    const locationPrefix = [selectedDistricts[0] || selectedCity].filter(Boolean).join(' ');
+    const autoName = [locationPrefix, keyword].filter(Boolean).join(' ');
+    setSaveGroupName(autoName || 'Yeni Kampanya Grubu');
+
+    try {
+      const groups = await ApiClient.getCampaignGroups();
+      setExistingGroups(groups);
+      if (groups.length > 0) {
+        setSaveGroupId(groups[0].id);
+      } else {
+        setSaveMode('NEW');
+      }
+    } catch {
+      setExistingGroups([]);
+    }
+
+    setIsSaveModalOpen(true);
+  };
+
+  const handleConfirmSaveToGroup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const leadIds = discoveredLeads.map((l) => l.id).filter(Boolean) as number[];
+    if (leadIds.length === 0) {
+      toast.warning('Kaydedilecek işletme bulunamadı.');
+      return;
+    }
+
+    try {
+      setIsSavingGroup(true);
+      if (saveMode === 'NEW') {
+        const locationStr = [selectedCity, selectedDistricts.join(', ')].filter(Boolean).join(' - ');
+        const created = await ApiClient.createCampaignGroup({
+          name: saveGroupName.trim() || undefined,
+          target_category: keyword.trim() || undefined,
+          target_location: locationStr || undefined,
+          lead_ids: leadIds,
+        });
+        toast.success(t('campaignGroups.groupCreated', { name: created.name }));
+      } else if (saveMode === 'EXISTING' && saveGroupId) {
+        const res = await ApiClient.addLeadsToCampaignGroup(saveGroupId, leadIds);
+        toast.success(res.message);
+      }
+      setIsSaveModalOpen(false);
+      onRefreshStats();
+    } catch (err: any) {
+      toast.error(err.message || 'Gruba kaydedilemedi.');
+    } finally {
+      setIsSavingGroup(false);
+    }
+  };
 
   // Auto-scroll inside terminal without scrolling the entire window
   useEffect(() => {
@@ -306,6 +375,41 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             </div>
           </div>
 
+          {/* Save to Group Inline Banner */}
+          <div className="bg-gradient-to-r from-[#7367F0]/10 via-[#7367F0]/5 to-transparent border border-[#7367F0]/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+            <div className="flex items-center space-x-3.5">
+              <div className="w-10 h-10 rounded-xl bg-[#7367F0] text-white flex items-center justify-center shadow-md shadow-[#7367F0]/25 shrink-0">
+                <FolderKanban className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-sm font-extrabold text-slate-800 dark:text-white">
+                  {t('leadFinder.saveToGroupBannerTitle')}
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-[#7E7F96] mt-0.5">
+                  {t('leadFinder.saveToGroupBannerDesc')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <Button
+                onClick={() => handleOpenSaveModal('NEW')}
+                className="bg-[#7367F0] hover:bg-[#685dd8] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md shadow-[#7367F0]/25 flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t('leadFinder.saveAsNewGroup')}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleOpenSaveModal('EXISTING')}
+                className="text-xs font-bold px-4 py-2 rounded-xl border-slate-200 dark:border-white/10 flex items-center gap-1.5 cursor-pointer"
+              >
+                <FolderKanban className="w-3.5 h-3.5 text-[#7367F0]" />
+                {t('leadFinder.addToExistingGroup')}
+              </Button>
+            </div>
+          </div>
+
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {discoveredLeads.map((lead, idx) => (
@@ -407,6 +511,147 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           </div>
         </div>
       )}
+
+      {/* Save to Group Modal */}
+      <Modal
+        isOpen={isSaveModalOpen}
+        onClose={() => setIsSaveModalOpen(false)}
+        title={t('leadFinder.saveModalTitle')}
+        subtitle={t('leadFinder.saveModalSubtitle')}
+      >
+        <form onSubmit={handleConfirmSaveToGroup} className="space-y-4">
+          {/* Options Radios */}
+          <div className="space-y-2">
+            <label
+              onClick={() => setSaveMode('NEW')}
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                saveMode === 'NEW'
+                  ? 'border-[#7367F0] bg-[#7367F0]/5 dark:bg-[#7367F0]/10'
+                  : 'border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/[0.02]'
+              }`}
+            >
+              <input
+                type="radio"
+                name="saveMode"
+                checked={saveMode === 'NEW'}
+                onChange={() => setSaveMode('NEW')}
+                className="mt-0.5 text-[#7367F0] focus:ring-[#7367F0]"
+              />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                  {t('leadFinder.saveOptionNew')}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Bu aramadan yeni bir hedef kitle grubu oluşturun.
+                </span>
+              </div>
+            </label>
+
+            <label
+              onClick={() => setSaveMode('EXISTING')}
+              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                saveMode === 'EXISTING'
+                  ? 'border-[#7367F0] bg-[#7367F0]/5 dark:bg-[#7367F0]/10'
+                  : 'border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/[0.02]'
+              }`}
+            >
+              <input
+                type="radio"
+                name="saveMode"
+                checked={saveMode === 'EXISTING'}
+                onChange={() => setSaveMode('EXISTING')}
+                disabled={existingGroups.length === 0}
+                className="mt-0.5 text-[#7367F0] focus:ring-[#7367F0]"
+              />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 dark:text-white block">
+                  {t('leadFinder.saveOptionExisting')}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {existingGroups.length === 0
+                    ? t('leadFinder.noExistingGroups')
+                    : 'Mevcut bir grubu seçip yeni işletmeleri ekleyin.'}
+                </span>
+              </div>
+            </label>
+          </div>
+
+          {/* New Group Name Input */}
+          {saveMode === 'NEW' && (
+            <div className="pt-2">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                {t('campaignGroups.groupNameLabel')}
+              </label>
+              <TextInput
+                value={saveGroupName}
+                onChange={(e) => setSaveGroupName(e.target.value)}
+                placeholder={t('campaignGroups.groupNamePlaceholder')}
+                className="w-full"
+                required
+              />
+            </div>
+          )}
+
+          {/* Existing Group Selection List */}
+          {saveMode === 'EXISTING' && existingGroups.length > 0 && (
+            <div className="pt-2 space-y-2 max-h-48 overflow-y-auto rounded-xl border border-slate-100 dark:border-white/10 p-2">
+              {existingGroups.map((g) => (
+                <label
+                  key={g.id}
+                  onClick={() => setSaveGroupId(g.id)}
+                  className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all ${
+                    saveGroupId === g.id
+                      ? 'border-[#7367F0] bg-[#7367F0]/10 font-bold text-[#7367F0]'
+                      : 'border-transparent hover:bg-slate-50 dark:hover:bg-white/[0.04] text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-xs truncate">
+                    <input
+                      type="radio"
+                      name="existingGroup"
+                      checked={saveGroupId === g.id}
+                      onChange={() => setSaveGroupId(g.id)}
+                      className="text-[#7367F0] focus:ring-[#7367F0]"
+                    />
+                    <span className="truncate">{g.name}</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-normal shrink-0">
+                    {g.total_leads_count} {t('campaignGroups.businesses')}
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {/* Info Badge */}
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.05] space-y-1">
+            <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+              {t('leadFinder.savingLeadsCount', { count: discoveredLeads.length })}
+            </p>
+            <p className="text-[11px] text-slate-400">
+              {t('leadFinder.duplicateNotice')}
+            </p>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsSaveModalOpen(false)}
+              className="text-xs font-semibold cursor-pointer"
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSavingGroup || (saveMode === 'EXISTING' && !saveGroupId)}
+              className="bg-[#7367F0] hover:bg-[#685dd8] text-white text-xs font-bold px-5 cursor-pointer"
+            >
+              {isSavingGroup ? t('common.loading') : t('common.save')}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

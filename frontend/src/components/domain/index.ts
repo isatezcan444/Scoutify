@@ -8,3 +8,4 @@ export * from './ChatThread';
 export * from './ChatComposer';
 export * from './ConversationList';
 export * from './TemplateSelectModal';
+export * from './CampaignGroupCard';

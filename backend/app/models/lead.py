@@ -67,8 +67,8 @@ class Lead(Base):
     # Standardized e.g. +905321234567. Telefonsuz kayıtlar (kartta telefon
     # bulunamayan işletmeler) NULL bırakılır — asla uydurma numara üretilmez.
     phone_e164 = Column(String(30), nullable=True, unique=True, index=True)
-    is_mobile = Column(Boolean, default=True)
-    is_whatsapp_eligible = Column(Boolean, default=True)
+    is_mobile = Column(Boolean, default=False)
+    is_whatsapp_eligible = Column(Boolean, default=False)
 
     # Location
     address = Column(Text, nullable=True)

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func, or_
 
 from backend.app.core.database import get_db
+from backend.app.core.search_utils import build_tr_search_filter
 from backend.app.models.blacklist import Blacklist
 from backend.app.models.lead import Lead, LeadStatus
 from backend.app.schemas.scraper import BlacklistCreate, BlacklistResponse, BlacklistPaginationResponse
@@ -31,18 +32,20 @@ async def list_blacklist(
 
     conditions = []
     if search and search.strip():
-        q = f"%{search.strip()}%"
-        conditions.append(
-            or_(
-                Blacklist.phone_e164.ilike(q),
-                Blacklist.reason.ilike(q),
-                Blacklist.notes.ilike(q),
-                Lead.name.ilike(q),
-                Lead.category.ilike(q),
-                Lead.city.ilike(q),
-                Lead.district.ilike(q)
-            )
+        search_filter = build_tr_search_filter(
+            [
+                Blacklist.phone_e164,
+                Blacklist.reason,
+                Blacklist.notes,
+                Lead.name,
+                Lead.category,
+                Lead.city,
+                Lead.district,
+            ],
+            search.strip(),
         )
+        if search_filter is not None:
+            conditions.append(search_filter)
     if reason and reason.strip():
         conditions.append(Blacklist.reason == reason.strip())
 

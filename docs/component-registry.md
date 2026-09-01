@@ -199,6 +199,11 @@ components/
 - **Props**: `campaign: Campaign`, `onStart`, `onPause`, `onCancel`.
 - **Import**: `import { CampaignCard } from '@/components/domain';`
 
+### `CampaignGroupCard`
+- **Purpose**: Vuexy-themed card displaying audience group metadata, category/location tags, WhatsApp readiness progress bar, 3-metric statistics grid, and direct actions (`[ 🚀 Kampanya Başlat ]`, `[ 👁️ Görüntüle ]`, `[ 🗑️ Sil ]`).
+- **Props**: `group: CampaignGroup`, `onLaunch?: (group: CampaignGroup) => void`, `onView?: (groupId: number) => void`, `onDelete?: (group: CampaignGroup) => void`.
+- **Import**: `import { CampaignGroupCard } from '@/components/domain';`
+
 ### `SpintaxPreviewCard`
 - **Purpose**: Interactive Spintax sampler card with dynamic variable injection and variation generator.
 - **Props**: `template: string`, `sampleLead?: object`.

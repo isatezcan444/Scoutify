@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import declarative_base
 from backend.app.core.config import settings
 
+from sqlalchemy import event
+
 # Engine configuration with connection pooling
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -15,6 +17,13 @@ engine = create_async_engine(
     # SQLite-specific connect args
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
 )
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    if "sqlite" in settings.DATABASE_URL:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

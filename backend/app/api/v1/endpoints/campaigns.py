@@ -10,6 +10,7 @@ from backend.app.schemas.campaign import (
     CampaignResponse,
     CampaignCreate,
     CampaignUpdate,
+    CampaignBulkDeleteRequest,
     CampaignLaunchRequest,
     SpintaxPreviewRequest,
     SpintaxPreviewResponse,
@@ -134,6 +135,27 @@ async def delete_campaign(campaign_id: int, db: AsyncSession = Depends(get_db)):
     return None
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_campaigns(
+    req: CampaignBulkDeleteRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    if not req.campaign_ids:
+        return {"deleted_count": 0, "message": "Silinecek kampanya belirtilmedi."}
+
+    deleted_count = 0
+    for cid in req.campaign_ids:
+        campaign = await db.get(Campaign, cid)
+        if campaign:
+            if CampaignRunner.is_campaign_running(cid):
+                await CampaignRunner.cancel_campaign(cid)
+            await db.delete(campaign)
+            deleted_count += 1
+
+    await db.commit()
+    return {"deleted_count": deleted_count, "message": f"{deleted_count} kampanya başarıyla silindi."}
+
+
 @router.post("/spintax/preview", response_model=SpintaxPreviewResponse)
 async def preview_spintax(req: SpintaxPreviewRequest):
     """
@@ -161,9 +183,17 @@ async def launch_campaign(
     if campaign.status == CampaignStatus.ACTIVE or CampaignRunner.is_campaign_running(campaign_id):
         raise HTTPException(status_code=409, detail="Bu kampanya şu anda zaten çalışıyor.")
 
+    target_lead_ids = req.lead_ids
+    if not target_lead_ids and campaign.group_id:
+        from backend.app.models.campaign_group import campaign_group_leads
+        group_leads_res = await db.execute(
+            select(campaign_group_leads.c.lead_id).where(campaign_group_leads.c.group_id == campaign.group_id)
+        )
+        target_lead_ids = [row[0] for row in group_leads_res.fetchall()]
+
     started = await CampaignRunner.start_campaign(
         campaign_id=campaign.id,
-        lead_ids=req.lead_ids,
+        lead_ids=target_lead_ids,
         limit=req.limit or 50
     )
 

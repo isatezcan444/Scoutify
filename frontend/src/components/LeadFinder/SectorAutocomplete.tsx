@@ -4,6 +4,8 @@ import { SECTORS } from '../../data/sectors';
 import { ApiClient } from '../../api/client';
 import { useI18n } from '../../context/I18nContext';
 
+import { matchTurkishSearch } from '../../lib/utils';
+
 export interface SectorAutocompleteProps {
   value: string;
   onChange: (value: string) => void;
@@ -41,7 +43,7 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
 
   // Filter when user has typed something, or show top sectors when focused
   const filteredSectors = value.trim()
-    ? availableSectors.filter((s) => s.toLowerCase().includes(value.toLowerCase().trim()))
+    ? availableSectors.filter((s) => matchTurkishSearch(s, value.trim()))
     : availableSectors.slice(0, 20);
 
   useEffect(() => {

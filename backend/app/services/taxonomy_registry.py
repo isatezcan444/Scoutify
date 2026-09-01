@@ -5,6 +5,7 @@ Maintains a queryable graph of business categories and semantic relationships:
 - MUTUALLY_EXCLUSIVE
 - RELATED_TO / COMPLEMENTARY_TO
 """
+import re
 import logging
 from typing import Dict, Any, List, Optional, Set, Tuple
 from backend.app.schemas.intelligence import (
@@ -23,6 +24,11 @@ class TaxonomyRegistry:
     Data-driven Relational Taxonomy Graph:
     Provides graph traversal for category relationships and mutual exclusivity reasoning.
     """
+
+    GENERIC_WORDS: Set[str] = {
+        "ilac", "danismanlik", "mutfak", "servis", "tamir", "buro", "merkez",
+        "ekipman", "malzeme", "imalat", "dekorasyon"
+    }
 
     _registry: Dict[str, CategoryNode] = {}
     _initialized: bool = False
@@ -47,8 +53,8 @@ class TaxonomyRegistry:
             ],
             semantic_concepts=[
                 "mobilya", "koltuk", "kanepe", "masa", "sandalye", "dolap", "yatak", "baza",
-                "ofis mobilyası", "büro mobilyası", "showroom", "imalat", "mobilyacı", "furniture",
-                "dekorasyon", "ahşap", "mutfak dolabı", "gardırop", "sehpa"
+                "ofis mobilyası", "büro mobilyası", "showroom", "mobilya imalatı", "mobilyacı", "furniture",
+                "mobilya dekorasyon", "ahşap mobilya", "mutfak dolabı", "gardırop", "sehpa"
             ],
             directory_slugs=[
                 "mobilya-magazalari", "mobilya-imalati", "ofis-mobilyalari", "koltuk-doseme",
@@ -74,7 +80,7 @@ class TaxonomyRegistry:
             name="dental",
             display_name="Diş Klinikleri & Ağız Sağlığı",
             aliases=[
-                "diş", "dis", "diş hekimi", "diş klinikleri", "diş kliniği", "ağız ve diş sağlığı",
+                "diş", "dis", "diş hekimi", "diş hekimleri", "diş klinikleri", "diş kliniği", "ağız ve diş sağlığı",
                 "diş polikliniği", "dental", "dentist", "ortodonti", "periodontoloji", "implant"
             ],
             semantic_concepts=[
@@ -104,7 +110,7 @@ class TaxonomyRegistry:
             display_name="Pet Shop & Veteriner Klinikleri",
             aliases=[
                 "pet shop", "petshop", "pet shoplar", "evcil hayvan", "veteriner", "veteriner kliniği",
-                "pet kuaför", "kedi köpek maması", "akvaryum"
+                "veteriner klinikleri", "pet kuaför", "kedi köpek maması", "akvaryum"
             ],
             semantic_concepts=[
                 "pet shop", "petshop", "veteriner", "evcil hayvan", "mama", "kedi", "köpek",
@@ -130,12 +136,12 @@ class TaxonomyRegistry:
             name="food_beverage",
             display_name="Restoranlar & Yeme-İçme",
             aliases=[
-                "restoran", "restoranlar", "lokanta", "kebapçı", "kafe", "cafe", "bistro",
-                "pizzacı", "fast food", "meyhane", "dönerci"
+                "restoran", "restoranlar", "lokanta", "lokantalar", "kebapçı", "kafe", "kafeler", "cafe", "bistro",
+                "pizzacı", "fast food", "meyhane", "dönerci", "kahve dükkanları"
             ],
             semantic_concepts=[
-                "restoran", "lokanta", "kafe", "cafe", "kebap", "döner", "yemek", "pizza",
-                "burger", "mutfak", "menü", "ızgara", "lezzet", "restaurant"
+                "restoran", "restoranlar", "lokanta", "lokantalar", "kafe", "kafeler", "cafe", "kebap", "döner", "yemek", "pizza",
+                "burger", "restoran mutfağı", "menü", "ızgara", "lezzet", "restaurant"
             ],
             directory_slugs=[
                 "restoranlar", "kafeler", "lokantalar", "kebapcilar", "pizzacilar"
@@ -182,11 +188,11 @@ class TaxonomyRegistry:
             name="legal",
             display_name="Hukuk & Avukatlık Büroları",
             aliases=[
-                "avukat", "avukatlar", "avukatlık bürosu", "hukuk bürosu", "hukuk danışmanlığı",
+                "avukat", "avukatlar", "avukatlık bürosu", "avukatlık büroları", "hukuk bürosu", "hukuk büroları", "hukuk danışmanlığı",
                 "arabuluculuk", "icra", "dava", "hukuk", "law firm"
             ],
             semantic_concepts=[
-                "avukat", "hukuk", "dava", "arabulucu", "danışmanlık", "büro", "baro", "hukukçu",
+                "avukat", "hukuk", "dava", "arabulucu", "hukuk danışmanlığı", "hukuk bürosu", "avukatlık bürosu", "baro", "hukukçu",
                 "icra", "ceza", "ticaret hukuku", "law", "attorney"
             ],
             directory_slugs=[
@@ -207,7 +213,7 @@ class TaxonomyRegistry:
             name="hair_beauty",
             display_name="Güzellik, Kuaför & Saç Ekim",
             aliases=[
-                "saç ekim", "saç ekimi", "güzellik merkezi", "güzellik salonu", "kuaför", "kuaförler",
+                "saç ekim", "saç ekimi", "güzellik merkezi", "güzellik merkezleri", "güzellik salonu", "güzellik salonları", "kuaför", "kuaförler",
                 "estetik", "cilt bakımı", "lazer epilasyon", "spa"
             ],
             semantic_concepts=[
@@ -232,11 +238,11 @@ class TaxonomyRegistry:
             name="automotive",
             display_name="Otomotiv & Araç Servisleri",
             aliases=[
-                "oto servis", "oto tamir", "oto galeri", "araç kiralama", "oto yedek parça",
+                "oto servis", "oto servisleri", "oto tamir", "oto galeri", "araç kiralama", "oto yedek parça",
                 "lastikçi", "oto yıkama", "ekspertiz"
             ],
             semantic_concepts=[
-                "oto", "otomotiv", "araç", "araba", "servis", "tamir", "yedek parça", "galeri",
+                "oto", "otomotiv", "araç", "araba", "oto servis", "oto tamir", "yedek parça", "galeri",
                 "lastik", "kaporta", "motor", "ekspertiz"
             ],
             directory_slugs=[
@@ -256,8 +262,8 @@ class TaxonomyRegistry:
             id="pharmacy",
             name="pharmacy",
             display_name="Eczaneler",
-            aliases=["eczane", "eczaneler", "nöbetçi eczane", "ilaç", "pharmacy"],
-            semantic_concepts=["eczane", "ilaç", "sağlık", "medikal", "pharmacy", "drogerie"],
+            aliases=["eczane", "eczaneler", "nöbetçi eczane", "nöbetçi eczaneler", "pharmacy"],
+            semantic_concepts=["eczane", "eczaneler", "nöbetçi eczane", "sağlık", "medikal", "pharmacy", "drogerie"],
             directory_slugs=["eczaneler", "nobetci-eczaneler"],
             osm_amenities=["pharmacy"],
             relationships=[
@@ -281,37 +287,92 @@ class TaxonomyRegistry:
 
     @classmethod
     def find_node_by_alias_or_concept(cls, query: str) -> Optional[CategoryNode]:
-        """Finds the best matching CategoryNode in the relational taxonomy for a query string."""
+        """
+        Finds the best matching CategoryNode in the relational taxonomy using a strict 5-tier matching policy.
+        Guarantees that generic single-word commodity/service tokens cannot accidentally select a static node.
+        """
         cls.initialize()
-        if not query:
+        if not query or not query.strip():
             return None
 
         norm = normalize_turkish(query.strip())
         tokens = set(norm.split())
 
-        best_node: Optional[CategoryNode] = None
-        best_score = 0.0
-
+        # =========================================================================
+        # PRIORITY 1: Exact Canonical ID / Display Name Match
+        # =========================================================================
         for node in cls._registry.values():
-            # 1. Exact alias match
+            if (norm == normalize_turkish(node.id) or 
+                norm == normalize_turkish(node.name) or 
+                norm == normalize_turkish(node.display_name)):
+                return node
+
+        # =========================================================================
+        # PRIORITY 2: Exact Full Alias Match
+        # =========================================================================
+        for node in cls._registry.values():
             for alias in node.aliases:
                 norm_alias = normalize_turkish(alias)
-                if norm == norm_alias or norm_alias in norm or norm in norm_alias:
-                    score = 1.0 + (len(norm_alias) / 100.0)
-                    if score > best_score:
-                        best_score = score
-                        best_node = node
+                if norm == norm_alias:
+                    return node
 
-            # 2. Semantic concept overlap
-            node_concepts = {normalize_turkish(c) for c in node.semantic_concepts}
+        # =========================================================================
+        # PRIORITY 3: Qualified Multi-Token / Phrase Alias Containment
+        # Multi-word alias (>= 2 tokens) contained within word boundaries in query
+        # =========================================================================
+        best_phrase_node: Optional[CategoryNode] = None
+        longest_phrase_len = 0
+        for node in cls._registry.values():
+            for alias in node.aliases:
+                norm_alias = normalize_turkish(alias)
+                alias_tokens = norm_alias.split()
+                if len(alias_tokens) >= 2:
+                    if re.search(r'\b' + re.escape(norm_alias) + r'\b', norm):
+                        if len(norm_alias) > longest_phrase_len:
+                            longest_phrase_len = len(norm_alias)
+                            best_phrase_node = node
+
+        if best_phrase_node:
+            return best_phrase_node
+
+        # =========================================================================
+        # PRIORITY 4: Dominant Primary Single-Word Alias Match
+        # Allowed ONLY if single word is NOT in GENERIC_WORDS
+        # =========================================================================
+        for node in cls._registry.values():
+            for alias in node.aliases:
+                norm_alias = normalize_turkish(alias)
+                alias_tokens = norm_alias.split()
+                if len(alias_tokens) == 1:
+                    single_word = alias_tokens[0]
+                    if single_word in cls.GENERIC_WORDS:
+                        continue
+                    if re.search(r'\b' + re.escape(single_word) + r'\b', norm):
+                        return node
+
+        # =========================================================================
+        # PRIORITY 5: Multi-Concept Qualified Semantic Overlap
+        # Requires at least 2 distinct domain-specific concept tokens
+        # =========================================================================
+        best_concept_node: Optional[CategoryNode] = None
+        best_concept_overlap_count = 0
+        for node in cls._registry.values():
+            node_concepts = {
+                normalize_turkish(c) for c in node.semantic_concepts 
+                if normalize_turkish(c) not in cls.GENERIC_WORDS
+            }
             overlap = tokens.intersection(node_concepts)
-            if overlap:
-                score = (len(overlap) / len(tokens)) * 0.9
-                if score > best_score:
-                    best_score = score
-                    best_node = node
+            if len(overlap) >= 2 and len(overlap) > best_concept_overlap_count:
+                best_concept_overlap_count = len(overlap)
+                best_concept_node = node
 
-        return best_node if best_score >= 0.3 else None
+        if best_concept_node:
+            return best_concept_node
+
+        # =========================================================================
+        # PRIORITY 6: Dynamic Fallback (Safe Default)
+        # =========================================================================
+        return None
 
     @classmethod
     def are_mutually_exclusive(cls, cat_a_id: str, cat_b_id: str) -> bool:

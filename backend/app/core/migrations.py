@@ -135,6 +135,17 @@ async def ensure_messages_media_columns(engine: AsyncEngine) -> None:
                 text("CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_conv ON conversations (lead_id, channel) WHERE status = 'ACTIVE'")
             )
 
+        # 3. Campaign group_id column
+        exists_camps = await conn.execute(
+            text("SELECT name FROM sqlite_master WHERE type='table' AND name='campaigns'")
+        )
+        if exists_camps.first() is not None:
+            info_rows = (await conn.execute(text("PRAGMA table_info(campaigns)"))).fetchall()
+            columns = _sqlite_columns(info_rows)
+            if "group_id" not in columns:
+                await conn.execute(text("ALTER TABLE campaigns ADD COLUMN group_id INTEGER"))
+                logger.info("[MIGRATION] Added campaigns.group_id")
+
 
 def _create_leads_only(sync_conn: Any) -> None:
     """Yalnızca `leads` tablosunu model metadata'sından oluşturur."""

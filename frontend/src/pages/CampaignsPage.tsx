@@ -12,7 +12,8 @@ import {
   RefreshCw,
   CheckCircle2,
   Target,
-  Trash2
+  Trash2,
+  Users
 } from 'lucide-react';
 import { ApiClient } from '../api/client';
 import { Campaign, CommunicationGoal } from '../types';
@@ -22,7 +23,10 @@ import {
   Card, 
   PageHeader, 
   EmptyState,
-  Modal
+  Modal,
+  Pagination,
+  BulkActionToolbar,
+  ToolbarActionButton
 } from '../components/ui';
 import { 
   CampaignCard, 
@@ -41,28 +45,105 @@ import { useI18n } from '../context/I18nContext';
 
 interface CampaignsPageProps {
   onRefreshStats: () => void;
-  onNavigate?: (tab: string) => void;
+  onNavigate?: (tab: string, prefillData?: any) => void;
+  prefill?: {
+    groupId?: number;
+    groupName?: string;
+    targetCategory?: string;
+    category?: string;
+    totalLeads?: number;
+    whatsappEligible?: number;
+  } | null;
+  onClearPrefill?: () => void;
 }
 
-export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, onNavigate }) => {
+export const CampaignsPage: React.FC<CampaignsPageProps> = ({
+  onRefreshStats,
+  onNavigate,
+  prefill,
+  onClearPrefill,
+}) => {
   const toast = useToast();
   const { t, language } = useI18n();
   const storedConfig = getStoredAntiBanConfig();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'list' | 'builder'>('list');
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
+
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  // Campaign Selection & Bulk Actions State
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+
+  // Campaign Builder Form
+  const [name, setName] = useState(prefill && prefill.groupName ? `${prefill.groupName} - Tanıtım` : '');
+  const [targetCategory, setTargetCategory] = useState(prefill ? (prefill.targetCategory || prefill.category || '') : '');
+  const [communicationGoal, setCommunicationGoal] = useState<CommunicationGoal | null>(null);
+  const [description, setDescription] = useState('');
+  const [isTemplateManuallyEdited, setIsTemplateManuallyEdited] = useState(false);
+
+  useEffect(() => {
+    if (prefill) {
+      setActiveTab('builder');
+      if (prefill.groupId) {
+        setSelectedGroupId(prefill.groupId);
+        setName(`${prefill.groupName || ''} - Tanıtım`.trim());
+        const cat = prefill.targetCategory || prefill.category || '';
+        if (cat) {
+          setTargetCategory(cat);
+          setGoalForm((prev) => ({
+            ...prev,
+            fcOffer: prev.fcOffer || cat,
+            spProduct: prev.spProduct || cat,
+            discOffer: prev.discOffer || cat,
+            offOffer: prev.offOffer || cat,
+            meetOffer: prev.meetOffer || cat,
+          }));
+        } else {
+          // If category wasn't explicitly passed in prefill, fetch group detail to derive it
+          ApiClient.getCampaignGroup(prefill.groupId)
+            .then((detail) => {
+              if (detail) {
+                const derivedCat = detail.target_category || detail.leads.find((l) => l.category)?.category || '';
+                if (derivedCat) {
+                  setTargetCategory(derivedCat);
+                  setGoalForm((prev) => ({
+                    ...prev,
+                    fcOffer: prev.fcOffer || derivedCat,
+                    spProduct: prev.spProduct || derivedCat,
+                    discOffer: prev.discOffer || derivedCat,
+                    offOffer: prev.offOffer || derivedCat,
+                    meetOffer: prev.meetOffer || derivedCat,
+                  }));
+                }
+              }
+            })
+            .catch(console.error);
+        }
+      } else if (prefill.targetCategory || prefill.category) {
+        const cat = prefill.targetCategory || prefill.category || '';
+        setTargetCategory(cat);
+        setGoalForm((prev) => ({
+          ...prev,
+          fcOffer: prev.fcOffer || cat,
+          spProduct: prev.spProduct || cat,
+          discOffer: prev.discOffer || cat,
+          offOffer: prev.offOffer || cat,
+          meetOffer: prev.meetOffer || cat,
+        }));
+      }
+    }
+  }, [prefill]);
 
   // Campaign Deletion Modal State
   const [campaignToDelete, setCampaignToDelete] = useState<Campaign | null>(null);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Campaign Builder Form
-  const [name, setName] = useState('');
-  const [targetCategory, setTargetCategory] = useState('');
-  const [communicationGoal, setCommunicationGoal] = useState<CommunicationGoal | null>(null);
-  const [description, setDescription] = useState('');
-  const [isTemplateManuallyEdited, setIsTemplateManuallyEdited] = useState(false);
 
   // Goal-Specific Form Data (Starts strictly empty - ZERO DUMMY DATA)
   const initialGoalForm = {
@@ -492,6 +573,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, on
         name,
         description,
         message_template: template,
+        group_id: selectedGroupId || undefined,
         min_delay_seconds: storedConfig.min_delay_seconds,
         max_delay_seconds: storedConfig.max_delay_seconds,
         typing_delay_seconds: storedConfig.typing_delay_seconds,
@@ -504,6 +586,8 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, on
       setActiveTab('list');
       setName('');
       setTargetCategory('');
+      setSelectedGroupId(null);
+      if (onClearPrefill) onClearPrefill();
       setCommunicationGoal(null);
       setGoalForm(initialGoalForm);
       setTemplate('');
@@ -583,6 +667,63 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, on
     }
   };
 
+  const handleToggleSelect = (campaignId: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(campaignId) ? prev.filter((id) => id !== campaignId) : [...prev, campaignId]
+    );
+  };
+
+  const currentPageCampaigns = campaigns.slice((page - 1) * pageSize, page * pageSize);
+  const currentPageIds = currentPageCampaigns.map((c) => c.id);
+  const isAllPageSelected = currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.includes(id));
+
+  const handleToggleSelectAllPage = () => {
+    if (isAllPageSelected) {
+      setSelectedIds((prev) => prev.filter((id) => !currentPageIds.includes(id)));
+      setSelectAllMatching(false);
+    } else {
+      setSelectedIds((prev) => Array.from(new Set([...prev, ...currentPageIds])));
+    }
+  };
+
+  const handleSelectAllMatching = () => {
+    setSelectedIds(campaigns.map((c) => c.id));
+    setSelectAllMatching(true);
+  };
+
+  const handleClearSelection = () => {
+    setSelectedIds([]);
+    setSelectAllMatching(false);
+  };
+
+  const handleBulkDelete = async () => {
+    const count = selectAllMatching ? campaigns.length : selectedIds.length;
+    if (count === 0) return;
+
+    const confirmed = await toast.confirm({
+      title: `${t('campaigns.deleteCampaign')} (${count})`,
+      message: `${count} kampanyayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+      confirmText: t('common.delete') || 'Sil',
+      variant: 'danger',
+    });
+    if (!confirmed) return;
+
+    setIsBulkDeleting(true);
+    try {
+      const targetIds = selectAllMatching ? campaigns.map((c) => c.id) : selectedIds;
+      const res = await ApiClient.bulkDeleteCampaigns(targetIds);
+      toast.success(res.message || `${res.deleted_count} kampanya silindi.`, t('common.success'));
+      setSelectedIds([]);
+      setSelectAllMatching(false);
+      fetchCampaigns();
+      onRefreshStats();
+    } catch (err: any) {
+      toast.error(err.message || 'Toplu silme işlemi başarısız oldu.', t('toast.errorTitle'));
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6 pb-16 select-none animate-fade-in">
       {/* Top Header & Mode Tabs */}
@@ -632,18 +773,79 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, on
               />
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {campaigns.map((camp) => (
-                <CampaignCard
-                  key={camp.id}
-                  campaign={camp}
-                  onStart={handleLaunchCampaign}
-                  onPause={handlePauseCampaign}
-                  onCancel={handleCancelCampaign}
-                  onDelete={handleOpenDeleteModal}
-                />
-              ))}
-            </div>
+            <>
+              {/* Centralized Bulk Action Toolbar (Identical to LeadCRMPage) */}
+              <BulkActionToolbar
+                selectedCount={selectedIds.length}
+                totalCount={campaigns.length}
+                selectAllMatching={selectAllMatching}
+                onSelectAllMatching={campaigns.length > selectedIds.length ? handleSelectAllMatching : undefined}
+                onClearSelection={handleClearSelection}
+                actions={
+                  <ToolbarActionButton tone="danger" onClick={handleBulkDelete} disabled={isBulkDeleting}>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{isBulkDeleting ? t('common.loading') : `Seçilenleri Sil (${selectedIds.length})`}</span>
+                  </ToolbarActionButton>
+                }
+              />
+
+              {/* Selection & Controls Bar (Slim Aesthetic Card Layout) */}
+              <Card className="px-4 py-3 sm:px-5 flex items-center justify-between border-slate-100 dark:border-white/[0.05] bg-white dark:bg-[#2F3349] shadow-sm">
+                <label className="flex items-center space-x-2.5 cursor-pointer font-bold text-xs text-slate-700 dark:text-slate-200 select-none group">
+                  <input
+                    type="checkbox"
+                    checked={isAllPageSelected}
+                    onChange={handleToggleSelectAllPage}
+                    className="w-4 h-4 rounded text-[#7367F0] focus:ring-[#7367F0] focus:ring-offset-0 border-slate-300 dark:border-white/20 dark:bg-[#25293C] cursor-pointer transition-all"
+                  />
+                  <span className="group-hover:text-[#7367F0] transition-colors">
+                    Bu Sayfadakileri Seç ({currentPageCampaigns.length})
+                  </span>
+                </label>
+
+                {selectedIds.length > 0 ? (
+                  <Badge variant="primary" className="text-[10px] font-mono px-2 py-0.5">
+                    {selectedIds.length} / {campaigns.length} Seçildi
+                  </Badge>
+                ) : (
+                  <span className="text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium hidden sm:inline">
+                    Toplu işlem için kartları seçebilirsiniz
+                  </span>
+                )}
+              </Card>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {currentPageCampaigns.map((camp) => (
+                  <CampaignCard
+                    key={camp.id}
+                    campaign={camp}
+                    isSelected={selectedIds.includes(camp.id)}
+                    onToggleSelect={handleToggleSelect}
+                    onStart={handleLaunchCampaign}
+                    onPause={handlePauseCampaign}
+                    onCancel={handleCancelCampaign}
+                    onDelete={handleOpenDeleteModal}
+                  />
+                ))}
+              </div>
+
+              {/* Centralized Pagination matching LeadCRMPage */}
+              {campaigns.length > 0 && (
+                <Card className="overflow-hidden border-slate-100 dark:border-white/[0.05]">
+                  <Pagination
+                    currentPage={page}
+                    totalItems={campaigns.length}
+                    pageSize={pageSize}
+                    onPageChange={(newPage) => setPage(newPage)}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                  />
+                </Card>
+              )}
+            </>
           )}
         </div>
       ) : (
@@ -660,6 +862,31 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({ onRefreshStats, on
                   subtitle="Hedef kitlenizi ve kampanyanızın genel kapsamını belirleyin."
                   icon={Target}
                 >
+                  {/* Selected Group Badge */}
+                  {selectedGroupId && prefill?.groupName && (
+                    <div className="p-3.5 rounded-xl bg-[#7367F0]/10 border border-[#7367F0]/20 flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-8 h-8 rounded-lg bg-[#7367F0] text-white flex items-center justify-center font-bold shrink-0">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-white truncate block">
+                            {t('campaignGroups.campaignBuilderGroupNotice')}: {prefill.groupName}
+                          </span>
+                          <p className="text-[11px] text-slate-500 dark:text-[#7E7F96]">
+                            {t('campaignGroups.campaignBuilderGroupSubtitle', {
+                              count: prefill.totalLeads ?? 0,
+                              waCount: prefill.whatsappEligible ?? 0,
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="primary" className="text-[10px] shrink-0 font-bold">
+                        {t('nav.campaignGroups')}
+                      </Badge>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <FormField label={t('campaigns.campaignName')} required>
                       <TextInput

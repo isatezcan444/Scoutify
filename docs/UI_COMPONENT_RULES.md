@@ -100,3 +100,19 @@ All typography and input styling across pages and components must follow standar
 - **Table Cell Text**: `text-xs font-semibold text-slate-800 dark:text-white`
 - **Badges & Tags**: `text-[10px] sm:text-[11px] font-bold`
 
+---
+
+## RULE 9 — UNIVERSAL ACTION ICON BUTTON SIZING CONTRACT (LEAD CRM STANDARD)
+All table row actions, card footer actions, and isolated icon buttons across every page **MUST** strictly follow the standardized `IconButton` sizing contract established in Lead CRM:
+
+- **Component**: Always use `<IconButton icon={Icon} size="sm" variant="ghost" ... />` from `components/ui/IconButton`.
+- **Button Container Dimensions**: Exactly `w-8 h-8` (32px × 32px), `rounded-lg` with `p-1.5`.
+- **Inner Icon Scale**: Standard `w-4 h-4` with `stroke-[2]` (or `stroke-[2.2]`).
+- **Color Transitions**:
+  - Default: `text-slate-400 dark:text-slate-400`
+  - Edit / Overview / Primary: `hover:text-[#7367F0] hover:bg-[#7367F0]/10`
+  - Delete / Destructive: `hover:text-[#EA5455] hover:bg-[#EA5455]/10`
+  - Warning / Blacklist: `hover:text-[#FF9F43] hover:bg-[#FF9F43]/10`
+  - WhatsApp / Success: `hover:text-[#28C76F] hover:bg-[#28C76F]/10`
+- **Strict Prohibition**: Ad-hoc icon button sizes (e.g. `w-9 h-9`, `w-7 h-7`, unpadded SVGs, oversized inline icons) in table or card action zones are strictly prohibited.
+

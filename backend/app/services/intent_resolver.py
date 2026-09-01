@@ -40,6 +40,28 @@ class IntentResolver:
         return cleaned
 
     @classmethod
+    def is_generic_single_token(cls, token: str) -> bool:
+        """Determines if a single token is too generic to be used as a standalone query term."""
+        norm_t = normalize_turkish(token.strip())
+        if not norm_t or len(norm_t) <= 2:
+            return True
+        if norm_t in TaxonomyRegistry.GENERIC_WORDS:
+            return True
+        # Check plural or derived suffix forms of generic words
+        for g in TaxonomyRegistry.GENERIC_WORDS:
+            if norm_t.startswith(g) and len(norm_t) <= len(g) + 6:
+                return True
+        # Entity structural suffixes
+        if norm_t in {
+            "bayi", "bayii", "bayiler", "bayileri", "sirket", "sirketi", "sirketler", "sirketleri",
+            "ofis", "ofisi", "ofisler", "ofisleri", "magaza", "magazasi", "magazalar", "magazalari",
+            "hizmet", "hizmeti", "hizmetler", "hizmetleri", "urun", "urunu", "urunler", "urunleri",
+            "nokta", "noktasi", "noktalar", "noktalari", "atolye", "atolyesi", "atolyeler", "atolyeleri"
+        }:
+            return True
+        return False
+
+    @classmethod
     def extract_semantic_tokens(cls, text: str) -> List[str]:
         """Extracts significant semantic concept tokens from text."""
         norm = normalize_turkish(text)
@@ -51,6 +73,7 @@ class IntentResolver:
         """
         Dynamically constructs a CategoryProfile on-the-fly for any arbitrary unseen category
         (e.g. 'Solar Panel Installers', 'Endüstriyel CNC İmalatı', 'Soğuk Hava Depoları').
+        Guarantees that generic single tokens are suppressed while full phrases are preserved.
         """
         clean_text = cls.clean_query_text(raw_query)
         norm_text = normalize_turkish(clean_text)
@@ -59,16 +82,23 @@ class IntentResolver:
         slug = norm_text.replace(" ", "-")
         canonical_id = f"dynamic_{norm_text.replace(' ', '_')[:32]}"
 
+        # Always preserve full-phrase search term
         search_terms = [clean_text]
         for t in tokens:
-            if t not in search_terms:
+            if not cls.is_generic_single_token(t) and t not in search_terms:
                 search_terms.append(t)
 
+        # Always preserve full-phrase directory slug
         directory_slugs = [slug]
         for t in tokens:
-            t_slug = t.replace(" ", "-")
-            if t_slug not in directory_slugs:
-                directory_slugs.append(t_slug)
+            if not cls.is_generic_single_token(t):
+                t_slug = t.replace(" ", "-")
+                if t_slug not in directory_slugs:
+                    directory_slugs.append(t_slug)
+
+        # Semantic concepts: keep non-generic tokens and full phrase
+        non_generic_tokens = [t for t in tokens if not cls.is_generic_single_token(t)]
+        positive_concepts = non_generic_tokens + [norm_text] if non_generic_tokens else [norm_text]
 
         logger.info(f"[INTENT_RESOLVER] Generated dynamic CategoryProfile for unseen category: '{raw_query}' (id: {canonical_id})")
 
@@ -78,7 +108,7 @@ class IntentResolver:
             semantic_description=f"Dynamically generated semantic profile for '{clean_text}'",
             profile_version="dynamic_1.0",
             is_dynamic=True,
-            positive_concepts=tokens + [norm_text],
+            positive_concepts=positive_concepts,
             negative_concepts=[],
             search_terms=search_terms[:6],
             directory_slugs=directory_slugs[:5],

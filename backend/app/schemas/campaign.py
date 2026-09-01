@@ -14,6 +14,7 @@ class CampaignBase(BaseModel):
     working_hours_start: str = "09:30"
     working_hours_end: str = "18:30"
     session_id: Optional[int] = None
+    group_id: Optional[int] = None
 
 class CampaignCreate(CampaignBase):
     pass
@@ -30,6 +31,10 @@ class CampaignUpdate(BaseModel):
     working_hours_start: Optional[str] = None
     working_hours_end: Optional[str] = None
     session_id: Optional[int] = None
+    group_id: Optional[int] = None
+
+class CampaignBulkDeleteRequest(BaseModel):
+    campaign_ids: List[int]
 
 class CampaignResponse(CampaignBase):
     id: int

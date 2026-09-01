@@ -9,7 +9,8 @@ from backend.app.api.v1.endpoints import (
     blacklist,
     analytics,
     settings,
-    smart_outreach
+    smart_outreach,
+    campaign_groups,
 )
 
 api_router = APIRouter()
@@ -17,6 +18,7 @@ api_router = APIRouter()
 api_router.include_router(leads.router, prefix="/leads", tags=["Leads"])
 api_router.include_router(scraper.router, prefix="/scraper", tags=["Scraper"])
 api_router.include_router(campaigns.router, prefix="/campaigns", tags=["Campaigns"])
+api_router.include_router(campaign_groups.router, prefix="/campaign-groups", tags=["Campaign Groups"])
 api_router.include_router(whatsapp.router, prefix="/whatsapp", tags=["WhatsApp"])
 api_router.include_router(whatsapp_cloud_webhook.router, prefix="/whatsapp/cloud-webhook", tags=["WhatsApp Cloud API"])
 api_router.include_router(conversations.router, prefix="/conversations", tags=["Conversations"])

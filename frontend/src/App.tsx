@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { LeadFinderPage } from './pages/LeadFinderPage';
 import { LeadCRMPage } from './pages/LeadCRMPage';
 import { CampaignsPage } from './pages/CampaignsPage';
+import { CampaignGroupsPage } from './pages/CampaignGroupsPage';
 import { WhatsAppHubPage } from './pages/WhatsAppHubPage';
 import { BlacklistPage } from './pages/BlacklistPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -19,8 +20,18 @@ const AppContent: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [campaignPrefill, setCampaignPrefill] = useState<any>(null);
   const toast = useToast();
   const { t } = useI18n();
+
+  const handleNavigate = (tab: string, prefillData?: any) => {
+    if (tab === 'campaigns' && prefillData) {
+      setCampaignPrefill(prefillData);
+    } else if (tab !== 'campaigns') {
+      setCampaignPrefill(null);
+    }
+    setActiveTab(tab);
+  };
 
   const refreshStats = async () => {
     try {
@@ -92,6 +103,8 @@ const AppContent: React.FC = () => {
         return t('titles.leads');
       case 'campaigns':
         return t('titles.campaigns');
+      case 'campaign-groups':
+        return t('titles.campaignGroups');
       case 'whatsapp':
         return t('titles.whatsapp');
       case 'blacklist':
@@ -113,6 +126,8 @@ const AppContent: React.FC = () => {
         return t('titles.leadsSub');
       case 'campaigns':
         return t('titles.campaignsSub');
+      case 'campaign-groups':
+        return t('titles.campaignGroupsSub');
       case 'whatsapp':
         return t('titles.whatsappSub');
       case 'blacklist':
@@ -129,7 +144,7 @@ const AppContent: React.FC = () => {
       {/* Sidebar with Desktop fixed & Mobile drawer support */}
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={handleNavigate}
         isWsConnected={isWsConnected}
         totalLeadsCount={stats?.total_leads}
         activeCampaignsCount={stats?.active_campaigns}
@@ -143,24 +158,32 @@ const AppContent: React.FC = () => {
         <TopHeader
           title={getPageTitle()}
           subtitle={getPageSubtitle()}
-          onOpenQuickScrape={() => setActiveTab('lead-finder')}
-          onOpenSettings={() => setActiveTab('settings')}
+          onOpenQuickScrape={() => handleNavigate('lead-finder')}
+          onOpenSettings={() => handleNavigate('settings')}
           onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         />
 
         {/* Dynamic Page Container with Responsive Padding */}
         <main className="flex-1 p-3.5 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {activeTab === 'dashboard' && (
-            <DashboardPage stats={stats} onNavigate={setActiveTab} />
+            <DashboardPage stats={stats} onNavigate={handleNavigate} />
           )}
           {activeTab === 'lead-finder' && (
-            <LeadFinderPage onNavigate={setActiveTab} onRefreshStats={refreshStats} />
+            <LeadFinderPage onNavigate={handleNavigate} onRefreshStats={refreshStats} />
           )}
           {activeTab === 'leads' && (
             <LeadCRMPage onRefreshStats={refreshStats} />
           )}
           {activeTab === 'campaigns' && (
-            <CampaignsPage onRefreshStats={refreshStats} onNavigate={setActiveTab} />
+            <CampaignsPage
+              onRefreshStats={refreshStats}
+              onNavigate={handleNavigate}
+              prefill={campaignPrefill}
+              onClearPrefill={() => setCampaignPrefill(null)}
+            />
+          )}
+          {activeTab === 'campaign-groups' && (
+            <CampaignGroupsPage onNavigate={handleNavigate} onRefreshStats={refreshStats} />
           )}
           {activeTab === 'whatsapp' && (
             <WhatsAppHubPage onRefreshStats={refreshStats} />

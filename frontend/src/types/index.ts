@@ -62,6 +62,7 @@ export interface Campaign {
   working_hours_start: string;
   working_hours_end: string;
   session_id?: number;
+  group_id?: number;
   total_leads_target: number;
   sent_count: number;
   delivered_count: number;
@@ -69,6 +70,40 @@ export interface Campaign {
   failed_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface CampaignGroup {
+  id: number;
+  name: string;
+  description?: string;
+  target_category?: string;
+  target_location?: string;
+  total_leads_count: number;
+  whatsapp_eligible_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignGroupDetail extends CampaignGroup {
+  leads: Lead[];
+}
+
+export interface CampaignGroupCreatePayload {
+  name?: string;
+  description?: string;
+  target_category?: string;
+  target_location?: string;
+  lead_ids?: number[];
+}
+
+export interface AddLeadsToGroupResponse {
+  group_id: number;
+  group_name: string;
+  added_count: number;
+  existing_count: number;
+  total_leads_count: number;
+  whatsapp_eligible_count: number;
+  message: string;
 }
 
 export interface GenerateMessagePayload {

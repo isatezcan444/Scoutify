@@ -8,7 +8,6 @@ import {
   Phone, 
   Star, 
   MapPin, 
-  Send, 
   ShieldAlert, 
   Globe, 
   Loader2, 
@@ -18,7 +17,10 @@ import {
   Square,
   MinusSquare,
   Eye,
-  Building2
+  Building2,
+  FolderPlus,
+  FolderKanban,
+  MoreVertical
 } from 'lucide-react';
 import { 
   Button, 
@@ -33,7 +35,7 @@ import {
   Pagination,
   Chip,
   WhatsAppIcon,
-  GoogleMapsIcon
+  Dropdown
 } from '../components/ui';
 import { SearchInput, Select } from '../components/forms';
 import { BusinessCell } from '../components/data-display';
@@ -41,7 +43,7 @@ import { LeadDetailDrawer } from '../components/domain/LeadDetailDrawer';
 import { LocationMultiSelect } from '../components/LeadFinder/LocationMultiSelect';
 import { CategoryMultiSelect } from '../components/LeadFinder/CategoryMultiSelect';
 import { ApiClient } from '../api/client';
-import { Lead, LeadStatus } from '../types';
+import { Lead, LeadStatus, CampaignGroup } from '../types';
 import { useToast } from '../context/ToastContext';
 import { useI18n } from '../context/I18nContext';
 
@@ -75,6 +77,15 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [selectAllMatching, setSelectAllMatching] = useState(false);
 
+  // Add to Campaign Group Modal State
+  const [isAddToGroupModalOpen, setIsAddToGroupModalOpen] = useState(false);
+  const [campaignGroups, setCampaignGroups] = useState<CampaignGroup[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = useState(false);
+  const [selectedTargetGroupId, setSelectedTargetGroupId] = useState<number | 'NEW'>('NEW');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [isAddingToGroup, setIsAddingToGroup] = useState(false);
+  const [singleLeadForGroup, setSingleLeadForGroup] = useState<Lead | null>(null);
+
   // Delete Modal State
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
@@ -88,13 +99,8 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const [blacklistReason, setBlacklistReason] = useState('USER_REQUEST');
   const [isBlacklisting, setIsBlacklisting] = useState(false);
 
-  // Add & Quick Send Modal State
+  // Add Lead Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [isSendModalOpen, setIsSendModalOpen] = useState(false);
-  const [selectedLeadForSend, setSelectedLeadForSend] = useState<Lead | null>(null);
-  const [customMessage, setCustomMessage] = useState('');
-  const [isSending, setIsSending] = useState(false);
-  const [sendSuccessMsg, setSendSuccessMsg] = useState('');
 
   // New Lead Form State
   const [newLeadName, setNewLeadName] = useState('');
@@ -236,6 +242,82 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
     }
   };
 
+  // --- Add to Campaign Group Handlers ---
+  const handleOpenAddToGroup = async (lead?: Lead) => {
+    if (lead) {
+      setSingleLeadForGroup(lead);
+    } else {
+      setSingleLeadForGroup(null);
+    }
+    setNewGroupName('');
+    setIsAddToGroupModalOpen(true);
+    try {
+      setIsLoadingGroups(true);
+      const groups = await ApiClient.getCampaignGroups();
+      setCampaignGroups(groups);
+      if (groups.length > 0) {
+        setSelectedTargetGroupId(groups[0].id);
+      } else {
+        setSelectedTargetGroupId('NEW');
+      }
+    } catch (err) {
+      console.error('Error loading campaign groups:', err);
+      setSelectedTargetGroupId('NEW');
+    } finally {
+      setIsLoadingGroups(false);
+    }
+  };
+
+  const handleConfirmAddToGroup = async () => {
+    setIsAddingToGroup(true);
+    try {
+      let targetLeadIds: number[] = [];
+      if (singleLeadForGroup) {
+        targetLeadIds = [singleLeadForGroup.id];
+      } else if (selectAllMatching) {
+        const allData = await ApiClient.getLeads({
+          size: 10000,
+          search: search.trim() || undefined,
+          city: selectedCity || undefined,
+          districts: selectedDistricts.length > 0 ? selectedDistricts : undefined,
+          categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+          status: statusFilter || undefined,
+          whatsapp_eligible_only: waOnly,
+        });
+        targetLeadIds = allData.items.map((l) => l.id);
+      } else {
+        targetLeadIds = selectedIds;
+      }
+
+      if (targetLeadIds.length === 0) {
+        toast.warning('Eklenecek işletme bulunamadı.');
+        return;
+      }
+
+      if (selectedTargetGroupId === 'NEW') {
+        const created = await ApiClient.createCampaignGroup({
+          name: newGroupName.trim() || undefined,
+          lead_ids: targetLeadIds,
+        });
+        toast.success(t('leads.addedToGroupSuccess', { count: targetLeadIds.length, name: created.name }));
+      } else {
+        const res = await ApiClient.addLeadsToCampaignGroup(selectedTargetGroupId, targetLeadIds);
+        const grp = campaignGroups.find((g) => g.id === selectedTargetGroupId);
+        toast.success(t('leads.addedToGroupSuccess', { count: targetLeadIds.length, name: grp?.name || 'Grup' }));
+      }
+
+      setIsAddToGroupModalOpen(false);
+      setSingleLeadForGroup(null);
+      setSelectedIds([]);
+      setSelectAllMatching(false);
+      onRefreshStats();
+    } catch (err: any) {
+      toast.error(err.message || 'İşletmeler gruba eklenemedi.');
+    } finally {
+      setIsAddingToGroup(false);
+    }
+  };
+
   // --- Blacklist Modal Handlers ---
   const handleOpenSingleBlacklist = (lead: Lead) => {
     setLeadToBlacklist(lead);
@@ -351,39 +433,6 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       onRefreshStats();
     } catch (err: any) {
       setFormError(err.message || t('common.error'));
-    }
-  };
-
-  const handleOpenSendModal = (lead: Lead) => {
-    setSelectedLeadForSend(lead);
-    setCustomMessage(`Merhaba ${lead.name} yetkilisi, işletmeniz için harika bir teklifimiz var!`);
-    setSendSuccessMsg('');
-    setIsSendModalOpen(true);
-  };
-
-  const handleSendSingleMessage = async () => {
-    if (!selectedLeadForSend || !customMessage) return;
-    setIsSending(true);
-    setSendSuccessMsg('');
-
-    try {
-      await ApiClient.sendSingleMessage({
-        phone: selectedLeadForSend.phone_e164 || selectedLeadForSend.phone,
-        message: customMessage,
-        lead_id: selectedLeadForSend.id,
-      });
-
-      toast.success(`${selectedLeadForSend.name} alıcısına mesaj başarıyla iletildi.`, t('leads.quickSendTitle'));
-      setSendSuccessMsg('✅ Mesaj kuyruğa alındı ve iletildi!');
-      setTimeout(() => {
-        setIsSendModalOpen(false);
-        fetchLeads();
-        onRefreshStats();
-      }, 1200);
-    } catch (err: any) {
-      toast.error(err.message, t('toast.errorTitle'));
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -602,6 +651,15 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
           <>
             <button
               type="button"
+              onClick={() => handleOpenAddToGroup()}
+              className="px-3 py-1.5 rounded-lg bg-[#7367F0] hover:bg-[#685dd8] text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition-all active:scale-95 cursor-pointer"
+            >
+              <FolderPlus className="w-3.5 h-3.5" />
+              <span>{t('leads.bulkAddToGroup')}</span>
+            </button>
+
+            <button
+              type="button"
               onClick={handleOpenBulkBlacklist}
               className="px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
             >
@@ -727,14 +785,20 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </div>
                       </td>
 
-                      {/* Location */}
+                      {/* Location - Clickable to open Google Maps */}
                       <td className="py-3.5 px-4 max-w-[240px]">
-                        <div className="flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-2 leading-tight">
+                        <a
+                          href={getGoogleMapsUrl(lead)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Google Maps'te Aç"
+                          className="group/loc inline-flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-[#7367F0] dark:hover:text-[#7367F0] transition-colors cursor-pointer"
+                        >
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 group-hover/loc:text-[#7367F0] shrink-0 mt-0.5 transition-colors" />
+                          <span className="line-clamp-2 leading-tight group-hover/loc:underline underline-offset-2">
                             {lead.address || `${lead.district ? `${lead.district}, ` : ''}${lead.city || ''}`}
                           </span>
-                        </div>
+                        </a>
                       </td>
 
                       {/* Rating & Website */}
@@ -792,15 +856,16 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                         </select>
                       </td>
 
-                      {/* Actions: View Details, Chat, Send, Google Maps, Blacklist, Delete */}
+                      {/* Actions: View Details, WhatsApp Chat, Delete, 3-Dots Dropdown */}
                       <td className="py-3.5 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end space-x-1">
                           <IconButton
                             icon={Eye}
                             variant="ghost"
                             size="sm"
-                            tooltip={t('common.details')}
+                            tooltip={t('leads.tabOverview')}
                             onClick={() => handleOpenLeadDrawer(lead, 'overview')}
+                            className="text-slate-400 hover:text-[#7367F0] hover:bg-[#7367F0]/10"
                           />
                           <div className="relative inline-flex">
                             <IconButton
@@ -816,34 +881,37 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                             )}
                           </div>
                           <IconButton
-                            icon={Send}
-                            variant="success"
-                            size="sm"
-                            tooltip={t('leads.quickSendTitle')}
-                            onClick={() => handleOpenSendModal(lead)}
-                          />
-                          <a
-                            href={getGoogleMapsUrl(lead)}
-                            target="_blank"
-                            rel="noreferrer"
-                            title="Google Maps"
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-[#7367F0] hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors cursor-pointer"
-                          >
-                            <GoogleMapsIcon className="w-4 h-4" />
-                          </a>
-                          <IconButton
-                            icon={ShieldAlert}
-                            variant="warning"
-                            size="sm"
-                            tooltip={t('blacklist.addNumber')}
-                            onClick={() => handleOpenSingleBlacklist(lead)}
-                          />
-                          <IconButton
                             icon={Trash2}
-                            variant="danger"
+                            variant="ghost"
                             size="sm"
                             tooltip={t('common.delete')}
                             onClick={() => handleOpenSingleDelete(lead)}
+                            className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/10"
+                          />
+                          <Dropdown
+                            trigger={
+                              <div
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.08] transition-colors"
+                                title={t('leads.colActions')}
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </div>
+                            }
+                            items={[
+                              {
+                                id: 'add-to-group',
+                                label: t('leads.bulkAddToGroup'),
+                                icon: <FolderPlus className="w-3.5 h-3.5 text-[#7367F0]" />,
+                                onClick: () => handleOpenAddToGroup(lead),
+                              },
+                              {
+                                id: 'blacklist',
+                                label: t('blacklist.addToBlacklist'),
+                                icon: <ShieldAlert className="w-3.5 h-3.5 text-[#FF9F43]" />,
+                                onClick: () => handleOpenSingleBlacklist(lead),
+                                variant: 'warning',
+                              },
+                            ]}
                           />
                         </div>
                       </td>
@@ -876,7 +944,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         isOpen={isDrawerOpen}
         initialTab={drawerInitialTab}
         onClose={() => setIsDrawerOpen(false)}
-        onSendMessage={handleOpenSendModal}
+        onSendMessage={(lead) => handleOpenLeadDrawer(lead, 'chat')}
         onBlacklist={handleOpenSingleBlacklist}
         onDelete={handleOpenSingleDelete}
         onStatusChange={handleStatusChange}
@@ -1151,73 +1219,161 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         </form>
       </Modal>
 
-      {/* Centralized Quick Send Modal */}
-      {selectedLeadForSend && (
-        <Modal
-          isOpen={isSendModalOpen}
-          onClose={() => setIsSendModalOpen(false)}
-          title={t('leads.quickSendTitle')}
-          subtitle={t('leads.quickSendSubtitle')}
-          icon={Send}
-          variant="success"
-          maxWidth="md"
-        >
-          <div className="mb-3.5 p-3 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] text-xs">
-            <p className="font-bold text-slate-800 dark:text-white">{selectedLeadForSend.name}</p>
-            <p className="font-mono text-[#7367F0] mt-0.5">{selectedLeadForSend.phone_e164 || selectedLeadForSend.phone}</p>
+      {/* Centralized Add to Campaign Group Modal */}
+      <Modal
+        isOpen={isAddToGroupModalOpen}
+        onClose={() => setIsAddToGroupModalOpen(false)}
+        title={t('leads.addToGroupModalTitle')}
+        subtitle={t('leads.addToGroupModalSubtitle')}
+        icon={FolderPlus}
+        variant="primary"
+        maxWidth="md"
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={isAddingToGroup}
+              onClick={() => setIsAddToGroupModalOpen(false)}
+              className="cursor-pointer"
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={isAddingToGroup || (selectedTargetGroupId === 'NEW' && !newGroupName.trim())}
+              onClick={handleConfirmAddToGroup}
+              className="bg-[#7367F0] hover:bg-[#685dd8] text-white font-bold space-x-1.5 shadow-md shadow-[#7367F0]/30 cursor-pointer"
+            >
+              {isAddingToGroup ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>{t('common.loading')}</span>
+                </>
+              ) : (
+                <>
+                  <FolderPlus className="w-4 h-4" />
+                  <span>{t('leads.addToGroupBtn')}</span>
+                </>
+              )}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4 text-xs">
+          {/* Target Leads Summary Box */}
+          <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] flex items-center justify-between">
+            <div className="flex items-center space-x-2 min-w-0 pr-2">
+              <Building2 className="w-4 h-4 text-[#7367F0] shrink-0" />
+              <span className="font-bold text-slate-800 dark:text-white truncate">
+                {singleLeadForGroup
+                  ? singleLeadForGroup.name
+                  : selectAllMatching
+                  ? t('leads.allMatchingSelected', { total })
+                  : t('leads.bulkToolbarCount', { count: selectedCount })}
+              </span>
+            </div>
+            <Badge variant="primary" className="text-[10px] shrink-0">
+              {singleLeadForGroup ? 1 : selectedCount} {t('campaignGroups.businesses')}
+            </Badge>
           </div>
 
-          {sendSuccessMsg && (
-            <div className="mb-3 p-2.5 rounded-lg bg-emerald-50 text-[#28C76F] text-xs font-bold border border-emerald-200 animate-fade-in">
-              {sendSuccessMsg}
-            </div>
-          )}
+          {/* Group Choice Selection */}
+          <div className="space-y-3">
+            <label className="text-slate-700 dark:text-slate-300 font-bold block">
+              {t('leads.selectExistingGroup')}
+            </label>
 
-          <div className="space-y-3.5 text-xs">
-            <div>
-              <label className="text-slate-700 dark:text-slate-300 font-bold block mb-1">{t('whatsapp.testMessageText')}</label>
-              <textarea
-                value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value)}
-                rows={5}
-                className="w-full p-3 rounded-lg vuexy-input leading-relaxed"
-                placeholder={t('leads.messagePlaceholder')}
-              />
-            </div>
+            {isLoadingGroups ? (
+              <div className="p-4 text-center text-slate-400">
+                <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                <span>{t('common.loading')}</span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {/* Radio choice for New Group */}
+                <label
+                  className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
+                    selectedTargetGroupId === 'NEW'
+                      ? 'bg-[#7367F0]/10 border-[#7367F0] text-[#7367F0]'
+                      : 'bg-white dark:bg-[#25293C] border-slate-200 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <input
+                      type="radio"
+                      name="targetGroupChoice"
+                      value="NEW"
+                      checked={selectedTargetGroupId === 'NEW'}
+                      onChange={() => setSelectedTargetGroupId('NEW')}
+                      className="text-[#7367F0] focus:ring-[#7367F0]"
+                    />
+                    <span className="font-bold">{t('leads.createNewGroupOption')}</span>
+                  </div>
+                  <Plus className="w-4 h-4" />
+                </label>
 
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                size="sm" 
-                onClick={() => setIsSendModalOpen(false)}
-                className="cursor-pointer"
-              >
-                {t('common.close')}
-              </Button>
-              <Button 
-                type="button" 
-                size="sm" 
-                disabled={isSending || !customMessage}
-                onClick={handleSendSingleMessage}
-                className="bg-[#25D366] hover:bg-[#1EBE5D] text-white font-bold space-x-1.5 cursor-pointer"
-              >
-                {isSending ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>{t('leads.sending')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-3.5 h-3.5" />
-                    <span>{t('leads.sendNow')}</span>
-                  </>
+                {selectedTargetGroupId === 'NEW' && (
+                  <div className="pl-6 pr-1 pt-1 pb-2">
+                    <input
+                      type="text"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder={t('leads.newGroupNamePlaceholder')}
+                      className="w-full px-3 py-2 rounded-lg vuexy-input text-xs"
+                      autoFocus
+                    />
+                  </div>
                 )}
-              </Button>
-            </div>
+
+                {/* List of Existing Campaign Groups */}
+                {campaignGroups.length > 0 && (
+                  <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                    {campaignGroups.map((grp) => {
+                      const isSelected = selectedTargetGroupId === grp.id;
+                      return (
+                        <label
+                          key={grp.id}
+                          className={`p-2.5 px-3 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-[#7367F0]/10 border-[#7367F0] text-[#7367F0]'
+                              : 'bg-white dark:bg-[#25293C] border-slate-200/80 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/[0.02]'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2.5 min-w-0 pr-2">
+                            <input
+                              type="radio"
+                              name="targetGroupChoice"
+                              value={grp.id}
+                              checked={isSelected}
+                              onChange={() => setSelectedTargetGroupId(grp.id)}
+                              className="text-[#7367F0] focus:ring-[#7367F0]"
+                            />
+                            <div className="min-w-0 truncate">
+                              <div className="font-bold truncate">{grp.name}</div>
+                              <div className="text-[10px] text-slate-400 truncate">
+                                {grp.target_category || ''} {grp.target_location ? `• ${grp.target_location}` : ''}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <Badge variant="primary" className="text-[9px]">
+                              {grp.total_leads_count} {t('campaignGroups.businesses')}
+                            </Badge>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        </Modal>
-      )}
+        </div>
+      </Modal>
     </div>
   );
 };

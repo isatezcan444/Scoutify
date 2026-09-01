@@ -7,7 +7,8 @@ import {
   Send, 
   MessageSquareReply, 
   AlertCircle,
-  Trash2
+  Trash2,
+  Check
 } from 'lucide-react';
 import { Campaign } from '../../types';
 import { Card } from '../ui/card';
@@ -20,6 +21,8 @@ import { useI18n } from '../../context/I18nContext';
 
 export interface CampaignCardProps {
   campaign: Campaign;
+  isSelected?: boolean;
+  onToggleSelect?: (campaignId: number) => void;
   onStart?: (campaignId: number) => void;
   onPause?: (campaignId: number) => void;
   onCancel?: (campaignId: number) => void;
@@ -29,6 +32,8 @@ export interface CampaignCardProps {
 
 export const CampaignCard: React.FC<CampaignCardProps> = ({
   campaign,
+  isSelected,
+  onToggleSelect,
   onStart,
   onPause,
   onCancel,
@@ -55,22 +60,47 @@ export const CampaignCard: React.FC<CampaignCardProps> = ({
   };
 
   return (
-    <Card className={cn('p-5 space-y-4 hover:shadow-md transition-all flex flex-col justify-between', className)}>
+    <Card
+      className={cn(
+        'p-5 space-y-4 hover:shadow-md transition-all flex flex-col justify-between relative',
+        isSelected ? 'border-[#7367F0] ring-2 ring-[#7367F0]/20 bg-[#7367F0]/[0.02]' : '',
+        className
+      )}
+    >
       <div>
         {/* Title & Status */}
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <h4 className="font-extrabold text-sm text-slate-800 dark:text-white leading-tight">
-              {campaign.name}
-            </h4>
-            {campaign.description && (
-              <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] mt-0.5 line-clamp-1">
-                {campaign.description}
-              </p>
+          <div className="flex items-start space-x-3 min-w-0">
+            {onToggleSelect && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleSelect(campaign.id);
+                }}
+                className={cn(
+                  "w-5 h-5 rounded-md border flex items-center justify-center transition-all cursor-pointer shrink-0 mt-0.5",
+                  isSelected
+                    ? "bg-[#7367F0] border-[#7367F0] text-white shadow-sm shadow-[#7367F0]/30 ring-2 ring-[#7367F0]/20"
+                    : "border-slate-300 dark:border-white/20 hover:border-[#7367F0] bg-slate-50 dark:bg-white/[0.04]"
+                )}
+              >
+                {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+              </button>
             )}
+            <div className="min-w-0">
+              <h4 className="font-extrabold text-sm text-slate-800 dark:text-white leading-tight truncate">
+                {campaign.name}
+              </h4>
+              {campaign.description && (
+                <p className="text-[11px] text-slate-400 dark:text-[#7E7F96] mt-0.5 line-clamp-1">
+                  {campaign.description}
+                </p>
+              )}
+            </div>
           </div>
 
-          <Badge variant={statusVariants[campaign.status] || 'default'} className="text-[10px] uppercase font-mono">
+          <Badge variant={statusVariants[campaign.status] || 'default'} className="text-[10px] uppercase font-mono shrink-0">
             {campaign.status}
           </Badge>
         </div>
@@ -104,13 +134,13 @@ export const CampaignCard: React.FC<CampaignCardProps> = ({
       </div>
 
       {/* Action Footer Controls */}
-      <div className="pt-3 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between">
-        <div className="flex items-center space-x-1.5 text-[11px] text-slate-400">
+      <div className="pt-3 border-t border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center space-x-1.5 text-[11px] text-slate-400 shrink-0">
           <Clock className="w-3.5 h-3.5" />
           <span>{campaign.min_delay_seconds}-{campaign.max_delay_seconds}s jitter</span>
         </div>
 
-        <div className="flex items-center space-x-1.5">
+        <div className="flex items-center space-x-1.5 shrink-0 flex-wrap sm:flex-nowrap justify-end">
           {onDelete && (
             <IconButton
               icon={Trash2}
@@ -119,7 +149,7 @@ export const CampaignCard: React.FC<CampaignCardProps> = ({
               data-testid={`delete-campaign-btn-${campaign.id}`}
               tooltip={t('campaigns.deleteCampaign') || 'Kampanyayı Sil'}
               onClick={() => onDelete(campaign.id)}
-              className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/15 h-8 w-8 cursor-pointer transition-colors"
+              className="text-slate-400 hover:text-[#EA5455] hover:bg-[#EA5455]/10"
             />
           )}
 
