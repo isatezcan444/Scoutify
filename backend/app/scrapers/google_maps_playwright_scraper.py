@@ -131,71 +131,57 @@ _DETAILS_EXTRACT_JS = """() => {
 }"""
 
 # Direct batch extraction of all rendered feed cards in one O(1) JavaScript evaluation.
-# Extracts real phone numbers, exact addresses, categories, ratings, reviews, and websites.
-_FEED_CARDS_EXTRACT_JS = """() => {
-    const results = [];
-    const cards = document.querySelectorAll('div.Nv2PK');
-    for (const card of cards) {
-        const nameEl = card.querySelector('.qBF1Pd, a.hfpxzc');
-        const linkEl = card.querySelector('a.hfpxzc');
-        const ratingEl = card.querySelector('.MW4etd');
-        const reviewsEl = card.querySelector('.UY7F9');
-        const webEl = card.querySelector('a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web sitesi"], a[data-tooltip*="Web sitesi"]');
-        
-        const name = nameEl ? (nameEl.innerText || nameEl.getAttribute('aria-label') || '').trim() : '';
-        const href = linkEl ? linkEl.href : '';
-        if (!name || !href) continue;
-        
-        const fullText = card.innerText || '';
-        const textLines = Array.from(card.querySelectorAll('.W4Efsd, .fontBodyMedium')).map(el => el.innerText.trim());
-        
-        // 1. Phone extraction directly from card text
-        let phone = null;
-        const phoneMatch = fullText.match(/(?:0[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|\\(0[2-5]\\d{2}\\)[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|\\+90[\\s\\.\\-\\(\\)]*[2-5]\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|05\\d{2}[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2}|0850[\\s\\.\\-\\(\\)]*\\d{3}[\\s\\.\\-\\(\\)]*\\d{2}[\\s\\.\\-\\(\\)]*\\d{2})/);
-        if (phoneMatch) {
-            phone = phoneMatch[0].trim();
-        }
-        
-        // 2. Address and Category extraction from card lines
-        let category = null;
-        let address = null;
-        
-        for (const line of textLines) {
-            const subLines = line.split('\n').map(s => s.trim());
-            for (const sub of subLines) {
-                const parts = sub.split('·').map(p => p.trim());
-                for (const part of parts) {
-                    if (!category && (part.includes('Kliniği') || part.includes('Hastanesi') || part.includes('Doktor') || part.includes('Merkezi') || part.includes('Polikliniği') || part.includes('Hizmet') || part.includes('Dişçi') || part.includes('Sağlık') || part.includes('Şirket') || part.includes('Ofis') || part.includes('Danışmanlık') || part.includes('Ajans') || part.includes('Güzellik') || part.includes('Avukat') || part.includes('Mühendislik') || part.includes('Restoran') || part.includes('Kafe') || part.includes('Otel'))) {
-                        if (part.length <= 60 && !part.match(/^[0-9]/) && !part.includes('(')) {
-                            category = part;
-                        }
-                    }
-                    if (!address && (part.includes('Cd') || part.includes('Sk') || part.includes('Sok') || part.includes('Mah') || part.includes('No:') || part.includes('Bulvarı') || part.includes('Çarşı') || part.includes('Kat:') || part.includes('Cad.') || part.includes('Sitesi') || part.includes('Blok'))) {
-                        address = part.replace(/^\s*(?:Açık|Kapalı|Kapanmak üzere).*?·\s*/i, '').trim();
-                    }
-                }
-            }
-        }
-        
-        const ratingText = ratingEl ? ratingEl.innerText.replace(',', '.').trim() : null;
-        const rating = ratingText ? parseFloat(ratingText) : null;
-        const revText = reviewsEl ? reviewsEl.innerText.replace(/[^0-9]/g, '') : null;
-        const reviewsCount = revText ? parseInt(revText, 10) : 0;
-        const website = webEl ? webEl.href : null;
-        
-        results.push({
-            name,
-            href,
-            phone,
-            address,
-            category,
-            rating,
-            reviewsCount,
-            website
-        });
-    }
-    return results;
-};"""
+# NOTE: Constructed via string concatenation so Python escape sequences don't corrupt JS regex.
+_FEED_CARDS_EXTRACT_JS = "\n".join([
+    "() => {",
+    "    const results = [];",
+    "    const cards = document.querySelectorAll('div.Nv2PK');",
+    "    const MIDDOT = '\\u00b7';",
+    "    for (const card of cards) {",
+    "        const nameEl = card.querySelector('.qBF1Pd, a.hfpxzc');",
+    "        const linkEl = card.querySelector('a.hfpxzc');",
+    "        const ratingEl = card.querySelector('.MW4etd');",
+    "        const reviewsEl = card.querySelector('.UY7F9');",
+    "        const webEl = card.querySelector('a[data-value=\"Web sitesi\"], a.lcr4fd, a[aria-label*=\"Web sitesi\"]');",
+    "        const name = nameEl ? (nameEl.innerText || nameEl.getAttribute('aria-label') || '').trim() : '';",
+    "        const href = linkEl ? linkEl.href : '';",
+    "        if (!name || !href) continue;",
+    "        const fullText = card.innerText || '';",
+    "        const textLines = Array.from(card.querySelectorAll('.W4Efsd, .fontBodyMedium')).map(el => el.innerText.trim());",
+    "        let phone = null;",
+    r"        const phoneMatch = fullText.match(/(?:0[2-5]\d{2}[\s.\-()\u0020]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|\(0[2-5]\d{2}\)[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|\+90[\s.\-()]*[2-5]\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|05\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|0850[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2})/);",
+    "        if (phoneMatch) phone = phoneMatch[0].trim();",
+    "        let category = null;",
+    "        let address = null;",
+    "        for (const line of textLines) {",
+    "            const parts = line.split(MIDDOT).map(p => p.replace(/[\\r\\n]+/g, ' ').trim()).filter(p => p.length > 0);",
+    "            for (const part of parts) {",
+    "                const hasRating = /[0-9],[0-9]/.test(part);",
+    "                const wordCount = part.trim().split(/\\s+/).length;",
+    "                if (!category && part.length > 2 && part.length <= 60 && wordCount <= 5 && !/^[0-9]/.test(part) && !part.includes('(') && !part.includes('|') && !hasRating &&",
+    "                    (part.includes('Klini') || part.includes('Hastane') || part.includes('Doktor') || part.includes('Merkezi') || part.includes('Poliklinik') ||",
+    "                     part.includes('Sa\\u011fl\\u0131k') || part.includes('Di\\u015f') || part.includes('\\u015eirket') || part.includes('Dan\\u0131\\u015fmanl\\u0131k') ||",
+    "                     part.includes('G\\u00fczellik') || part.includes('Avukat') || part.includes('Restoran') || part.includes('Kafe') || part.includes('Otel') ||",
+    "                     part.includes('M\\u00fchendis') || part.includes('Hizmet') || part.includes('Ofis') || part.includes('Ajans'))) {",
+    "                    category = part;",
+    "                }",
+    "                if (!address && part.length > 8 && !address &&",
+    "                    (part.includes('Cd') || part.includes('Sk') || part.includes('Sok') || part.includes('Mah') || part.includes('No:') ||",
+    "                     part.includes('Bulvar') || part.includes('Kat:') || part.includes('Cad') || part.includes('Sitesi') || part.includes('Blok'))) {",
+    "                    address = part;",
+    "                }",
+    "            }",
+    "        }",
+    "        const ratingText = ratingEl ? ratingEl.innerText.replace(',', '.').trim() : null;",
+    "        const rating = ratingText ? parseFloat(ratingText) : null;",
+    r"        const revText = reviewsEl ? reviewsEl.innerText.replace(/[^0-9]/g, '') : null;",
+    "        const reviewsCount = revText ? parseInt(revText, 10) : 0;",
+    "        const website = webEl ? webEl.href : null;",
+    "        results.push({ name, href, phone, address, category, rating, reviewsCount, website });",
+    "    }",
+    "    return results;",
+    "}",
+])
 
 
 def clean_extracted_website(raw_url: Optional[str]) -> Optional[str]:
