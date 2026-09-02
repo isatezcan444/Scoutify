@@ -58,23 +58,29 @@ async def recover_stuck_jobs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Connecting to Database & Creating Tables...")
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
 
-    # Bilinen şema geçişleri (idempotent)
-    await ensure_leads_phone_nullable(engine)
-    await ensure_conversations_columns(engine)
-    await ensure_messages_media_columns(engine)
+        # Bilinen şema geçişleri (idempotent)
+        await ensure_leads_phone_nullable(engine)
+        await ensure_conversations_columns(engine)
+        await ensure_messages_media_columns(engine)
 
-    # Restart sonrası yarıda kalan arka plan işlerini toparla
-    await recover_stuck_jobs()
+        # Restart sonrası yarıda kalan arka plan işlerini toparla
+        await recover_stuck_jobs()
 
-    if settings.SEED_DEMO_DATA:
-        await seed_demo_data_if_empty()
+        if settings.SEED_DEMO_DATA:
+            await seed_demo_data_if_empty()
+    except Exception as e:
+        logger.error(f"[STARTUP_ERROR] Database/seed initialization exception: {e}", exc_info=True)
 
     yield
     # Cleanup
-    await engine.dispose()
+    try:
+        await engine.dispose()
+    except Exception as e:
+        logger.warning(f"Engine dispose exception: {e}")
 
 
 app = FastAPI(
