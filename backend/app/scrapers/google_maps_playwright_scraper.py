@@ -161,13 +161,18 @@ _FEED_CARDS_EXTRACT_JS = """() => {
         let address = null;
         
         for (const line of textLines) {
-            const parts = line.split('·').map(p => p.trim());
-            for (const part of parts) {
-                if (!category && (part.includes('Kliniği') || part.includes('Hastanesi') || part.includes('Doktor') || part.includes('Merkezi') || part.includes('Polikliniği') || part.includes('Hizmet') || part.includes('Dişçi') || part.includes('Sağlık') || part.includes('Şirket') || part.includes('Ofis') || part.includes('Danışmanlık') || part.includes('Ajans') || part.includes('Güzellik') || part.includes('Avukat') || part.includes('Mühendislik') || part.includes('Restoran') || part.includes('Kafe') || part.includes('Otel'))) {
-                    category = part;
-                }
-                if (!address && (part.includes('Cd') || part.includes('Sk') || part.includes('Sok') || part.includes('Mah') || part.includes('No:') || part.includes('Bulvarı') || part.includes('Çarşı') || part.includes('Kat:') || part.includes('Cad.') || part.includes('Sitesi') || part.includes('Blok'))) {
-                    address = part.replace(/^\\s*(?:Açık|Kapalı|Kapanmak üzere).*?·\\s*/i, '').trim();
+            const subLines = line.split('\n').map(s => s.trim());
+            for (const sub of subLines) {
+                const parts = sub.split('·').map(p => p.trim());
+                for (const part of parts) {
+                    if (!category && (part.includes('Kliniği') || part.includes('Hastanesi') || part.includes('Doktor') || part.includes('Merkezi') || part.includes('Polikliniği') || part.includes('Hizmet') || part.includes('Dişçi') || part.includes('Sağlık') || part.includes('Şirket') || part.includes('Ofis') || part.includes('Danışmanlık') || part.includes('Ajans') || part.includes('Güzellik') || part.includes('Avukat') || part.includes('Mühendislik') || part.includes('Restoran') || part.includes('Kafe') || part.includes('Otel'))) {
+                        if (part.length <= 60 && !part.match(/^[0-9]/) && !part.includes('(')) {
+                            category = part;
+                        }
+                    }
+                    if (!address && (part.includes('Cd') || part.includes('Sk') || part.includes('Sok') || part.includes('Mah') || part.includes('No:') || part.includes('Bulvarı') || part.includes('Çarşı') || part.includes('Kat:') || part.includes('Cad.') || part.includes('Sitesi') || part.includes('Blok'))) {
+                        address = part.replace(/^\s*(?:Açık|Kapalı|Kapanmak üzere).*?·\s*/i, '').trim();
+                    }
                 }
             }
         }
@@ -637,26 +642,32 @@ class GoogleMapsPlaywrightScraper:
                 full_address = clean_extracted_address(raw_addr) if raw_addr else f"{district}, {city}"
                 lat, lon = extract_coords_from_url(href)
 
+                # Defensively truncate all string fields to prevent VARCHAR overflow
+                safe_name = (raw_name or "")[:500]
+                raw_cat = c.get("category") or keyword or ""
+                safe_category = raw_cat.split("\n")[0][:100]
+                safe_address = (full_address or "")[:500]
+
                 lead_dict = {
-                    "name": raw_name,
-                    "category": c.get("category") or keyword,
-                    "phone": raw_phone,
+                    "name": safe_name,
+                    "category": safe_category,
+                    "phone": (raw_phone or "")[:50],
                     "phone_e164": phone_data["e164"] if phone_data else None,
                     "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
                     "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
-                    "website": clean_web,
-                    "address": full_address,
-                    "city": city,
-                    "district": district,
+                    "website": (clean_web or "")[:500] if clean_web else None,
+                    "address": safe_address,
+                    "city": (city or "")[:100],
+                    "district": (district or "")[:100],
                     "latitude": lat,
                     "longitude": lon,
                     "rating": c.get("rating"),
                     "reviews_count": c.get("reviewsCount", 0),
-                    "google_maps_url": href,
+                    "google_maps_url": (href or "")[:1000],
                     "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
                     "source": "GOOGLE_MAPS",
                     "is_verified": bool(phone_data or clean_web or c.get("rating")),
-                    "display_name": f"{raw_name}, {full_address}"
+                    "display_name": f"{safe_name}, {safe_address}"[:500]
                 }
 
                 results.append(lead_dict)
