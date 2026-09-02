@@ -201,17 +201,21 @@ def extract_coords_from_url(maps_url: Optional[str]) -> tuple[Optional[float], O
 def pane_belongs_to_card(pane_title: Optional[str], card_name: str) -> bool:
     """
     Validates that the open details pane actually belongs to the clicked card.
-    Comparison is diacritics-insensitive with bidirectional containment, since the
-    pane heading may carry suffixes the card label omits (and vice versa).
-    An empty pane title means no pane rendered — treated as belonging (fields will be empty).
+    Comparison is diacritics-insensitive with bidirectional containment and word token matching.
     """
     if not pane_title:
         return True
-    norm_pane = normalize_turkish(pane_title)
-    norm_card = normalize_turkish(card_name)
+    norm_pane = normalize_turkish(pane_title).lower()
+    norm_card = normalize_turkish(card_name).lower()
     if not norm_pane or not norm_card:
         return True
-    return norm_pane in norm_card or norm_card in norm_pane
+    if norm_pane in norm_card or norm_card in norm_pane:
+        return True
+    # Word token intersection for titles with punctuation or slight variations
+    pane_tokens = set(re.findall(r'\w+', norm_pane))
+    card_tokens = set(re.findall(r'\w+', norm_card))
+    common = pane_tokens.intersection(card_tokens)
+    return len(common) >= 2 or (len(pane_tokens) == 1 and bool(common))
 
 
 class GoogleMapsBlockedError(RuntimeError):
@@ -356,7 +360,8 @@ class GoogleMapsPlaywrightScraper:
         try:
             await card.scroll_into_view_if_needed(timeout=1000)
             await card.click(timeout=1500)
-            await self._wait_for_pane_title(page, card_name)
+            await page.wait_for_timeout(400)
+            await self._wait_for_pane_title(page, card_name, timeout_ms=1200)
         except Exception as click_err:
             logger.debug(f"[GMAPS_PLAYWRIGHT] Card click fallback: {click_err}")
 
