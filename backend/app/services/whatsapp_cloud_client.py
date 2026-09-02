@@ -6,7 +6,7 @@ with Meta Graph API's WhatsApp Business endpoints.
 Handles authentication, request construction, response mapping, and structured error isolation.
 """
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import httpx
 
 from backend.app.core.config import settings
