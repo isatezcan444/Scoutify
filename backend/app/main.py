@@ -1,3 +1,4 @@
+import collections
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,6 +18,23 @@ from backend.app.core.migrations import (
 from backend.app.core.seed import seed_demo_data_if_empty
 from backend.app.models.blacklist import ScraperJob, ScraperJobStatus
 from backend.app.models.campaign import Campaign, CampaignStatus
+
+# In-memory log handler for live diagnostics
+class MemoryLogHandler(logging.Handler):
+    def __init__(self, capacity: int = 300):
+        super().__init__()
+        self.buffer = collections.deque(maxlen=capacity)
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.buffer.append(msg)
+        except Exception:
+            pass
+
+memory_log_handler = MemoryLogHandler()
+memory_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
+logging.getLogger().addHandler(memory_log_handler)
 
 # Setup logging
 logging.basicConfig(
@@ -121,6 +139,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Include API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+@app.get("/system-log", tags=["Health"])
+async def get_system_log():
+    return {"logs": list(memory_log_handler.buffer)}
 
 
 @app.get("/", tags=["Health"])
