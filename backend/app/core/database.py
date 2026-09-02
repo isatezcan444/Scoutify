@@ -10,17 +10,24 @@ from backend.app.core.config import settings
 from sqlalchemy import event
 
 # Engine configuration with connection pooling
-engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=False,
-    future=True,
-    # Connect args: check_same_thread for SQLite, statement_cache_size=0 for Supabase/PgBouncer pooler
-    connect_args=(
-        {"check_same_thread": False}
-        if "sqlite" in settings.DATABASE_URL
-        else {"statement_cache_size": 0}
-    ),
-)
+is_sqlite = "sqlite" in settings.DATABASE_URL
+
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
+if is_sqlite:
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Supabase / PostgreSQL Connection Pooling Best Practices
+    engine_kwargs["connect_args"] = {"statement_cache_size": 0}
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
+    engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_pre_ping"] = True
+
+engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 
 @event.listens_for(engine.sync_engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
