@@ -294,13 +294,32 @@ class GoogleMapsPlaywrightScraper:
     # ------------------------------------------------------------------
 
     async def _open_results_session(self, page: Page, maps_url: str) -> None:
-        """Navigates to the search URL, dismisses consent, and verifies Google served real results."""
-        await page.goto(maps_url, wait_until="domcontentloaded", timeout=settings.SCRAPER_PAGE_TIMEOUT_MS)
-        await page.wait_for_timeout(1800)
-
-        await self._dismiss_consent(page)
-        await page.wait_for_timeout(2500)
-        await self._ensure_not_blocked(page)
+        """Navigates to the search URL, dismisses consent, and verifies Google served real results.
+        Retries up to 3 times with exponential backoff to handle transient network timeouts
+        on production environments (e.g., Render's slower network).
+        """
+        max_attempts = 3
+        last_exc: Optional[Exception] = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                await page.goto(maps_url, wait_until="domcontentloaded", timeout=settings.SCRAPER_PAGE_TIMEOUT_MS)
+                await page.wait_for_timeout(1800)
+                await self._dismiss_consent(page)
+                await page.wait_for_timeout(2500)
+                await self._ensure_not_blocked(page)
+                return  # Success
+            except GoogleMapsBlockedError:
+                raise  # Never retry anti-bot blocks
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(
+                    f"[GMAPS_PLAYWRIGHT] _open_results_session attempt {attempt}/{max_attempts} failed: {exc}"
+                )
+                if attempt < max_attempts:
+                    await page.wait_for_timeout(5000 * attempt)  # 5s, 10s backoff
+        raise RuntimeError(
+            f"[GMAPS_PLAYWRIGHT] All {max_attempts} page-open attempts failed. Last error: {last_exc}"
+        )
 
     async def _dismiss_consent(self, page: Page) -> None:
         """Dismisses the Google cookie-consent dialog when present across any region."""

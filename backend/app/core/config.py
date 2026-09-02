@@ -147,7 +147,8 @@ class Settings(BaseSettings):
     SCRAPER_MAX_CONCURRENT_TASKS: int = 3
     SCRAPER_REQUEST_TIMEOUT: int = 30
     # Page navigation timeout for Google Maps sessions (ms)
-    SCRAPER_PAGE_TIMEOUT_MS: int = 30000
+    # 60s for production (Render's network is slower than local)
+    SCRAPER_PAGE_TIMEOUT_MS: int = 60000
     # "Sınırsız" modda ilçe başına hedef işletme sayısı
     SCRAPER_UNLIMITED_DISTRICT_TARGET: int = 200
     # "Sınırsız" modda ilçe başına maksimum scroll iterasyonu
