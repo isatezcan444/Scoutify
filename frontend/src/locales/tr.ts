@@ -129,7 +129,7 @@ export const tr = {
     today: 'Bugün',
     queue: 'Kademeli kuyruk',
     inbound: 'Dönüş sağlandı',
-    online: 'Online',
+    online: 'Aktif',
     realtime: 'Canlı Metrikler',
     live: 'CANLI',
     cooldownPolicyTitle: 'Anti-Ban & Isınma Protokolü',
