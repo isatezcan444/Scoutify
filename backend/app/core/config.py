@@ -67,6 +67,22 @@ class Settings(BaseSettings):
         "http://127.0.0.1:8000",
     ]
 
+    @field_validator("BACKEND_CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: object) -> List[str]:
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",") if i.strip()]
+        if isinstance(v, list):
+            return [str(i) for i in v]
+        return [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:8000",
+            "http://127.0.0.1:8000",
+        ]
+
     # WhatsApp Gateway Settings
     WA_GATEWAY_URL: str = "http://localhost:3001"
     # Gateway'in /api/v1/whatsapp/webhook/inbound çağrılarında göndermesi
