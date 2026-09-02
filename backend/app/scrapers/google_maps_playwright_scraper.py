@@ -84,7 +84,9 @@ _DETAILS_EXTRACT_JS = """() => {
     // 2. Direct Phone
     const phoneBtn = document.querySelector('button[data-item-id*="phone"], a[href*="tel:"]');
     if (phoneBtn) {
-        res.phone = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
+        let p = phoneBtn.getAttribute('aria-label') || phoneBtn.innerText.trim() || phoneBtn.href;
+        p = p.replace(/^tel:/i, '').replace(/^(?:Telefon|Phone|Tel|Cep)\s*:\s*/i, '').trim();
+        res.phone = p;
     }
 
     // 3. Official Website
@@ -436,16 +438,33 @@ class GoogleMapsPlaywrightScraper:
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage"
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--no-first-run",
+                    "--no-zygote",
+                    "--disable-extensions",
+                    "--disable-background-networking",
                 ]
             )
             context = await browser.new_context(
                 locale="tr-TR",
                 user_agent=settings.SCRAPER_USER_AGENT,
-                viewport={"width": 1920, "height": 1080}
+                viewport={"width": 1280, "height": 800}
             )
             page = await context.new_page()
             await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+
+            # Route optimization: block images, fonts, media and tracker scripts to speed up scraping 5-10x
+            async def _filter_routes(route):
+                req = route.request
+                if req.resource_type in ["image", "media", "font"]:
+                    await route.abort()
+                elif any(b in req.url for b in ["google-analytics", "googletagmanager", "doubleclick", "fonts.gstatic.com"]):
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await page.route("**/*", _filter_routes)
 
             try:
                 await self._open_results_session(page, maps_url)
