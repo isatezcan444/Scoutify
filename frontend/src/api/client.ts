@@ -22,16 +22,44 @@ import {
   AddLeadsToGroupResponse,
 } from '../types';
 
+const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
 const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-const defaultApiPort = '8000';
+const isRemoteHost = typeof window !== 'undefined' && host !== 'localhost' && host !== '127.0.0.1';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL
-  ? `${(import.meta as any).env.VITE_API_URL}/api/v1`
-  : `http://${host}:${defaultApiPort}/api/v1`;
+function resolveApiBase(): string {
+  const envApi = (import.meta as any).env?.VITE_API_URL;
+  if (envApi) {
+    return envApi.endsWith('/api/v1') ? envApi : `${envApi.replace(/\/$/, '')}/api/v1`;
+  }
+  if (isRemoteHost) {
+    return 'https://scoutify-kuv3.onrender.com/api/v1';
+  }
+  return `http://${host}:8000/api/v1`;
+}
 
-const WS_URL = (import.meta as any).env?.VITE_WS_URL
-  ? (import.meta as any).env.VITE_WS_URL
-  : `ws://${host}:${defaultApiPort}/ws`;
+function resolveWsUrl(): string {
+  const envWs = (import.meta as any).env?.VITE_WS_URL;
+  if (envWs) {
+    if (isHttps && envWs.startsWith('ws://')) {
+      return envWs.replace(/^ws:\/\//i, 'wss://');
+    }
+    return envWs;
+  }
+  const envApi = (import.meta as any).env?.VITE_API_URL;
+  if (envApi) {
+    const wsProto = envApi.startsWith('https://') || isHttps ? 'wss://' : 'ws://';
+    const cleanHost = envApi.replace(/^https?:\/\//i, '').replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');
+    return `${wsProto}${cleanHost}/ws`;
+  }
+  if (isRemoteHost) {
+    return 'wss://scoutify-kuv3.onrender.com/ws';
+  }
+  const wsProto = isHttps ? 'wss://' : 'ws://';
+  return `${wsProto}${host}:8000/ws`;
+}
+
+export const API_BASE = resolveApiBase();
+export const WS_URL = resolveWsUrl();
 
 export class ApiClient {
   // --- Analytics ---
@@ -220,6 +248,12 @@ export class ApiClient {
   static async getScraperJobs(): Promise<ScraperJob[]> {
     const res = await fetch(`${API_BASE}/scraper/jobs`);
     if (!res.ok) throw new Error('Failed to fetch scraper jobs');
+    return res.json();
+  }
+
+  static async getScraperJob(jobId: number): Promise<ScraperJob> {
+    const res = await fetch(`${API_BASE}/scraper/jobs/${jobId}`);
+    if (!res.ok) throw new Error('Failed to fetch scraper job details');
     return res.json();
   }
 

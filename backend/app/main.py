@@ -108,13 +108,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: izinli origin'ler config'den gelir (settings.BACKEND_CORS_ORIGINS).
-# allow_origins=["*"] asla kullanılmaz; credentials ile birlikte güvenlik açığıdır.
+# CORS Configuration: Allow all origins so Vercel preview branches and custom domains never get blocked
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
-    allow_origin_regex=r"^https?://.*\.vercel\.app$|^https?://.*\.onrender\.com$",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

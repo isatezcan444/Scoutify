@@ -198,11 +198,13 @@ export interface ScraperJob {
   city?: string;
   districts_json?: string[];
   source: string;
-  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
   total_found: number;
   total_valid_phones: number;
   total_new_leads: number;
   duration_seconds: number;
+  error_message?: string;
+  completed_at?: string;
   created_at: string;
 }
 

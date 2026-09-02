@@ -155,6 +155,58 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         `[${new Date().toLocaleTimeString()}] 📡 Job #${job.id} active. Searching in ${locationDisplay}...`,
       ]);
 
+      let pollInterval: any = null;
+      const stopPolling = () => {
+        if (pollInterval) {
+          clearInterval(pollInterval);
+          pollInterval = null;
+        }
+      };
+
+      const handleJobCompletion = (totalFound: number, totalNew: number) => {
+        stopPolling();
+        setIsScraping(false);
+        setProgress(100);
+        setLogs((prev) => [
+          ...prev,
+          `[${new Date().toLocaleTimeString()}] 🎉 Discovery completed! Total found: ${totalFound}, New CRM Leads: ${totalNew}`,
+        ]);
+        onRefreshStats();
+        ApiClient.getLeads({ page: 1, size: 50 }).then((res) => {
+          if (res?.items?.length) {
+            setDiscoveredLeads(res.items);
+          }
+        }).catch(() => {});
+
+        setTimeout(() => {
+          if (resultsSectionRef.current) {
+            resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 300);
+      };
+
+      const handleJobFailure = (errorMsg: string) => {
+        stopPolling();
+        setIsScraping(false);
+        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Scraper error: ${errorMsg}`]);
+      };
+
+      // Fallback Polling (3s interval) to guarantee state progression
+      pollInterval = setInterval(async () => {
+        try {
+          const status = await ApiClient.getScraperJob(job.id);
+          if (status.status === 'COMPLETED') {
+            handleJobCompletion(status.total_found || 0, status.total_new_leads || 0);
+            ws.close();
+          } else if (status.status === 'FAILED') {
+            handleJobFailure(status.error_message || 'Tarama başarısız oldu');
+            ws.close();
+          }
+        } catch (e) {
+          // ignore transient poll error
+        }
+      }, 3000);
+
       const ws = createWebSocket((eventData) => {
         if (eventData.job_id !== undefined && eventData.job_id !== activeJobIdRef.current) {
           return;
@@ -177,23 +229,10 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             });
           }
         } else if (eventData.event === 'scraper_completed') {
-          setIsScraping(false);
-          setProgress(100);
-          setLogs((prev) => [
-            ...prev,
-            `[${new Date().toLocaleTimeString()}] 🎉 Discovery completed! Total found: ${eventData.total_found}, New CRM Leads: ${eventData.total_new_leads}`,
-          ]);
-          onRefreshStats();
+          handleJobCompletion(eventData.total_found, eventData.total_new_leads);
           ws.close();
-
-          setTimeout(() => {
-            if (resultsSectionRef.current) {
-              resultsSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-          }, 300);
         } else if (eventData.event === 'scraper_failed') {
-          setIsScraping(false);
-          setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Scraper error: ${eventData.error}`]);
+          handleJobFailure(eventData.error);
           ws.close();
         }
       });

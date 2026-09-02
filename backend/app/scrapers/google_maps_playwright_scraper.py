@@ -242,14 +242,28 @@ class GoogleMapsPlaywrightScraper:
         await self._ensure_not_blocked(page)
 
     async def _dismiss_consent(self, page: Page) -> None:
-        """Dismisses the Google cookie-consent dialog when present."""
-        try:
-            accept_btn = page.locator('button:has-text("Tümünü kabul et"), button:has-text("Kabul et"), button:has-text("Accept all")')
-            if await accept_btn.count() > 0:
-                await accept_btn.first.click()
-                await page.wait_for_timeout(600)
-        except Exception:
-            pass
+        """Dismisses the Google cookie-consent dialog when present across any region."""
+        consent_selectors = [
+            'button[aria-label*="Tümünü kabul et"]',
+            'button[aria-label*="Accept all"]',
+            'button[aria-label*="Alle akzeptieren"]',
+            'form[action*="consent"] button',
+            'button:has-text("Tümünü kabul et")',
+            'button:has-text("Kabul et")',
+            'button:has-text("Accept all")',
+            'button:has-text("I agree")',
+            'button:has-text("Ich stimme zu")',
+            'button:has-text("Tout accepter")',
+        ]
+        for sel in consent_selectors:
+            try:
+                btn = page.locator(sel)
+                if await btn.count() > 0:
+                    await btn.first.click()
+                    await page.wait_for_timeout(800)
+                    break
+            except Exception:
+                pass
 
     async def _ensure_not_blocked(self, page: Page) -> None:
         """Raises GoogleMapsBlockedError when an anti-bot interstitial is detected."""
