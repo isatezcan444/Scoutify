@@ -117,6 +117,17 @@ async def websocket_endpoint(websocket: WebSocket):
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
+@app.get("/", tags=["Health"])
+async def root():
+    return {
+        "status": "ok",
+        "service": "Scoutify Backend API",
+        "docs": "/docs",
+        "health": "/health",
+        "version": settings.VERSION,
+    }
+
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     return {
