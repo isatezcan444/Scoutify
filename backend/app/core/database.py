@@ -14,8 +14,12 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
     future=True,
-    # SQLite-specific connect args
-    connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {}
+    # Connect args: check_same_thread for SQLite, statement_cache_size=0 for Supabase/PgBouncer pooler
+    connect_args=(
+        {"check_same_thread": False}
+        if "sqlite" in settings.DATABASE_URL
+        else {"statement_cache_size": 0}
+    ),
 )
 
 @event.listens_for(engine.sync_engine, "connect")
