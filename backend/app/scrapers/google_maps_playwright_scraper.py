@@ -523,6 +523,15 @@ class GoogleMapsPlaywrightScraper:
                     "--no-zygote",
                     "--disable-extensions",
                     "--disable-background-networking",
+                    "--disable-default-apps",
+                    "--disable-sync",
+                    "--disable-translate",
+                    "--hide-scrollbars",
+                    "--metrics-recording-only",
+                    "--mute-audio",
+                    "--safebrowsing-disable-auto-update",
+                    "--memory-pressure-off",
+                    "--js-flags=--max-old-space-size=256",
                 ]
             )
             context = await browser.new_context(
@@ -533,12 +542,20 @@ class GoogleMapsPlaywrightScraper:
             page = await context.new_page()
             await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
-            # Route optimization: block images, fonts, media and tracker scripts to speed up scraping 5-10x
+            # Route optimization: block images, fonts, media, stylesheets and tracker scripts
+            # to speed up scraping significantly on low-resource environments
+            _BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
+            _BLOCKED_URL_FRAGMENTS = [
+                "google-analytics", "googletagmanager", "doubleclick",
+                "fonts.gstatic.com", "accounts.google.com", "recaptcha",
+                "jnn-pa.googleapis.com",
+            ]
+
             async def _filter_routes(route):
                 req = route.request
-                if req.resource_type in ["image", "media", "font"]:
+                if req.resource_type in _BLOCKED_RESOURCE_TYPES:
                     await route.abort()
-                elif any(b in req.url for b in ["google-analytics", "googletagmanager", "doubleclick", "fonts.gstatic.com"]):
+                elif any(b in req.url for b in _BLOCKED_URL_FRAGMENTS):
                     await route.abort()
                 else:
                     await route.continue_()
