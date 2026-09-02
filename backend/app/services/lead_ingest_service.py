@@ -180,35 +180,43 @@ class LeadIngestService:
         """
         initial_status = LeadStatus.UNSUBSCRIBED if is_blacklisted else LeadStatus.NEW
 
+        # Defensive truncation: protect all VARCHAR-bounded columns from overflow
+        def _trunc(val: Optional[str], limit: int) -> Optional[str]:
+            if val is None:
+                return None
+            # Also strip embedded newlines that can corrupt single-line fields
+            val = val.split("\n")[0].strip()
+            return val[:limit]
+
         lead = Lead(
-            name=name,
-            category=raw.get("category"),
-            canonical_category=raw.get("canonical_category"),
+            name=name,  # text (unlimited)
+            category=raw.get("category"),  # text (unlimited)
+            canonical_category=raw.get("canonical_category"),  # text
             category_score=raw.get("category_score", 1.0),
-            category_classification=raw.get("category_classification", "MATCH"),
-            entity_type=raw.get("entity_type", EntityType.BUSINESS.value),
-            verification_status=raw.get("verification_status", VerificationStatus.VERIFIED.value if is_verified else VerificationStatus.UNVERIFIED.value),
-            confidence_level=raw.get("confidence_level", ConfidenceLevel.HIGH.value if (is_verified and is_wa_eligible) else ConfidenceLevel.MEDIUM.value),
+            category_classification=_trunc(raw.get("category_classification", "MATCH"), 50),
+            entity_type=_trunc(raw.get("entity_type", EntityType.BUSINESS.value), 50),
+            verification_status=_trunc(raw.get("verification_status", VerificationStatus.VERIFIED.value if is_verified else VerificationStatus.UNVERIFIED.value), 50),
+            confidence_level=_trunc(raw.get("confidence_level", ConfidenceLevel.HIGH.value if (is_verified and is_wa_eligible) else ConfidenceLevel.MEDIUM.value), 20),
             confidence_score=raw.get("confidence_score", 90 if (is_verified and is_wa_eligible) else 60),
             is_verified=is_verified,
-            discovered_from=raw.get("discovered_from", source),
+            discovered_from=_trunc(raw.get("discovered_from", source), 100),
             verified_by=raw.get("verified_by"),
-            phone=raw.get("phone") or (e164 or "Belirtilmemiş"),
-            phone_e164=e164,  # None if phone is not present — never fabricate numbers
+            phone=_trunc(raw.get("phone") or (e164 or "Belirtilmemiş"), 50),
+            phone_e164=_trunc(e164, 30),  # None if phone is not present — never fabricate numbers
             is_mobile=phone_data.get("is_mobile", False) if phone_data else False,
             is_whatsapp_eligible=is_wa_eligible,
-            address=raw.get("address"),
-            city=raw.get("city"),
-            district=raw.get("district"),
+            address=raw.get("address"),  # text
+            city=_trunc(raw.get("city"), 100),
+            district=_trunc(raw.get("district"), 100),
             latitude=raw.get("latitude"),
             longitude=raw.get("longitude"),
-            website=raw.get("website"),
+            website=raw.get("website"),  # text
             rating=raw.get("rating"),
             reviews_count=raw.get("reviews_count", 0),
-            place_id=raw.get("place_id"),
-            search_keyword=search_keyword or raw.get("search_keyword"),
-            search_location=search_location or raw.get("search_location"),
-            source=source,
+            place_id=_trunc(raw.get("place_id"), 255),
+            search_keyword=_trunc(search_keyword or raw.get("search_keyword"), 200),
+            search_location=_trunc(search_location or raw.get("search_location"), 200),
+            source=_trunc(source, 50),
             status=initial_status,
             custom_data=cls._initial_custom_data(raw),
         )
