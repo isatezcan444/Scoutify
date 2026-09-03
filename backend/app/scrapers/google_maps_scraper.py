@@ -626,7 +626,9 @@ class GoogleMapsScraper(BaseScraper):
                     target_reached = True
                     break
 
-            if progress_callback and not target_reached:
+            # District closure line always fires (even when the global target was
+            # just hit): the stream must never go silent about a finished area.
+            if progress_callback:
                 await progress_callback({
                     "type": "log",
                     "key": "leadFinder.stream.districtDone",
