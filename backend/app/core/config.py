@@ -166,6 +166,11 @@ class Settings(BaseSettings):
     SCRAPER_GEO_FILTER_ENABLED: bool = True
     # İlçe kanıtı taşımayan (CITY_ONLY/UNKNOWN) adresleri de ele (en katı mod)
     SCRAPER_REJECT_UNPROVEN_LOCATION: bool = False
+    # Scraper Engine: "HTTP" (ultra-fast, zero RAM, no browser) or "PLAYWRIGHT"
+    SCRAPER_ENGINE: str = "HTTP"
+    SCRAPER_HTTP_PAGE_SIZE: int = 20
+    SCRAPER_HTTP_MAX_PAGES_PER_QUERY: int = 10
+    SCRAPER_HTTP_TIMEOUT_SECONDS: float = 12.0
 
 
 settings = Settings()

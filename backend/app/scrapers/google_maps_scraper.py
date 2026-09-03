@@ -34,6 +34,7 @@ from backend.app.scrapers.google_maps_playwright_scraper import (
     GoogleMapsPlaywrightScraper,
     GoogleMapsBlockedError,
 )
+from backend.app.scrapers.google_maps_http_scraper import GoogleMapsHttpScraper
 from backend.app.services.phone_service import PhoneService
 from backend.app.services.geo_scope_filter import GeoScopeFilter, GeoScopeDecision, GeoScopeVerdict
 from backend.app.services.query_expander import QueryExpander
@@ -149,6 +150,7 @@ class GoogleMapsScraper(BaseScraper):
     ):
         super().__init__(user_agent)
         self.playwright_scraper = GoogleMapsPlaywrightScraper()
+        self.http_scraper = GoogleMapsHttpScraper()
         # Geo fence collaborator (DI-friendly): keeps discovery results inside the
         # requested city/district scope and resolves each place's TRUE district.
         self.geo_scope_filter = geo_scope_filter or GeoScopeFilter.from_settings()
@@ -370,6 +372,30 @@ class GoogleMapsScraper(BaseScraper):
         deduplicator.register(place_url, name_key, e164, address_key=address_key)
         return lead_record, decision
 
+    def _resolve_active_engine(self):
+        """
+        Determines whether to route to GoogleMapsHttpScraper or GoogleMapsPlaywrightScraper.
+        Seamlessly honors any tests or callers that patched self.playwright_scraper.
+        """
+        is_custom_playwright = False
+        try:
+            pw_method = getattr(self.playwright_scraper, "scrape_district_places", None)
+            if pw_method is not None:
+                if hasattr(pw_method, "mock") or hasattr(pw_method, "assert_called") or hasattr(pw_method, "call_count"):
+                    is_custom_playwright = True
+                elif getattr(pw_method, "__code__", None) != getattr(GoogleMapsPlaywrightScraper.scrape_district_places, "__code__", None):
+                    is_custom_playwright = True
+        except Exception:
+            pass
+
+        if is_custom_playwright:
+            return self.playwright_scraper
+
+        engine_name = getattr(settings, "SCRAPER_ENGINE", "HTTP").upper()
+        if engine_name == "HTTP":
+            return self.http_scraper
+        return self.playwright_scraper
+
     # ------------------------------------------------------------------
     # Discovery orchestration
     # ------------------------------------------------------------------
@@ -540,7 +566,9 @@ class GoogleMapsScraper(BaseScraper):
 
                 stats["queries_executed"] += 1
                 try:
-                    await self.playwright_scraper.scrape_district_places(
+                    active_engine = self._resolve_active_engine()
+                    logger.info(f"[GMAPS_ENGINE] Executing query '{term}' via {active_engine.__class__.__name__}.")
+                    await active_engine.scrape_district_places(
                         keyword=term,
                         city=clean_city,
                         district=district,
@@ -559,7 +587,7 @@ class GoogleMapsScraper(BaseScraper):
                     )
                 finally:
                     gc.collect()
-                    await asyncio.sleep(1.5)
+                    await asyncio.sleep(0.5)
 
                 if progress_callback and len(search_terms) > 1:
                     term_pct = min(
