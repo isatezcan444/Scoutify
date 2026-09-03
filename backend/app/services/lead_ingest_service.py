@@ -59,6 +59,7 @@ class LeadIngestService:
         shared_line_saved = 0
         matched_by: Dict[str, int] = {basis.value: 0 for basis in MatchBasis}
         race_merged = 0
+        assigned_batch_e164s: Set[str] = set()
 
         for raw in raw_leads:
             name = (raw.get("name") or "").strip()
@@ -87,11 +88,37 @@ class LeadIngestService:
                 raw = {**raw, "phone_e164": None}
                 shared_line_saved += 1
 
-            is_wa_eligible = bool(phone_data and phone_data.get("is_whatsapp_eligible")) if phone_data else False
+            # Strict phone unique index guard:
+            # If e164 is already allocated to another lead in this batch, or already exists on a
+            # DIFFERENT row in the database, withhold phone_e164 (None) to satisfy the ix_leads_phone_e164
+            # unique constraint while preserving the display phone and creating/updating the lead row.
+            if e164:
+                target_lead_id = verdict.existing.id if verdict.existing else None
+                conflict = False
+                if e164 in assigned_batch_e164s:
+                    conflict = True
+                else:
+                    phone_query = select(Lead.id).where(Lead.phone_e164 == e164)
+                    if target_lead_id:
+                        phone_query = phone_query.where(Lead.id != target_lead_id)
+                    existing_by_phone = (await db.execute(phone_query)).scalar_one_or_none()
+                    if existing_by_phone:
+                        conflict = True
+
+                if conflict:
+                    e164 = None
+                    raw = {**raw, "phone_e164": None}
+                    shared_line_saved += 1
+                else:
+                    assigned_batch_e164s.add(e164)
+
+            is_wa_eligible = bool(phone_data and phone_data.get("is_whatsapp_eligible")) if (phone_data and e164) else False
             is_verified = raw.get("is_verified", bool(phone_data and phone_data.get("is_valid")))
 
             if verdict.existing:
                 cls._merge_into_existing(verdict.existing, raw, e164, is_wa_eligible, is_blacklisted)
+                if verdict.existing.phone_e164:
+                    assigned_batch_e164s.add(verdict.existing.phone_e164)
                 updated_count += 1
                 matched_by[verdict.basis.value] += 1
                 all_processed_leads.append(verdict.existing)
@@ -101,6 +128,8 @@ class LeadIngestService:
                     is_verified, is_blacklisted, source,
                     search_keyword, search_location
                 )
+                if lead.phone_e164:
+                    assigned_batch_e164s.add(lead.phone_e164)
                 if merged_into_existing:
                     updated_count += 1
                     race_merged += 1

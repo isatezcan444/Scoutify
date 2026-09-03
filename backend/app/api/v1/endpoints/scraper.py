@@ -152,11 +152,17 @@ async def run_scraper_task(
             raise
         except Exception as e:
             logger.exception(f"[SEARCH_JOB_ERROR] job_id={job_id}: {e}")
-            job.status = ScraperJobStatus.FAILED
-            job.error_message = str(e)
-            job.completed_at = datetime.utcnow()
-            job.duration_seconds = int(time.time() - start_time)
-            await db.commit()
+            try:
+                await db.rollback()
+                job = await db.get(ScraperJob, job_id)
+                if job:
+                    job.status = ScraperJobStatus.FAILED
+                    job.error_message = str(e)[:500]
+                    job.completed_at = datetime.utcnow()
+                    job.duration_seconds = int(time.time() - start_time)
+                    await db.commit()
+            except Exception as rollback_err:
+                logger.error(f"[SEARCH_JOB_ERROR] Failed to record failure in DB: {rollback_err}")
             await ws_manager.broadcast({
                 "event": "scraper_failed",
                 "job_id": job_id,
