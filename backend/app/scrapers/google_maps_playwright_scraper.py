@@ -330,6 +330,31 @@ def clean_extracted_address(raw_addr: Optional[str]) -> Optional[str]:
     return full_joined.strip()
 
 
+def strip_leading_business_name(name: Optional[str], address: Optional[str]) -> Optional[str]:
+    """Removes a business-name prefix from a Google Maps address string.
+
+    The pure-HTTP JSON feed returns pd[18] as "Business Name, street, district..."
+    (verified 11/11 on live samples). Cards must show only the street part, and
+    downstream dedup (address-key) must compare streets — not names.
+    Matching is whitespace-collapsed and case-insensitive; anything that does
+    not match is returned byte-identical (fail-safe no-op).
+    """
+    if not address:
+        return address
+    if not name or not name.strip():
+        return address
+    collapsed_addr = re.sub(r'\s+', ' ', address).strip()
+    collapsed_name = re.sub(r'\s+', ' ', name).strip()
+    if not collapsed_name:
+        return address
+    if collapsed_addr.casefold().startswith(collapsed_name.casefold()):
+        remainder = collapsed_addr[len(collapsed_name):].lstrip(' ,;:-–—').strip()
+        # Address that is ONLY the name carries no street evidence — keep it
+        # rather than returning an empty string.
+        return remainder or address
+    return address
+
+
 def extract_coords_from_url(maps_url: Optional[str]) -> tuple[Optional[float], Optional[float]]:
     """Extracts latitude and longitude coordinates from Google Maps URL (@lat,lon,zoom)."""
     if not maps_url:

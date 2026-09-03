@@ -79,3 +79,36 @@ async def test_lead_ingest_handles_blacklist():
         assert leads[0].status == LeadStatus.UNSUBSCRIBED
 
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_merge_heals_name_prefixed_address():
+    """Rows stored before the pd[18] prefix strip carry 'Name, street...'.
+    A re-scrape touching the same business must normalize the stored
+    address (pure prefix removal, no new content injected)."""
+    session_maker, engine = await get_in_memory_db()
+    async with session_maker() as db:
+        db.add(Lead(
+            name="Mozaik Dent",
+            city="İstanbul",
+            district="Ataşehir",
+            phone="Belirtilmemiş",
+            phone_e164=None,
+            place_id="gmaps_mozaik_01",
+            address="Mozaik Dent, Atatürk, Meriç Cd. NO: 21/35",
+        ))
+        await db.commit()
+
+        raw = [{
+            "name": "Mozaik Dent",
+            "city": "İstanbul",
+            "district": "Ataşehir",
+            "place_id": "gmaps_mozaik_01",
+            "phone": None,
+            "phone_e164": None,
+            "address": "Atatürk, Meriç Cd. NO: 21/35",
+        }]
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+        assert new_c == 0 and upd_c == 1
+        assert leads[0].address == "Atatürk, Meriç Cd. NO: 21/35"
+    await engine.dispose()

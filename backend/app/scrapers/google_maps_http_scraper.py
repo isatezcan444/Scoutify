@@ -27,6 +27,7 @@ from backend.app.core.config import settings
 from backend.app.scrapers.google_maps_playwright_scraper import (
     clean_extracted_address,
     clean_extracted_website,
+    strip_leading_business_name,
 )
 from backend.app.services.phone_service import PhoneService
 
@@ -166,8 +167,11 @@ class GoogleMapsHttpScraper:
         # Deterministic place_id conforming to AGENTS.md invariant 1.3
         place_id = f"gmaps_{hashlib.sha256(maps_url.encode()).hexdigest()[:16]}"
 
-        # Address
+        # Address (pd[18] carries a "Business Name, street..." prefix — strip it
+        # BEFORE cleaning so cards show streets and dedup compares streets).
         raw_addr = pd[18] if (len(pd) > 18 and isinstance(pd[18], str)) else None
+        if raw_addr:
+            raw_addr = strip_leading_business_name(safe_name, raw_addr)
         full_address = clean_extracted_address(raw_addr) if raw_addr else f"{district}, {city}"
 
         # Category

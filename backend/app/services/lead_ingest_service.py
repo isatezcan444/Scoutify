@@ -13,6 +13,7 @@ from backend.app.models.lead import Lead, LeadStatus, EntityType, VerificationSt
 from backend.app.models.blacklist import Blacklist
 from backend.app.services.phone_service import PhoneService
 from backend.app.services.lead_match_policy import LeadMatchPolicy, MatchBasis
+from backend.app.scrapers.google_maps_playwright_scraper import strip_leading_business_name
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +183,13 @@ class LeadIngestService:
             existing_lead.website = raw.get("website")
         if not existing_lead.address and raw.get("address"):
             existing_lead.address = raw.get("address")
+        # Self-healing: rows stored before the name-prefix strip carry
+        # "Business Name, street...". Normalize them on contact — pure removal
+        # of a proven prefix, never injecting new content.
+        if existing_lead.address:
+            healed = strip_leading_business_name(existing_lead.name, existing_lead.address)
+            if healed and healed != existing_lead.address:
+                existing_lead.address = healed
         if raw.get("rating") and not existing_lead.rating:
             existing_lead.rating = raw.get("rating")
         if is_blacklisted:

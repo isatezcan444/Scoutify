@@ -134,3 +134,46 @@ async def test_scrape_district_places_mock(http_scraper):
     assert len(inspected) == 2
     assert results[0]["name"] == "Klinik A"
     assert results[1]["name"] == "Klinik B"
+
+
+# ============================================================
+# Address name-prefix strip (kartlarda "İşletme Adı, adres..." bug)
+# ============================================================
+
+def test_strip_leading_business_name_exact_prefix(http_scraper):
+    from backend.app.scrapers.google_maps_playwright_scraper import strip_leading_business_name
+    addr = "Mozaik Dent Ağız ve Diş Sağlığı Polikliniği, Atatürk, Meriç Cd. NO: 21/35, 34758 Ataşehir/İstanbul"
+    assert strip_leading_business_name("Mozaik Dent Ağız ve Diş Sağlığı Polikliniği", addr) == \
+        "Atatürk, Meriç Cd. NO: 21/35, 34758 Ataşehir/İstanbul"
+
+
+def test_strip_leading_business_name_no_match_untouched():
+    from backend.app.scrapers.google_maps_playwright_scraper import strip_leading_business_name
+    addr = "Barbaros Mah. Halk Cd. No:1, Ataşehir"
+    assert strip_leading_business_name("Başka Klinik", addr) == addr
+    assert strip_leading_business_name(None, addr) == addr
+    assert strip_leading_business_name("Klinik", None) is None
+
+
+def test_strip_leading_business_name_never_empties():
+    from backend.app.scrapers.google_maps_playwright_scraper import strip_leading_business_name
+    assert strip_leading_business_name("Klinik X", "Klinik X") == "Klinik X"
+
+
+def test_parse_place_entry_strips_name_from_address(http_scraper):
+    entry = [None] * 15
+    pd = [None] * 180
+    pd[10] = "0x14cac8a7:0xa626190b"
+    pd[11] = "Özel Test Diş Kliniği"
+    pd[13] = ["Diş Kliniği"]
+    pd[18] = "Özel Test Diş Kliniği, Barbaros Mah. No: 10, Ataşehir, İstanbul"
+    pd[4] = [None] * 9
+    pd[9] = [None, None, 40.9928, 29.1249]
+    entry[14] = pd
+
+    res = http_scraper._parse_place_entry(
+        entry=entry, keyword="Diş Klinikleri", city="İstanbul", district="Ataşehir"
+    )
+    assert res is not None
+    assert res["address"] == "Barbaros Mah. No: 10, Ataşehir, İstanbul"
+    assert not res["address"].startswith("Özel Test Diş Kliniği")
