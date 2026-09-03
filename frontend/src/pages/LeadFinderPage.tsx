@@ -1,30 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Play, 
+import {
+  Play,
   Check,
-  Terminal, 
-  ExternalLink, 
-  Phone, 
-  Star, 
-  Globe, 
-  Loader2, 
-  Sparkles, 
-  MapPin, 
+  Terminal,
+  ExternalLink,
+  Phone,
+  Star,
+  Globe,
+  Loader2,
+  Sparkles,
+  MapPin,
   Search,
   FolderKanban,
   Plus,
-  CheckCircle2
+  CheckCircle2,
+  CheckSquare,
+  Square,
+  Save,
+  Database
 } from 'lucide-react';
 import { ApiClient, createWebSocket } from '../api/client';
-import { 
-  Button, 
-  Badge, 
-  Card, 
-  PageHeader, 
-  Progress, 
-  Avatar, 
-  WhatsAppIcon, 
-  GoogleMapsIcon 
+import {
+  Button,
+  Badge,
+  Card,
+  PageHeader,
+  Progress,
+  Avatar,
+  WhatsAppIcon,
+  GoogleMapsIcon,
+  BulkActionToolbar,
+  ToolbarActionButton
 } from '../components/ui';
 import { Modal } from '../components/ui/Modal';
 import { TextInput } from '../components/forms/TextInput';
@@ -51,6 +57,28 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   const [logs, setLogs] = useState<string[]>([]);
   const [discoveredLeads, setDiscoveredLeads] = useState<any[]>([]);
   const [progress, setProgress] = useState(0);
+  // Explicit-save selection (Gmail style, keyed by place_id — results carry
+  // no CRM id until the user saves them).
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const leadKey = (l: any): string => String(l?.place_id || l?.name || '');
+  const allKeys = discoveredLeads.map(leadKey).filter(Boolean);
+  const unsavedLeads = discoveredLeads.filter((l) => !l.id);
+  const savedLeads = discoveredLeads.filter((l) => l.id);
+  const isAllSelected = allKeys.length > 0 && allKeys.every((k) => selectedKeys.includes(k));
+
+  const handleToggleSingleSelect = (key: string) => {
+    setSelectedKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    setSelectedKeys((prev) =>
+      allKeys.length > 0 && allKeys.every((k) => prev.includes(k)) ? [] : [...allKeys]
+    );
+  };
 
   // Save to Group State
   const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
@@ -77,8 +105,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
     return d?.message ?? '';
   };
 
-  const handleOpenSaveModal = async (initialMode: 'NEW' | 'EXISTING') => {
-    setSaveMode(initialMode);
+  const handleOpenSaveModal = async (initialMode: 'NEW' | 'EXISTING') => {    setSaveMode(initialMode);
     const locationPrefix = [selectedDistricts[0] || selectedCity].filter(Boolean).join(' ');
     const autoName = [locationPrefix, keyword].filter(Boolean).join(' ');
     setSaveGroupName(autoName || 'Yeni Kampanya Grubu');
@@ -102,7 +129,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
     e.preventDefault();
     const leadIds = discoveredLeads.map((l) => l.id).filter(Boolean) as number[];
     if (leadIds.length === 0) {
-      toast.warning('Kaydedilecek işletme bulunamadı.');
+      toast.warning(t('leadFinder.saveGroupNoLeads'));
       return;
     }
 
@@ -147,6 +174,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
     setIsScraping(true);
     setProgress(5);
     jobDoneRef.current = false;
+    setSelectedKeys([]);
     const targetLabel = maxResults === 0
       ? t('leadFinder.scopeAll')
       : `${maxResults} ${t('common.entries')}`;
@@ -182,7 +210,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         }
       };
 
-      const handleJobCompletion = (totalFound: number, totalNew: number, leads?: any[]) => {
+      const handleJobCompletion = (totalFound: number, _totalNew: number, leads?: any[]) => {
         if (jobDoneRef.current) return;
         jobDoneRef.current = true;
         stopPolling();
@@ -190,7 +218,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         setProgress(100);
         setLogs((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.completed', { found: totalFound, new: totalNew })}`,
+          `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.completed', { found: totalFound })}`,
         ]);
         onRefreshStats();
         // Prefer the job's own exact result set (with CRM ids); the paged
@@ -272,8 +300,38 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
     }
   };
 
-  const getGoogleMapsUrl = (lead: any) => {
-    if (lead.maps_url) return lead.maps_url;
+  // Explicit CRM save: persists the reviewed selection (or everything) via
+  // POST /scraper/jobs/{id}/save and merges the returned CRM rows (with ids)
+  // back into the discovery list by place_id. Idempotent — re-saving merges.
+  const handleSaveLeads = async (keys: string[]) => {
+    const jobId = activeJobIdRef.current;
+    if (!jobId || keys.length === 0 || isSaving) return;
+    const payload = discoveredLeads.filter((l) => keys.includes(leadKey(l)));
+    if (payload.length === 0) return;
+
+    setIsSaving(true);
+    try {
+      const res = await ApiClient.saveScraperLeads(jobId, payload);
+      const byKey = new Map((res.saved || []).map((s: any) => [String(s.place_id || s.name), s]));
+      setDiscoveredLeads((prev) => prev.map((l) => byKey.get(leadKey(l)) ?? l));
+      setSelectedKeys([]);
+      setLogs((prev) => [
+        ...prev,
+        `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.savedToCrm', { saved: res.new_count, updated: res.updated_count })}`,
+      ]);
+      toast.success(t('leadFinder.stream.savedToCrm', { saved: res.new_count, updated: res.updated_count }));
+      onRefreshStats();
+    } catch (err: any) {
+      toast.error(err.message || t('leadFinder.stream.failed', { error: '' }));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveSelected = () => handleSaveLeads(selectedKeys);
+  const handleSaveAll = () => handleSaveLeads(unsavedLeads.map(leadKey));
+
+  const getGoogleMapsUrl = (lead: any) => {    if (lead.maps_url) return lead.maps_url;
     if (lead.google_maps_url) return lead.google_maps_url;
     if (lead.latitude && lead.longitude && lead.latitude !== 0) {
       return `https://www.google.com/maps/search/?api=1&query=${lead.latitude},${lead.longitude}`;
@@ -423,7 +481,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
       {discoveredLeads.length > 0 && (
         <div ref={resultsSectionRef} className="space-y-4 pt-2 animate-fade-in">
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h3 className="text-lg font-extrabold text-slate-800 dark:text-white">
                 {t('leadFinder.businessesFound')} ({discoveredLeads.length})
@@ -432,7 +490,32 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                 {t('leadFinder.googleMapsSource')}
               </p>
             </div>
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                title={isAllSelected ? t('common.clearSelection') : t('common.selectAll')}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
+              >
+                {isAllSelected ? (
+                  <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                )}
+                <span>{t('common.selectAll')}</span>
+              </button>
+              <Button
+                onClick={handleSaveAll}
+                disabled={isSaving || isScraping || unsavedLeads.length === 0}
+                className="bg-[#7367F0] hover:bg-[#685dd8] text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md shadow-[#7367F0]/25 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Save className="w-3.5 h-3.5" />
+                )}
+                <span>{t('leadFinder.saveAll')}</span>
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => onNavigate('leads')}
@@ -443,7 +526,8 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             </div>
           </div>
 
-          {/* Save to Group Inline Banner */}
+          {/* Save to Group Inline Banner (only saved CRM rows can be grouped) */}
+          {savedLeads.length > 0 && (
           <div className="bg-gradient-to-r from-[#7367F0]/10 via-[#7367F0]/5 to-transparent border border-[#7367F0]/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
             <div className="flex items-center space-x-3.5">
               <div className="w-10 h-10 rounded-xl bg-[#7367F0] text-white flex items-center justify-center shadow-md shadow-[#7367F0]/25 shrink-0">
@@ -477,32 +561,57 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
               </Button>
             </div>
           </div>
+          )}
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {discoveredLeads.map((lead, idx) => (
-              <Card key={lead.id || `lead-${idx}`} className="p-5 hover:shadow-md transition-shadow flex flex-col justify-between h-full space-y-4">
+            {discoveredLeads.map((lead, idx) => {
+              const key = leadKey(lead) || `lead-${idx}`;
+              const isSelected = selectedKeys.includes(key);
+              const isSaved = Boolean(lead.id);
+              return (
+              <Card key={key} className={`p-5 hover:shadow-md transition-shadow flex flex-col justify-between h-full space-y-4 ${isSelected ? 'border-[#7367F0]/60 bg-[#7367F0]/[0.04] dark:bg-[#7367F0]/[0.07]' : ''}`}>
                 <div>
-                  {/* Full Business Name & Entity Badges */}
+                  {/* Selection Checkbox, Business Name & Entity Badges */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center space-x-2.5 min-w-0">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSingleSelect(key)}
+                        title={isSelected ? t('common.clearSelection') : t('common.selectAll')}
+                        className="p-1 rounded hover:bg-slate-200 dark:hover:bg-white/[0.08] transition-colors shrink-0 cursor-pointer"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-[#7367F0]" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-300 dark:text-slate-600" />
+                        )}
+                      </button>
                       <Avatar name={lead.name} size="sm" shape="rounded" />
                       <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-snug break-words truncate">
                         {lead.name}
                       </h4>
                     </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
                       {lead.is_verified ? (
-                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/20">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/20">
                           <Check className="w-2.5 h-2.5" />
                           <span>{t('leadFinder.verifiedBadge')}</span>
                         </span>
                       ) : (
-                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#FF9F43]/15 text-[#FF9F43] border border-[#FF9F43]/20">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#FF9F43]/15 text-[#FF9F43] border border-[#FF9F43]/20">
                           <span>{t('leadFinder.leadBadge')}</span>
                         </span>
                       )}
+                      {isSaved && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#7367F0]/10 text-[#7367F0] border border-[#7367F0]/20">
+                          <Database className="w-2.5 h-2.5" />
+                          <span>{t('leadFinder.savedBadge')}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  
+
                   {/* Category & Entity Type placed below the title */}
                   <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                     <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-[#7367F0]/10 text-[#7367F0] dark:bg-[#7367F0]/20 dark:text-[#A59DF8]">
@@ -575,8 +684,39 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                   </a>
                 </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
+
+          {/* Bulk Selection Toolbar (CRM pattern): save selection to CRM */}
+          <BulkActionToolbar
+            selectedCount={selectedKeys.length}
+            totalCount={discoveredLeads.length}
+            selectAllMatching={false}
+            onClearSelection={() => setSelectedKeys([])}
+            actions={
+              <>
+                <ToolbarActionButton
+                  onClick={handleSaveSelected}
+                  disabled={isSaving || selectedKeys.length === 0}
+                >
+                  {isSaving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>{t('leadFinder.saveSelected')}</span>
+                </ToolbarActionButton>
+                <ToolbarActionButton
+                  onClick={handleSaveAll}
+                  disabled={isSaving || unsavedLeads.length === 0}
+                >
+                  <Database className="w-3.5 h-3.5" />
+                  <span>{t('leadFinder.saveAll')}</span>
+                </ToolbarActionButton>
+              </>
+            }
+          />
         </div>
       )}
 
@@ -694,7 +834,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
           {/* Info Badge */}
           <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-100 dark:border-white/[0.05] space-y-1">
             <p className="text-xs font-semibold text-slate-700 dark:text-slate-200">
-              {t('leadFinder.savingLeadsCount', { count: discoveredLeads.length })}
+              {t('leadFinder.savingLeadsCount', { count: savedLeads.length })}
             </p>
             <p className="text-[11px] text-slate-400">
               {t('leadFinder.duplicateNotice')}

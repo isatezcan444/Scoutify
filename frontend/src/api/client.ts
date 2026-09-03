@@ -257,6 +257,19 @@ export class ApiClient {
     return res.json();
   }
 
+  static async saveScraperLeads(jobId: number, leads: any[]): Promise<{ job_id: number; saved: any[]; new_count: number; updated_count: number }> {
+    const res = await fetch(`${API_BASE}/scraper/jobs/${jobId}/save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leads })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Sonuçlar kaydedilemedi');
+    }
+    return res.json();
+  }
+
   // --- Campaigns ---
   static async getCampaigns(): Promise<Campaign[]> {
     const res = await fetch(`${API_BASE}/campaigns`);

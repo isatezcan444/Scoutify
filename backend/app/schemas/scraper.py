@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict, Field
 from backend.app.models.blacklist import ScraperJobStatus
 
@@ -69,3 +69,19 @@ class BlacklistPaginationResponse(BaseModel):
     pages: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ScraperSaveRequest(BaseModel):
+    """Explicit on-demand persist of discovery results.
+
+    Discovery (POST /scraper/start) never writes to CRM by itself; the client
+    sends back the reviewed selection (or the full set) through this endpoint.
+    """
+    leads: List[Dict[str, Any]] = Field(min_length=1, max_length=1000)
+
+
+class ScraperSaveResponse(BaseModel):
+    job_id: int
+    saved: List[Dict[str, Any]]
+    new_count: int
+    updated_count: int

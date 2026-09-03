@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,7 +10,8 @@ from sqlalchemy import select
 from backend.app.core.database import get_db, AsyncSessionLocal
 from backend.app.core.config import settings
 from backend.app.models.blacklist import ScraperJob, ScraperJobStatus
-from backend.app.schemas.scraper import ScraperRunRequest, ScraperJobResponse
+from backend.app.models.lead import Lead
+from backend.app.schemas.scraper import ScraperRunRequest, ScraperSaveRequest, ScraperSaveResponse, ScraperJobResponse
 from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
 from backend.app.services.lead_ingest_service import LeadIngestService
 from backend.app.api.v1.websocket import ws_manager
@@ -80,74 +81,31 @@ async def run_scraper_task(
                     progress_callback=on_progress,
                 )
 
-            # Ingest leads cleanly via LeadIngestService (with live progress so
-            # the Supabase write phase never looks like a post-scan hang).
-            async def on_ingest_progress(done: int, total: int) -> None:
-                await on_progress({
-                    "type": "log",
-                    "key": "leadFinder.stream.savingLeads",
-                    "params": {"done": done, "total": total},
-                    "message": f"💾 Kaydediliyor: {done}/{total} işletme...",
-                    "progress": 95 if total == 0 else min(99, 95 + int(4 * done / max(total, 1))),
-                })
-
-            all_leads, new_count, updated_count = await LeadIngestService.ingest_leads(
-                db=db,
-                raw_leads=raw_leads,
-                source="GOOGLE_MAPS",
-                search_keyword=keyword,
-                search_location=f"{city} {', '.join(districts)}",
-                progress_callback=on_ingest_progress,
-            )
-
+            # Discovery-only: nothing is written to CRM here. The user reviews
+            # the live results and explicitly saves a selection (or all) via
+            # POST /scraper/jobs/{job_id}/save. Persisted counts stay zero
+            # until that happens.
             job.status = ScraperJobStatus.COMPLETED
             job.total_found = len(raw_leads)
             job.total_valid_phones = sum(1 for r in raw_leads if r.get("phone_e164"))
-            job.total_new_leads = new_count
+            job.total_new_leads = 0
             job.completed_at = datetime.utcnow()
             job.duration_seconds = int(time.time() - start_time)
 
             await db.commit()
 
-            lead_dicts = [
-                {
-                    "id": l.id,
-                    "name": l.name,
-                    "category": l.category,
-                    "entity_type": l.entity_type,
-                    "phone": l.phone,
-                    "phone_e164": l.phone_e164,
-                    "is_mobile": l.is_mobile,
-                    "is_whatsapp_eligible": l.is_whatsapp_eligible,
-                    "address": l.address,
-                    "city": l.city,
-                    "district": l.district,
-                    "latitude": l.latitude,
-                    "longitude": l.longitude,
-                    "website": l.website,
-                    "rating": l.rating,
-                    "reviews_count": l.reviews_count,
-                    "is_verified": l.is_verified,
-                    "place_id": l.place_id,
-                    "maps_url": (l.custom_data or {}).get("maps_url"),
-                    "status": l.status.value if hasattr(l.status, 'value') else str(l.status),
-                    "created_at": str(l.created_at)
-                }
-                for l in all_leads
-            ]
-
             await ws_manager.broadcast({
                 "event": "scraper_completed",
                 "job_id": job_id,
                 "total_found": len(raw_leads),
-                "total_new_leads": new_count,
-                "leads": lead_dicts,
+                "total_new_leads": 0,
+                "leads": raw_leads,
                 "metrics": latest_metrics
             })
 
             logger.info(
                 f"[SEARCH_JOB_DONE] job_id={job_id} in {job.duration_seconds}s "
-                f"found={len(raw_leads)} new={new_count} updated={updated_count}"
+                f"discovered={len(raw_leads)} (awaiting explicit user save)"
             )
 
         except asyncio.CancelledError:
@@ -237,6 +195,76 @@ async def start_scraper(
     active_tasks[job.id] = task
 
     return job
+
+
+def lead_to_dict(l: Lead) -> Dict[str, Any]:
+    """Serializes a persisted Lead for discovery/save responses (always carries id)."""
+    return {
+        "id": l.id,
+        "name": l.name,
+        "category": l.category,
+        "entity_type": l.entity_type,
+        "phone": l.phone,
+        "phone_e164": l.phone_e164,
+        "is_mobile": l.is_mobile,
+        "is_whatsapp_eligible": l.is_whatsapp_eligible,
+        "address": l.address,
+        "city": l.city,
+        "district": l.district,
+        "latitude": l.latitude,
+        "longitude": l.longitude,
+        "website": l.website,
+        "rating": l.rating,
+        "reviews_count": l.reviews_count,
+        "is_verified": l.is_verified,
+        "place_id": l.place_id,
+        "maps_url": (l.custom_data or {}).get("maps_url"),
+        "status": l.status.value if hasattr(l.status, 'value') else str(l.status),
+        "created_at": str(l.created_at)
+    }
+
+
+@router.post("/jobs/{job_id}/save", response_model=ScraperSaveResponse)
+async def save_scraper_leads(
+    job_id: int,
+    req: ScraperSaveRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """Persists a user-reviewed selection of discovery results to CRM.
+
+    Discovery itself is side-effect free; this is the only path that creates
+    Lead rows from a scrape job. Re-saving is idempotent (matches merge).
+    """
+    job = await db.get(ScraperJob, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Tarama işi bulunamadı")
+    if job.status != ScraperJobStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400,
+            detail="Yalnızca tamamlanmış taramaların sonuçları kaydedilebilir."
+        )
+
+    all_leads, new_count, updated_count = await LeadIngestService.ingest_leads(
+        db=db,
+        raw_leads=req.leads,
+        source="GOOGLE_MAPS",
+        search_keyword=job.keyword,
+        search_location=job.location,
+    )
+
+    job.total_new_leads = (job.total_new_leads or 0) + new_count
+    await db.commit()
+
+    logger.info(
+        f"[SEARCH_JOB_SAVE] job_id={job_id} saved={len(all_leads)} "
+        f"new={new_count} updated={updated_count}"
+    )
+    return ScraperSaveResponse(
+        job_id=job_id,
+        saved=[lead_to_dict(l) for l in all_leads],
+        new_count=new_count,
+        updated_count=updated_count,
+    )
 
 
 @router.get("/jobs", response_model=List[ScraperJobResponse])
