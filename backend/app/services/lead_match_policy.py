@@ -96,4 +96,9 @@ class LeadMatchPolicy:
 
     @staticmethod
     async def _first(db: AsyncSession, stmt) -> Optional[Lead]:
-        return (await db.execute(stmt)).scalar_one_or_none()
+        # Fail-safe: legacy production rows can contain duplicates created
+        # before the unique constraints were hardened. A whole scrape job
+        # must never fail with "Multiple rows were found..." — merge into
+        # the oldest row instead (deterministic via id ordering).
+        stmt = stmt.order_by(Lead.id).limit(1)
+        return (await db.execute(stmt)).scalars().first()

@@ -320,3 +320,70 @@ async def test_scrape_reports_explicit_suppression_funnel():
         + metrics["duplicate_merged"]
         + metrics["geo_filtered_out"]
     )
+
+
+# ============================================================
+# Legacy-duplicate fail-safe (prod job 19: "Multiple rows were found...")
+# ============================================================
+
+class TestLegacyDuplicateFailSafe:
+    """Production Supabase holds duplicate rows predating the hardened unique
+    constraints. Identity resolution must merge into the oldest row instead of
+    raising MultipleResultsFound and failing the whole scrape job."""
+
+    async def _seed_legacy_dupes(self, db):
+        first = Lead(
+            name="Legacy Klinik", city="İstanbul", district="Ataşehir",
+            phone="Belirtilmemiş", phone_e164=None, place_id=None,
+        )
+        second = Lead(
+            name="Legacy Klinik", city="İstanbul", district="Ataşehir",
+            phone="Belirtilmemiş", phone_e164=None, place_id=None,
+        )
+        db.add_all([first, second])
+        await db.commit()
+        await db.refresh(first)
+        await db.refresh(second)
+        return first, second
+
+    @pytest.mark.asyncio
+    async def test_resolve_merges_into_oldest_on_name_location_dupes(self):
+        maker, engine = await get_in_memory_db()
+        try:
+            async with maker() as db:
+                first, _ = await self._seed_legacy_dupes(db)
+                verdict = await LeadMatchPolicy().resolve(
+                    db,
+                    {"name": "Legacy Klinik", "city": "İstanbul",
+                     "district": "Ataşehir", "place_id": None},
+                    "Legacy Klinik",
+                    None,
+                )
+                assert verdict.existing is not None
+                assert verdict.existing.id == first.id
+                assert verdict.basis == MatchBasis.NAME_LOCATION
+        finally:
+            await engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_ingest_completes_over_legacy_dupes(self):
+        maker, engine = await get_in_memory_db()
+        try:
+            async with maker() as db:
+                await self._seed_legacy_dupes(db)
+                raw = [{
+                    "name": "Legacy Klinik", "city": "İstanbul",
+                    "district": "Ataşehir", "place_id": None,
+                    "phone": None, "phone_e164": None,
+                    "address": "Ataşehir, İstanbul",
+                }]
+                leads, new_count, updated_count = await LeadIngestService.ingest_leads(
+                    db=db, raw_leads=raw, source="GOOGLE_MAPS",
+                    search_keyword="Diş Kliniği",
+                    search_location="İstanbul Ataşehir",
+                )
+                assert len(leads) == 1
+                assert new_count == 0
+                assert updated_count == 1
+        finally:
+            await engine.dispose()

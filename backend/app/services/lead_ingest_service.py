@@ -74,9 +74,15 @@ class LeadIngestService:
             # Check blacklist
             is_blacklisted = False
             if e164:
-                bl_stmt = select(Blacklist).where(Blacklist.phone_e164 == e164)
+                # Fail-safe limit(1): legacy prod rows may hold duplicates.
+                bl_stmt = (
+                    select(Blacklist)
+                    .where(Blacklist.phone_e164 == e164)
+                    .order_by(Blacklist.id)
+                    .limit(1)
+                )
                 bl_res = await db.execute(bl_stmt)
-                if bl_res.scalar_one_or_none():
+                if bl_res.scalars().first():
                     is_blacklisted = True
 
             # Identity resolution (policy-owned). A distinct business that merely
@@ -101,6 +107,9 @@ class LeadIngestService:
                     phone_query = select(Lead.id).where(Lead.phone_e164 == e164)
                     if target_lead_id:
                         phone_query = phone_query.where(Lead.id != target_lead_id)
+                    # Fail-safe limit(1): legacy prod rows may hold duplicates;
+                    # any hit means conflict — never raise "Multiple rows...".
+                    phone_query = phone_query.order_by(Lead.id).limit(1)
                     existing_by_phone = (await db.execute(phone_query)).scalar_one_or_none()
                     if existing_by_phone:
                         conflict = True
