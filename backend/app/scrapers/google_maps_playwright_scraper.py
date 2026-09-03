@@ -55,7 +55,7 @@ _FEED_GROWTH_POLL_MS = 300
 
 # Extracts structured attributes from the currently open place details pane.
 # paneTitle enables caller-side validation that the pane belongs to the clicked card.
-_DETAILS_EXTRACT_JS = """() => {
+_DETAILS_EXTRACT_JS = r"""() => {
     const res = {
         paneTitle: null,
         address: null,
