@@ -17,7 +17,9 @@ Orchestration invariants:
   distinct businesses too — name-based suppression requires address agreement.
 - Metrics truthfulness: every reported metric reflects a value actually measured.
 """
+import asyncio
 import enum
+import gc
 import hashlib
 import logging
 import math
@@ -555,6 +557,9 @@ class GoogleMapsScraper(BaseScraper):
                     logger.warning(
                         f"[GMAPS_ENGINE] Query variant '{term}' failed for {clean_city} > {district}: {term_err}"
                     )
+                finally:
+                    gc.collect()
+                    await asyncio.sleep(1.5)
 
                 if progress_callback and len(search_terms) > 1:
                     term_pct = min(

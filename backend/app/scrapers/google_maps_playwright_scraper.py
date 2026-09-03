@@ -134,13 +134,14 @@ _DETAILS_EXTRACT_JS = r"""() => {
 
 class GoogleMapsCardParser:
     """
-    Advanced & Stable Python BeautifulSoup Parser for Google Maps Place Cards (div.Nv2PK).
-    Parses structured attributes directly from rendered card HTML in pure Python:
-    - Name (.qBF1Pd, [role="heading"], a.hfpxzc[aria-label])
+    Advanced & Stable Python Parser for Google Maps Place Cards.
+    Parses and normalizes raw DOM elements using Python's phonenumbers library,
+    regex tokenization, and strict Turkish category & address rules:
+    - Name normalization & deduplication
     - Canonical Maps URL (a.hfpxzc[href])
-    - Rating (.MW4etd) & Reviews Count (.UY7F9)
-    - Website (a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web"])
-    - Verified Phone: regex scanner across all card spans for Turkish landline (02xx), GSM (05xx), 0850, and +90
+    - Precise Rating & Reviews Count parsing
+    - Clean Official Website URL unwrapping
+    - Robust Phone Extraction: scans card spans, phone buttons and attributes for 02xx, 05xx, 0850, and +90
     - Category: cleanly isolated from .W4Efsd metadata lines (excluding ratings, status words, addresses)
     - Address: street/neighborhood tokens or fallback to district/city
     - Coordinates: extracted from URL
@@ -163,98 +164,86 @@ class GoogleMapsCardParser:
         'stüdyo', 'laboratuvar', 'sigorta', 'lojistik'
     )
 
-    STATUS_WORDS = ('açık', 'kapalı', 'kapanmak üzere', '24 saat açık', 'open', 'closed')
+    STATUS_WORDS = ('açık', 'kapalı', 'kapanmak üzere', '24 saat açık', 'open', 'closed', 'kapanır')
     ADDRESS_MARKERS = ('mah', 'cad', 'cd', 'sok', 'sk', 'no:', 'bulvar', 'kat:', 'sitesi', 'blok', 'apt')
 
     @classmethod
-    def parse(cls, card_html: str, keyword: str, city: str, district: str) -> Optional[Dict[str, Any]]:
-        if not card_html:
-            return None
-        soup = BeautifulSoup(card_html, 'html.parser')
-
-        # 1. Place URL & Place ID
-        link_el = soup.select_one('a.hfpxzc')
-        href = link_el.get('href', '').strip() if link_el else ''
-        if not href or '/maps/place/' not in href:
-            return None
-
-        # 2. Business Name
-        name_el = soup.select_one('.qBF1Pd, [role="heading"]')
-        raw_name = name_el.get_text(strip=True) if name_el else ''
-        if not raw_name and link_el:
-            raw_name = link_el.get('aria-label', '').strip()
-        if not raw_name:
+    def parse_item(
+        cls,
+        raw_item: Dict[str, Any],
+        keyword: str,
+        city: str,
+        district: str
+    ) -> Optional[Dict[str, Any]]:
+        href = (raw_item.get("href") or "").strip()
+        raw_name = (raw_item.get("name") or "").strip()
+        if not href or not raw_name or '/maps/place/' not in href:
             return None
 
         safe_name = raw_name.split('\n')[0].strip()[:300]
 
-        # 3. Rating & Reviews
+        # 1. Rating & Reviews
         rating = None
-        rating_el = soup.select_one('.MW4etd')
-        if rating_el:
+        rating_text = raw_item.get("ratingText")
+        if rating_text:
             try:
-                rating = float(rating_el.get_text(strip=True).replace(',', '.'))
+                rating = float(rating_text.replace(',', '.').strip())
             except (ValueError, TypeError):
                 pass
 
         reviews_count = 0
-        reviews_el = soup.select_one('.UY7F9')
-        if reviews_el:
-            digits = re.sub(r'[^0-9]', '', reviews_el.get_text())
+        rev_text = raw_item.get("revText")
+        if rev_text:
+            digits = re.sub(r'[^0-9]', '', rev_text)
             if digits:
                 try:
                     reviews_count = int(digits)
                 except ValueError:
                     pass
 
-        # 4. Official Website
-        web_el = soup.select_one('a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web sitesi"], a[aria-label*="Website"]')
-        raw_web = web_el.get('href', '').strip() if web_el else None
-        clean_web = clean_extracted_website(raw_web)
+        # 2. Official Website
+        clean_web = clean_extracted_website(raw_item.get("webHref"))
 
-        # 5. Direct Phone from Card
+        # 3. Direct Phone Extraction using Python regex & PhoneService (phonenumbers)
         phone_match = None
-        tel_link = soup.select_one('a[href^="tel:"]')
-        if tel_link:
-            tel_val = tel_link.get('href', '').replace('tel:', '').strip()
-            if tel_val:
-                phone_match = tel_val
+        phone_attr = raw_item.get("phoneAttr")
+        if phone_attr:
+            p_clean = phone_attr.replace('tel:', '').strip()
+            m = cls.PHONE_REGEX.search(p_clean)
+            if m:
+                phone_match = m.group(0).strip()
 
+        text_lines = raw_item.get("textLines") or []
+        combined_text = " ".join(text_lines)
         if not phone_match:
-            card_text = soup.get_text(' ')
-            m = cls.PHONE_REGEX.search(card_text)
+            m = cls.PHONE_REGEX.search(combined_text)
             if m:
                 phone_match = m.group(0).strip()
 
         phone_data = PhoneService.normalize_to_e164(phone_match) if phone_match else None
         raw_phone = phone_data["national_number"] if phone_data else (phone_match or "")
 
-        # 6. Category and Address from metadata lines
+        # 4. Clean Category and Address Extraction
         category = None
         extracted_address = None
 
-        text_lines = [el.get_text(strip=True) for el in soup.select('.W4Efsd, .fontBodyMedium')]
         for line in text_lines:
             parts = [p.replace('\r', ' ').replace('\n', ' ').strip() for p in line.split('\u00b7') if p.strip()]
             for part in parts:
                 p_lower = normalize_turkish(part).lower()
                 has_digit = bool(re.search(r'\d', part))
 
-                # Skip ratings like "4,7(181)" or "4.7"
                 if re.search(r'\d[,\.]\d', part):
                     continue
-                # Skip opening hours status
                 if any(s in p_lower for s in cls.STATUS_WORDS):
                     continue
 
-                # Category candidate: 2-35 chars, no digits, no parens, matches keywords or short sector phrase
                 if not category and 2 <= len(part) <= 35 and not has_digit and '(' not in part and ')' not in part and '|' not in part:
                     word_count = len(part.split())
                     if word_count <= 4:
                         if any(k in p_lower for k in cls.CATEGORY_KEYWORDS) or word_count <= 2:
                             category = part
 
-                # Address candidate: contains street markers
                 if not extracted_address and any(m in p_lower for m in cls.ADDRESS_MARKERS):
                     extracted_address = part
 
@@ -738,23 +727,45 @@ class GoogleMapsPlaywrightScraper:
             await on_progress_status(f"📡 {city} > {district} işletme akışı taranıyor...", 15)
 
         while scroll_attempts < max_scroll_attempts:
-            # 1. Fast batch extraction of visible cards' lean HTML (stripping SVGs and IMGs to keep memory under 50KB)
+            # 1. Fast incremental extraction of newly rendered DOM cards (marked with dataset.scoutScraped)
             try:
-                card_htmls: List[str] = await page.evaluate(r"""() => {
+                raw_items: List[Dict[str, Any]] = await page.evaluate("""() => {
                     const cards = document.querySelectorAll('div.Nv2PK');
-                    return Array.from(cards).map(c => {
-                        return c.outerHTML.replace(/<svg[\s\S]*?<\/svg>/gi, '').replace(/<img[\s\S]*?>/gi, '');
-                    });
+                    const newItems = [];
+                    for (let i = 0; i < cards.length; i++) {
+                        const card = cards[i];
+                        if (card.dataset.scoutScraped) continue;
+                        card.dataset.scoutScraped = "true";
+
+                        const nameEl = card.querySelector('.qBF1Pd, [role="heading"]');
+                        const linkEl = card.querySelector('a.hfpxzc');
+                        const ratingEl = card.querySelector('.MW4etd');
+                        const revEl = card.querySelector('.UY7F9');
+                        const webEl = card.querySelector('a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web"]');
+                        const textLines = Array.from(card.querySelectorAll('.W4Efsd, .fontBodyMedium')).map(el => el.innerText.trim());
+                        const phoneEl = card.querySelector('button[data-item-id*="phone"], a[href^="tel:"]');
+
+                        newItems.push({
+                            name: nameEl ? nameEl.innerText.trim() : (linkEl ? linkEl.getAttribute('aria-label') || '' : ''),
+                            href: linkEl ? linkEl.href : '',
+                            ratingText: ratingEl ? ratingEl.innerText.trim() : null,
+                            revText: revEl ? revEl.innerText.trim() : null,
+                            webHref: webEl ? webEl.href : null,
+                            phoneAttr: phoneEl ? (phoneEl.getAttribute('aria-label') || phoneEl.innerText || phoneEl.href || '') : null,
+                            textLines: textLines
+                        });
+                    }
+                    return newItems;
                 }""")
             except Exception as eval_err:
                 logger.warning(f"[GMAPS_PLAYWRIGHT] Feed evaluation warning: {eval_err}")
-                card_htmls = []
+                raw_items = []
 
             new_cards_this_iteration = 0
 
-            for html_str in card_htmls:
-                lead_dict = GoogleMapsCardParser.parse(
-                    html_str,
+            for item in raw_items:
+                lead_dict = GoogleMapsCardParser.parse_item(
+                    item,
                     keyword=keyword,
                     city=city,
                     district=district,
@@ -814,7 +825,7 @@ class GoogleMapsPlaywrightScraper:
                 logger.debug(f"[GMAPS_PLAYWRIGHT] Scroll action fallback: {scroll_err}")
 
             # 3. Adaptive wait for DOM cards growth (up to 2.5s)
-            previous_count = len(card_htmls)
+            previous_count = len(results)
             deadline = time.monotonic() + 2.5
             while time.monotonic() < deadline:
                 try:
