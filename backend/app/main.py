@@ -157,9 +157,18 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health_check():
+    # Process RSS via stdlib only (no psutil dependency): lets operators
+    # verify the 512 MB Render budget from the outside. ru_maxrss is KiB on
+    # Linux, bytes on macOS — normalize to MB for both.
+    import resource
+    import sys
+    maxrss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    memory_mb = round(maxrss / 1024, 1) if sys.platform.startswith("linux") else round(maxrss / (1024 * 1024), 1)
     return {
         "status": "healthy",
         "service": "Scoutify Backend API",
         "version": settings.VERSION,
         "simulation_mode": settings.SIMULATION_MODE,
+        "scraper_engine": getattr(settings, "SCRAPER_ENGINE", "HTTP"),
+        "memory_mb": memory_mb,
     }
