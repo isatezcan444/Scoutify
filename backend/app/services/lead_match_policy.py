@@ -11,7 +11,7 @@ two distinct businesses; it only flags the number.
 """
 import enum
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -90,6 +90,48 @@ class LeadMatchPolicy:
             ),
         )
         if existing:
+            return MatchVerdict(existing=existing, basis=MatchBasis.NAME_LOCATION)
+
+        return MatchVerdict()
+
+    def resolve_from_caches(
+        self,
+        raw: dict,
+        name: str,
+        e164: Optional[str],
+        find: Callable[[str, object], Optional[Lead]],
+    ) -> MatchVerdict:
+        """Identical cascade to resolve(), but over caller-supplied lookups.
+
+        find(kind, key) returns the oldest matching row or None, where kind is
+        'place' (by place_id), 'phone' (by e164) or 'nameloc' (by the
+        (name, city, district) triple). Zero DB round-trips: the caller
+        prefetches with batched IN queries and overlays rows it created
+        earlier in the same batch (read-your-writes). Single home for the
+        matching rules — resolve() stays the DB-backed path for races/tests.
+        """
+        place_id = raw.get("place_id")
+
+        if place_id:
+            existing = find("place", place_id)
+            if existing is not None:
+                return MatchVerdict(existing=existing, basis=MatchBasis.PLACE_ID)
+
+        if e164:
+            existing = find("phone", e164)
+            if existing is not None:
+                identities_agree = (
+                    not existing.place_id
+                    or not place_id
+                    or existing.place_id == place_id
+                )
+                if identities_agree:
+                    return MatchVerdict(existing=existing, basis=MatchBasis.PHONE)
+                # Different physical places share the line → never collapse them.
+                return MatchVerdict(shares_phone_line=True)
+
+        existing = find("nameloc", (name, raw.get("city"), raw.get("district")))
+        if existing is not None:
             return MatchVerdict(existing=existing, basis=MatchBasis.NAME_LOCATION)
 
         return MatchVerdict()

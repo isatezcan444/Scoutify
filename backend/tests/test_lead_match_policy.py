@@ -387,3 +387,64 @@ class TestLegacyDuplicateFailSafe:
                 assert updated_count == 1
         finally:
             await engine.dispose()
+
+
+# ============================================================
+# resolve() vs resolve_from_caches() equivalence
+# ============================================================
+
+class TestResolveCachesEquivalence:
+    """The batched fast path must reach byte-identical verdicts to the
+    DB-backed cascade across all rules (incl. shared-line + legacy dupes)."""
+
+    async def _seed(self, db):
+        rows = [
+            Lead(name="Klinik P", city="İstanbul", district="Ataşehir",
+                 phone="+902161111111", phone_e164="+902161111111",
+                 place_id="gmaps_eq_place"),
+            Lead(name="Santral", city="İstanbul", district="Kadıköy",
+                 phone="08500000000", phone_e164="+908500000000",
+                 place_id="gmaps_eq_other_place"),
+            Lead(name="Klinik N", city="İstanbul", district="Ataşehir",
+                 phone="Belirtilmemiş", phone_e164=None, place_id=None),
+        ]
+        db.add_all(rows)
+        await db.commit()
+        for r in rows:
+            await db.refresh(r)
+        return rows
+
+    def _caches(self, rows):
+        place = {r.place_id: r for r in rows if r.place_id}
+        phone = {r.phone_e164: r for r in rows if r.phone_e164}
+        nameloc = {(r.name, r.city, r.district): r for r in rows}
+        def find(kind, key):
+            return {"place": place, "phone": phone, "nameloc": nameloc}[kind].get(key)
+        return find
+
+    @staticmethod
+    def _sig(v):
+        return (v.existing.id if v.existing else None, v.basis, v.shares_phone_line)
+
+    @pytest.mark.asyncio
+    async def test_verdicts_match_across_rules(self):
+        maker, engine = await get_in_memory_db()
+        try:
+            async with maker() as db:
+                rows = await self._seed(db)
+                find = self._caches(rows)
+                policy = LeadMatchPolicy()
+                cases = [
+                    ({"place_id": "gmaps_eq_place"}, "Klinik P", "+902161111111"),
+                    ({"place_id": "gmaps_eq_place"}, "Klinik P", None),
+                    ({"place_id": "gmaps_eq_new"}, "Yeni", "+902161111111"),
+                    ({"place_id": "gmaps_eq_new2"}, "Baska", "+908500000000"),
+                    ({"city": "İstanbul", "district": "Ataşehir"}, "Klinik N", None),
+                    ({"city": "İstanbul", "district": "Yok"}, "Kimse", None),
+                ]
+                for raw, name, e164 in cases:
+                    db_verdict = await policy.resolve(db, raw, name, e164)
+                    cache_verdict = policy.resolve_from_caches(raw, name, e164, find)
+                    assert self._sig(cache_verdict) == self._sig(db_verdict), (raw, name, e164)
+        finally:
+            await engine.dispose()

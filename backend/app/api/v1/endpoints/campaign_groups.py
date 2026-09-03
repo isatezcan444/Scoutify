@@ -22,6 +22,48 @@ from backend.app.schemas.lead import LeadResponse
 router = APIRouter()
 
 
+async def _bulk_insert_memberships(
+    db: AsyncSession, group_id: int, lead_ids: List[int]
+) -> int:
+    """Inserts (group_id, lead_id) memberships in ONE round-trip.
+
+    Falls back to per-row savepoints only when the bulk statement hits an
+    IntegrityError (concurrent race inserting the same pair). Returns the
+    number of rows actually added.
+    """
+    distinct_ids = list(set(lead_ids))
+    if not distinct_ids:
+        return 0
+    now = datetime.utcnow()
+    try:
+        async with db.begin_nested():
+            await db.execute(
+                insert(campaign_group_leads).values([
+                    {"group_id": group_id, "lead_id": lid, "added_at": now}
+                    for lid in distinct_ids
+                ])
+            )
+        return len(distinct_ids)
+    except IntegrityError:
+        pass
+    added = 0
+    for lid in distinct_ids:
+        try:
+            async with db.begin_nested():
+                await db.execute(
+                    insert(campaign_group_leads).values(
+                        group_id=group_id,
+                        lead_id=lid,
+                        added_at=datetime.utcnow(),
+                    )
+                )
+            added += 1
+        except IntegrityError:
+            # Pair already present (pre-existing or concurrent race) — skip.
+            pass
+    return added
+
+
 async def _get_group_counts(db: AsyncSession, group_id: int) -> tuple[int, int]:
     """Returns (total_leads_count, whatsapp_eligible_count) for a given group."""
     stmt = (
@@ -112,18 +154,7 @@ async def create_campaign_group(
         leads_res = await db.execute(select(Lead.id).where(Lead.id.in_(distinct_lead_ids)))
         valid_lead_ids = [row[0] for row in leads_res.fetchall()]
 
-        for lid in valid_lead_ids:
-            try:
-                async with db.begin_nested():
-                    await db.execute(
-                        insert(campaign_group_leads).values(
-                            group_id=group.id,
-                            lead_id=lid,
-                            added_at=datetime.utcnow(),
-                        )
-                    )
-            except IntegrityError:
-                pass
+        await _bulk_insert_memberships(db, group.id, valid_lead_ids)
         await db.commit()
         await db.refresh(group)
 
@@ -267,23 +298,8 @@ async def add_leads_to_campaign_group(
     new_lead_ids = [lid for lid in valid_lead_ids if lid not in existing_member_ids]
     already_existing_in_group = len(valid_lead_ids) - len(new_lead_ids)
 
-    # 4. Insert only new leads with savepoint protection for concurrent race conditions
-    actually_added_count = 0
-    for lid in new_lead_ids:
-        try:
-            async with db.begin_nested():
-                await db.execute(
-                    insert(campaign_group_leads).values(
-                        group_id=group.id,
-                        lead_id=lid,
-                        added_at=datetime.utcnow(),
-                    )
-                )
-                actually_added_count += 1
-        except IntegrityError:
-            # Concurrent transaction already inserted this (group_id, lead_id) pair.
-            # Savepoint safely rolled back without invalidating the parent transaction.
-            pass
+    # 4. Bulk insert (single round-trip; per-row savepoint fallback on races)
+    actually_added_count = await _bulk_insert_memberships(db, group_id, new_lead_ids)
 
     group.updated_at = datetime.utcnow()
     await db.commit()

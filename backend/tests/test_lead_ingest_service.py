@@ -156,3 +156,90 @@ async def test_ingest_batch_blacklist_prefetch_marks_unsubscribed():
         assert by_name["Engelli Klinik"].status == LeadStatus.UNSUBSCRIBED
         assert by_name["Temiz Klinik"].status == LeadStatus.NEW
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ingest_statement_budget_stays_flat():
+    """50 fresh leads must persist in a handful of round-trips (bulk insert),
+    not ~7 statements per lead. Guards the Supabase save latency fix."""
+    from sqlalchemy import event as sa_event
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    counter = {"n": 0}
+
+    @sa_event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _count(conn, cursor, statement, params, context, executemany):
+        counter["n"] += 1
+
+    raw = [
+        {"name": f"Budget Klinik {i}", "city": "İstanbul", "district": "Ataşehir",
+         "place_id": f"gmaps_budget_{i}", "phone": f"0534{i:07d}", "phone_e164": f"+90534{i:07d}"}
+        for i in range(30)
+    ]
+    async with maker() as db:
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+    await engine.dispose()
+    assert new_c == 30 and len(leads) == 30
+    assert counter["n"] <= 30, f"too many statements: {counter['n']}"
+
+
+@pytest.mark.asyncio
+async def test_ingest_same_batch_duplicates_converge():
+    """Same-batch duplicates must fold onto one row (read-your-writes),
+    and a distinct business on a shared line keeps its own phoneless row."""
+    session_maker, engine = await get_in_memory_db()
+    async with session_maker() as db:
+        raw = [
+            {"name": "Batch A", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": "gmaps_batch_X", "phone": "05350000001", "phone_e164": "+905350000001"},
+            {"name": "Batch A", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": "gmaps_batch_X", "phone": "05350000001", "phone_e164": "+905350000001",
+             "website": "https://batcha.example"},
+            {"name": "Batch C", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": "gmaps_batch_Y", "phone": "05350000001", "phone_e164": "+905350000001"},
+        ]
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+        assert new_c == 2
+        assert upd_c == 1
+        assert len(leads) == 3
+        # Folded website landed on the single Batch A row (same id twice —
+        # one entry per raw, mirroring long-standing return semantics).
+        a_rows = [l for l in leads if l.place_id == "gmaps_batch_X"]
+        assert {l.id for l in a_rows} == {a_rows[0].id}
+        assert a_rows[0].website == "https://batcha.example"
+        # Shared line kept its display phone but no targeting e164
+        c_rows = [l for l in leads if l.place_id == "gmaps_batch_Y"]
+        assert len(c_rows) == 1
+        assert c_rows[0].phone_e164 is None
+        assert c_rows[0].phone == "05350000001"
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reingest_identical_batch_writes_nothing():
+    """Identical re-save must not dirty any row (no UPDATE round-trips)."""
+    from sqlalchemy import event as sa_event
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    raw = [
+        {"name": f"Stable {i}", "city": "İ", "district": "A",
+         "place_id": f"gmaps_stable_{i}", "phone": None, "phone_e164": None}
+        for i in range(10)
+    ]
+    async with maker() as db:
+        await LeadIngestService.ingest_leads(db, raw)
+    counter = {"n": 0}
+
+    @sa_event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _count(conn, cursor, statement, params, context, executemany):
+        counter["n"] += 1
+
+    async with maker() as db:
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+    await engine.dispose()
+    assert new_c == 0 and upd_c == 10
+    assert counter["n"] <= 10, f"no-op re-ingest wrote too much: {counter['n']}"
