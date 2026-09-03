@@ -151,7 +151,19 @@ async def list_leads(
 async def get_distinct_categories(db: AsyncSession = Depends(get_db)):
     stmt = select(Lead.category).where(Lead.category.is_not(None)).distinct().order_by(Lead.category)
     res = await db.execute(stmt)
-    return [c for c in res.scalars().all() if c]
+    raw_cats = [c.strip() for c in res.scalars().all() if c and isinstance(c, str)]
+    clean_cats = []
+    seen = set()
+    for cat in raw_cats:
+        # Reject multi-line, numbers, parens or overly long category strings
+        if "\n" in cat or "\r" in cat or len(cat) > 35 or len(cat) < 2:
+            continue
+        if any(char.isdigit() for char in cat):
+            continue
+        if cat.lower() not in seen:
+            seen.add(cat.lower())
+            clean_cats.append(cat)
+    return clean_cats
 
 
 @router.get("/cities", response_model=List[str])

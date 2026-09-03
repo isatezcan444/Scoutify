@@ -158,8 +158,8 @@ class Settings(BaseSettings):
     # Zaman bazlı stagnasyon eşiği: bu süre boyunca hiç yeni kart görülmezse
     # sonuç listesinin bittiği kabul edilir (saniye)
     SCRAPER_STAGNATION_TIMEOUT_SECONDS: float = 12.0
-    # Website telefon zenginleştirme HTTP timeout'u (saniye)
-    SCRAPER_ENRICH_TIMEOUT_SECONDS: float = 4.0
+    # Website telefon zenginleştirme HTTP timeout'u (saniye - akışı yavaşlatmamak için 1.5s)
+    SCRAPER_ENRICH_TIMEOUT_SECONDS: float = 1.5
     # Sektör etiketinden türetilecek maksimum arama varyantı sayısı
     SCRAPER_MAX_QUERY_VARIANTS: int = 3
     # Coğrafi çit: adresi hedef ilçe dışını kanıtlayan işletmeleri ele

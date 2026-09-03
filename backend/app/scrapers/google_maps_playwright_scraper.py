@@ -25,6 +25,7 @@ import time
 from typing import List, Dict, Any, Optional, Set, Callable
 from urllib.parse import quote, unquote, urlparse
 from playwright.async_api import async_playwright, Browser, Page, Locator
+from bs4 import BeautifulSoup
 
 from backend.app.core.config import settings
 from backend.app.services.phone_service import PhoneService
@@ -130,58 +131,157 @@ _DETAILS_EXTRACT_JS = r"""() => {
     return res;
 }"""
 
-# Direct batch extraction of all rendered feed cards in one O(1) JavaScript evaluation.
-# NOTE: Constructed via string concatenation so Python escape sequences don't corrupt JS regex.
-_FEED_CARDS_EXTRACT_JS = "\n".join([
-    "() => {",
-    "    const results = [];",
-    "    const cards = document.querySelectorAll('div.Nv2PK');",
-    "    const MIDDOT = '\\u00b7';",
-    "    for (const card of cards) {",
-    "        const nameEl = card.querySelector('.qBF1Pd, a.hfpxzc');",
-    "        const linkEl = card.querySelector('a.hfpxzc');",
-    "        const ratingEl = card.querySelector('.MW4etd');",
-    "        const reviewsEl = card.querySelector('.UY7F9');",
-    "        const webEl = card.querySelector('a[data-value=\"Web sitesi\"], a.lcr4fd, a[aria-label*=\"Web sitesi\"]');",
-    "        const name = nameEl ? (nameEl.innerText || nameEl.getAttribute('aria-label') || '').trim() : '';",
-    "        const href = linkEl ? linkEl.href : '';",
-    "        if (!name || !href) continue;",
-    "        const fullText = card.innerText || '';",
-    "        const textLines = Array.from(card.querySelectorAll('.W4Efsd, .fontBodyMedium')).map(el => el.innerText.trim());",
-    "        let phone = null;",
-    r"        const phoneMatch = fullText.match(/(?:0[2-5]\d{2}[\s.\-()\u0020]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|\(0[2-5]\d{2}\)[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|\+90[\s.\-()]*[2-5]\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|05\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|0850[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2})/);",
-    "        if (phoneMatch) phone = phoneMatch[0].trim();",
-    "        let category = null;",
-    "        let address = null;",
-    "        for (const line of textLines) {",
-    "            const parts = line.split(MIDDOT).map(p => p.replace(/[\\r\\n]+/g, ' ').trim()).filter(p => p.length > 0);",
-    "            for (const part of parts) {",
-    "                const hasRating = /[0-9],[0-9]/.test(part);",
-    "                const wordCount = part.trim().split(/\\s+/).length;",
-    "                if (!category && part.length > 2 && part.length <= 60 && wordCount <= 5 && !/^[0-9]/.test(part) && !part.includes('(') && !part.includes('|') && !hasRating &&",
-    "                    (part.includes('Klini') || part.includes('Hastane') || part.includes('Doktor') || part.includes('Merkezi') || part.includes('Poliklinik') ||",
-    "                     part.includes('Sa\\u011fl\\u0131k') || part.includes('Di\\u015f') || part.includes('\\u015eirket') || part.includes('Dan\\u0131\\u015fmanl\\u0131k') ||",
-    "                     part.includes('G\\u00fczellik') || part.includes('Avukat') || part.includes('Restoran') || part.includes('Kafe') || part.includes('Otel') ||",
-    "                     part.includes('M\\u00fchendis') || part.includes('Hizmet') || part.includes('Ofis') || part.includes('Ajans'))) {",
-    "                    category = part;",
-    "                }",
-    "                if (!address && part.length > 8 && !address &&",
-    "                    (part.includes('Cd') || part.includes('Sk') || part.includes('Sok') || part.includes('Mah') || part.includes('No:') ||",
-    "                     part.includes('Bulvar') || part.includes('Kat:') || part.includes('Cad') || part.includes('Sitesi') || part.includes('Blok'))) {",
-    "                    address = part;",
-    "                }",
-    "            }",
-    "        }",
-    "        const ratingText = ratingEl ? ratingEl.innerText.replace(',', '.').trim() : null;",
-    "        const rating = ratingText ? parseFloat(ratingText) : null;",
-    r"        const revText = reviewsEl ? reviewsEl.innerText.replace(/[^0-9]/g, '') : null;",
-    "        const reviewsCount = revText ? parseInt(revText, 10) : 0;",
-    "        const website = webEl ? webEl.href : null;",
-    "        results.push({ name, href, phone, address, category, rating, reviewsCount, website });",
-    "    }",
-    "    return results;",
-    "}",
-])
+class GoogleMapsCardParser:
+    """
+    Advanced & Stable Python BeautifulSoup Parser for Google Maps Place Cards (div.Nv2PK).
+    Parses structured attributes directly from rendered card HTML in pure Python:
+    - Name (.qBF1Pd, [role="heading"], a.hfpxzc[aria-label])
+    - Canonical Maps URL (a.hfpxzc[href])
+    - Rating (.MW4etd) & Reviews Count (.UY7F9)
+    - Website (a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web"])
+    - Verified Phone: regex scanner across all card spans for Turkish landline (02xx), GSM (05xx), 0850, and +90
+    - Category: cleanly isolated from .W4Efsd metadata lines (excluding ratings, status words, addresses)
+    - Address: street/neighborhood tokens or fallback to district/city
+    - Coordinates: extracted from URL
+    """
+
+    PHONE_REGEX = re.compile(
+        r'(?:0[2-5]\d{2}[\s.\-()\u0020]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|'
+        r'\(0[2-5]\d{2}\)[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|'
+        r'\+90[\s.\-()]*[2-5]\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|'
+        r'05\d{2}[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2}|'
+        r'0850[\s.\-()]*\d{3}[\s.\-()]*\d{2}[\s.\-()]*\d{2})'
+    )
+
+    CATEGORY_KEYWORDS = (
+        'klini', 'hastane', 'doktor', 'merkez', 'poliklinik',
+        'sağlık', 'diş', 'hekim', 'şirket', 'danışmanlık',
+        'güzellik', 'avukat', 'restoran', 'kafe', 'otel',
+        'mühendis', 'hizmet', 'ofis', 'ajans', 'eczane',
+        'optik', 'kuaför', 'berber', 'servis', 'kurs',
+        'stüdyo', 'laboratuvar', 'sigorta', 'lojistik'
+    )
+
+    STATUS_WORDS = ('açık', 'kapalı', 'kapanmak üzere', '24 saat açık', 'open', 'closed')
+    ADDRESS_MARKERS = ('mah', 'cad', 'cd', 'sok', 'sk', 'no:', 'bulvar', 'kat:', 'sitesi', 'blok', 'apt')
+
+    @classmethod
+    def parse(cls, card_html: str, keyword: str, city: str, district: str) -> Optional[Dict[str, Any]]:
+        if not card_html:
+            return None
+        soup = BeautifulSoup(card_html, 'html.parser')
+
+        # 1. Place URL & Place ID
+        link_el = soup.select_one('a.hfpxzc')
+        href = link_el.get('href', '').strip() if link_el else ''
+        if not href or '/maps/place/' not in href:
+            return None
+
+        # 2. Business Name
+        name_el = soup.select_one('.qBF1Pd, [role="heading"]')
+        raw_name = name_el.get_text(strip=True) if name_el else ''
+        if not raw_name and link_el:
+            raw_name = link_el.get('aria-label', '').strip()
+        if not raw_name:
+            return None
+
+        safe_name = raw_name.split('\n')[0].strip()[:300]
+
+        # 3. Rating & Reviews
+        rating = None
+        rating_el = soup.select_one('.MW4etd')
+        if rating_el:
+            try:
+                rating = float(rating_el.get_text(strip=True).replace(',', '.'))
+            except (ValueError, TypeError):
+                pass
+
+        reviews_count = 0
+        reviews_el = soup.select_one('.UY7F9')
+        if reviews_el:
+            digits = re.sub(r'[^0-9]', '', reviews_el.get_text())
+            if digits:
+                try:
+                    reviews_count = int(digits)
+                except ValueError:
+                    pass
+
+        # 4. Official Website
+        web_el = soup.select_one('a[data-value="Web sitesi"], a.lcr4fd, a[aria-label*="Web sitesi"], a[aria-label*="Website"]')
+        raw_web = web_el.get('href', '').strip() if web_el else None
+        clean_web = clean_extracted_website(raw_web)
+
+        # 5. Direct Phone from Card
+        phone_match = None
+        tel_link = soup.select_one('a[href^="tel:"]')
+        if tel_link:
+            tel_val = tel_link.get('href', '').replace('tel:', '').strip()
+            if tel_val:
+                phone_match = tel_val
+
+        if not phone_match:
+            card_text = soup.get_text(' ')
+            m = cls.PHONE_REGEX.search(card_text)
+            if m:
+                phone_match = m.group(0).strip()
+
+        phone_data = PhoneService.normalize_to_e164(phone_match) if phone_match else None
+        raw_phone = phone_data["national_number"] if phone_data else (phone_match or "")
+
+        # 6. Category and Address from metadata lines
+        category = None
+        extracted_address = None
+
+        text_lines = [el.get_text(strip=True) for el in soup.select('.W4Efsd, .fontBodyMedium')]
+        for line in text_lines:
+            parts = [p.replace('\r', ' ').replace('\n', ' ').strip() for p in line.split('\u00b7') if p.strip()]
+            for part in parts:
+                p_lower = normalize_turkish(part).lower()
+                has_digit = bool(re.search(r'\d', part))
+
+                # Skip ratings like "4,7(181)" or "4.7"
+                if re.search(r'\d[,\.]\d', part):
+                    continue
+                # Skip opening hours status
+                if any(s in p_lower for s in cls.STATUS_WORDS):
+                    continue
+
+                # Category candidate: 2-35 chars, no digits, no parens, matches keywords or short sector phrase
+                if not category and 2 <= len(part) <= 35 and not has_digit and '(' not in part and ')' not in part and '|' not in part:
+                    word_count = len(part.split())
+                    if word_count <= 4:
+                        if any(k in p_lower for k in cls.CATEGORY_KEYWORDS) or word_count <= 2:
+                            category = part
+
+                # Address candidate: contains street markers
+                if not extracted_address and any(m in p_lower for m in cls.ADDRESS_MARKERS):
+                    extracted_address = part
+
+        safe_category = (category or keyword or "İşletme").split('\n')[0].strip()[:50]
+        full_address = clean_extracted_address(extracted_address) if extracted_address else f"{district}, {city}"
+        lat, lon = extract_coords_from_url(href)
+
+        return {
+            "name": safe_name,
+            "category": safe_category,
+            "phone": raw_phone[:50] if raw_phone else None,
+            "phone_e164": phone_data["e164"] if phone_data else None,
+            "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
+            "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
+            "website": clean_web[:500] if clean_web else None,
+            "address": full_address[:500],
+            "city": city[:100],
+            "district": district[:100],
+            "latitude": lat,
+            "longitude": lon,
+            "rating": rating,
+            "reviews_count": reviews_count,
+            "google_maps_url": href[:1000],
+            "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
+            "source": "GOOGLE_MAPS",
+            "is_verified": bool(phone_data or clean_web or rating),
+            "display_name": f"{safe_name}, {full_address}"[:500]
+        }
 
 
 def clean_extracted_website(raw_url: Optional[str]) -> Optional[str]:
@@ -542,9 +642,9 @@ class GoogleMapsPlaywrightScraper:
             page = await context.new_page()
             await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
-            # Route optimization: block images, fonts, media, stylesheets and tracker scripts
-            # to speed up scraping significantly on low-resource environments
-            _BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
+            # Route optimization: block heavy media, fonts, images and tracker scripts.
+            # STYLESHEETS ARE KEPT so Google Maps feed layout and virtual scroll calculations work properly.
+            _BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
             _BLOCKED_URL_FRAGMENTS = [
                 "google-analytics", "googletagmanager", "doubleclick",
                 "fonts.gstatic.com", "accounts.google.com", "recaptcha",
@@ -636,18 +736,29 @@ class GoogleMapsPlaywrightScraper:
             await on_progress_status(f"📡 {city} > {district} işletme akışı taranıyor...", 15)
 
         while scroll_attempts < max_scroll_attempts:
-            # 1. Fast batch extraction of all visible cards in DOM
+            # 1. Fast batch extraction of all visible cards' outerHTML
             try:
-                extracted_cards: List[Dict[str, Any]] = await page.evaluate(_FEED_CARDS_EXTRACT_JS)
+                card_htmls: List[str] = await page.evaluate(
+                    "() => Array.from(document.querySelectorAll('div.Nv2PK')).map(c => c.outerHTML)"
+                )
             except Exception as eval_err:
                 logger.warning(f"[GMAPS_PLAYWRIGHT] Feed evaluation warning: {eval_err}")
-                extracted_cards = []
+                card_htmls = []
 
             new_cards_this_iteration = 0
 
-            for c in extracted_cards:
-                href = c.get("href")
-                raw_name = c.get("name")
+            for html_str in card_htmls:
+                lead_dict = GoogleMapsCardParser.parse(
+                    html_str,
+                    keyword=keyword,
+                    city=city,
+                    district=district,
+                )
+                if not lead_dict:
+                    continue
+
+                href = lead_dict.get("google_maps_url")
+                raw_name = lead_dict.get("name")
                 if not href or not raw_name:
                     continue
                 if href in seen_hrefs or raw_name in seen_names:
@@ -656,44 +767,12 @@ class GoogleMapsPlaywrightScraper:
                 seen_hrefs.add(href)
                 seen_names.add(raw_name)
                 new_cards_this_iteration += 1
-
-                raw_phone = c.get("phone")
-                phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
-                clean_web = clean_extracted_website(c.get("website"))
-                raw_addr = c.get("address")
-                full_address = clean_extracted_address(raw_addr) if raw_addr else f"{district}, {city}"
-                lat, lon = extract_coords_from_url(href)
-
-                # Defensively truncate all string fields to prevent VARCHAR overflow
-                safe_name = (raw_name or "")[:500]
-                raw_cat = c.get("category") or keyword or ""
-                safe_category = raw_cat.split("\n")[0][:100]
-                safe_address = (full_address or "")[:500]
-
-                lead_dict = {
-                    "name": safe_name,
-                    "category": safe_category,
-                    "phone": (raw_phone or "")[:50],
-                    "phone_e164": phone_data["e164"] if phone_data else None,
-                    "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
-                    "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
-                    "website": (clean_web or "")[:500] if clean_web else None,
-                    "address": safe_address,
-                    "city": (city or "")[:100],
-                    "district": (district or "")[:100],
-                    "latitude": lat,
-                    "longitude": lon,
-                    "rating": c.get("rating"),
-                    "reviews_count": c.get("reviewsCount", 0),
-                    "google_maps_url": (href or "")[:1000],
-                    "place_id": f"gmaps_{hashlib.sha256(href.encode()).hexdigest()[:16]}",
-                    "source": "GOOGLE_MAPS",
-                    "is_verified": bool(phone_data or clean_web or c.get("rating")),
-                    "display_name": f"{safe_name}, {safe_address}"[:500]
-                }
-
                 results.append(lead_dict)
-                logger.info(f"[GMAPS_PLAYWRIGHT] Extracted #{len(results)}: '{raw_name}' ({phone_data['e164'] if phone_data else 'No phone'})")
+
+                logger.info(
+                    f"[GMAPS_PLAYWRIGHT] Extracted #{len(results)}: '{raw_name}' "
+                    f"({lead_dict['phone_e164'] or 'No phone'})"
+                )
 
                 if on_place_inspected:
                     await on_place_inspected(lead_dict, len(results), progress_denominator)
@@ -710,22 +789,43 @@ class GoogleMapsPlaywrightScraper:
 
             if new_cards_this_iteration == 0:
                 stagnant_count += 1
-                if stagnant_count >= 4:
+                if stagnant_count >= 8:
                     logger.info(f"[GMAPS_PLAYWRIGHT] Discovery settled with {len(results)} places.")
                     break
             else:
                 stagnant_count = 0
 
-            # 2. Smooth feed scroll
+            # 2. Multi-Action Smooth feed scroll to trigger Google Maps virtual list
             try:
+                last_card = page.locator('div.Nv2PK').last
+                if await last_card.count() > 0:
+                    await last_card.scroll_into_view_if_needed(timeout=1000)
+
+                feed_el = page.locator('div[role="feed"]').first
+                if await feed_el.is_visible():
+                    await feed_el.hover()
+                    await page.mouse.wheel(0, 5000)
+                    await page.keyboard.press("PageDown")
+
                 await page.evaluate("""() => {
                     const feed = document.querySelector('div[role="feed"], .m6QErb[aria-label]');
-                    if (feed) feed.scrollTop += 6000;
+                    if (feed) feed.scrollTop += 5000;
                 }""")
-            except Exception:
-                pass
+            except Exception as scroll_err:
+                logger.debug(f"[GMAPS_PLAYWRIGHT] Scroll action fallback: {scroll_err}")
 
-            await page.wait_for_timeout(600)
+            # 3. Adaptive wait for DOM cards growth
+            previous_count = len(card_htmls)
+            deadline = time.monotonic() + 2.5
+            while time.monotonic() < deadline:
+                try:
+                    current_count = await page.locator('div.Nv2PK').count()
+                    if current_count > previous_count or await self._reached_end_of_results(page):
+                        break
+                except Exception:
+                    pass
+                await page.wait_for_timeout(300)
+
             scroll_attempts += 1
 
     # ------------------------------------------------------------------

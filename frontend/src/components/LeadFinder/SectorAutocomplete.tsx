@@ -25,17 +25,28 @@ export const SectorAutocomplete: React.FC<SectorAutocompleteProps> = ({
   const [availableSectors, setAvailableSectors] = useState<string[]>(SECTORS);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Fetch distinct categories from database to combine with sector presets
+  // Use curated industry sectors from sectors.ts as the authoritative source
   useEffect(() => {
     const fetchDBCategories = async () => {
       try {
         const dbCats = await ApiClient.getLeadCategories();
         if (dbCats && dbCats.length > 0) {
-          const combined = Array.from(new Set([...dbCats, ...SECTORS])).filter(Boolean);
-          setAvailableSectors(combined);
+          // Strictly validate: only keep short, single-line category strings without numbers or parentheses
+          const cleanDBCats = dbCats.filter(
+            (c) =>
+              c &&
+              typeof c === 'string' &&
+              c.length >= 2 &&
+              c.length <= 35 &&
+              !/\d/.test(c) &&
+              !/[\n\r\(\)\|]/.test(c) &&
+              !SECTORS.includes(c)
+          );
+          setAvailableSectors([...SECTORS, ...cleanDBCats]);
         }
       } catch (e) {
         // Fallback to static SECTORS
+        setAvailableSectors(SECTORS);
       }
     };
     fetchDBCategories();

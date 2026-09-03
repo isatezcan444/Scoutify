@@ -32,11 +32,21 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
       try {
         const dbCats = await ApiClient.getLeadCategories();
         if (dbCats && dbCats.length > 0) {
-          const combined = Array.from(new Set([...dbCats, ...SECTORS])).filter(Boolean);
-          setAvailableCategories(combined);
+          const cleanDBCats = dbCats.filter(
+            (c) =>
+              c &&
+              typeof c === 'string' &&
+              c.length >= 2 &&
+              c.length <= 35 &&
+              !/\d/.test(c) &&
+              !/[\n\r\(\)\|]/.test(c) &&
+              !SECTORS.includes(c)
+          );
+          setAvailableCategories([...SECTORS, ...cleanDBCats]);
         }
       } catch (e) {
         // Fallback to static SECTORS
+        setAvailableCategories(SECTORS);
       }
     };
     fetchDBCategories();
