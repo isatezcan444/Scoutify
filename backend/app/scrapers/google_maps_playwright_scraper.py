@@ -18,6 +18,7 @@ Robustness invariants:
 - Anti-bot interstitials (captcha / unusual traffic) raise GoogleMapsBlockedError —
   failures are reported loudly, never silently as zero results.
 """
+import gc
 import re
 import hashlib
 import logging
@@ -631,7 +632,8 @@ class GoogleMapsPlaywrightScraper:
                     "--mute-audio",
                     "--safebrowsing-disable-auto-update",
                     "--memory-pressure-off",
-                    "--js-flags=--max-old-space-size=256",
+                    "--js-flags=--max-old-space-size=128",
+                    "--renderer-process-limit=1",
                 ]
             )
             context = await browser.new_context(
@@ -642,9 +644,9 @@ class GoogleMapsPlaywrightScraper:
             page = await context.new_page()
             await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
 
-            # Route optimization: block heavy media, fonts, images and tracker scripts.
-            # STYLESHEETS ARE KEPT so Google Maps feed layout and virtual scroll calculations work properly.
-            _BLOCKED_RESOURCE_TYPES = {"image", "media", "font"}
+            # Route optimization: aggressively block heavy media, fonts, images, stylesheets and trackers
+            # to strictly stay within Render's 512MB memory limit
+            _BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
             _BLOCKED_URL_FRAGMENTS = [
                 "google-analytics", "googletagmanager", "doubleclick",
                 "fonts.gstatic.com", "accounts.google.com", "recaptcha",
@@ -736,11 +738,14 @@ class GoogleMapsPlaywrightScraper:
             await on_progress_status(f"📡 {city} > {district} işletme akışı taranıyor...", 15)
 
         while scroll_attempts < max_scroll_attempts:
-            # 1. Fast batch extraction of all visible cards' outerHTML
+            # 1. Fast batch extraction of visible cards' lean HTML (stripping SVGs and IMGs to keep memory under 50KB)
             try:
-                card_htmls: List[str] = await page.evaluate(
-                    "() => Array.from(document.querySelectorAll('div.Nv2PK')).map(c => c.outerHTML)"
-                )
+                card_htmls: List[str] = await page.evaluate(r"""() => {
+                    const cards = document.querySelectorAll('div.Nv2PK');
+                    return Array.from(cards).map(c => {
+                        return c.outerHTML.replace(/<svg[\s\S]*?<\/svg>/gi, '').replace(/<img[\s\S]*?>/gi, '');
+                    });
+                }""")
             except Exception as eval_err:
                 logger.warning(f"[GMAPS_PLAYWRIGHT] Feed evaluation warning: {eval_err}")
                 card_htmls = []
@@ -789,32 +794,26 @@ class GoogleMapsPlaywrightScraper:
 
             if new_cards_this_iteration == 0:
                 stagnant_count += 1
-                if stagnant_count >= 8:
+                if stagnant_count >= 6:
                     logger.info(f"[GMAPS_PLAYWRIGHT] Discovery settled with {len(results)} places.")
                     break
             else:
                 stagnant_count = 0
 
-            # 2. Multi-Action Smooth feed scroll to trigger Google Maps virtual list
+            # 2. Smooth feed scroll with synthetic scroll event dispatch
             try:
-                last_card = page.locator('div.Nv2PK').last
-                if await last_card.count() > 0:
-                    await last_card.scroll_into_view_if_needed(timeout=1000)
-
-                feed_el = page.locator('div[role="feed"]').first
-                if await feed_el.is_visible():
-                    await feed_el.hover()
-                    await page.mouse.wheel(0, 5000)
-                    await page.keyboard.press("PageDown")
-
                 await page.evaluate("""() => {
                     const feed = document.querySelector('div[role="feed"], .m6QErb[aria-label]');
-                    if (feed) feed.scrollTop += 5000;
+                    if (feed) {
+                        feed.scrollTop += 6000;
+                        feed.dispatchEvent(new Event('scroll', { bubbles: true }));
+                    }
                 }""")
+                await page.keyboard.press("PageDown")
             except Exception as scroll_err:
                 logger.debug(f"[GMAPS_PLAYWRIGHT] Scroll action fallback: {scroll_err}")
 
-            # 3. Adaptive wait for DOM cards growth
+            # 3. Adaptive wait for DOM cards growth (up to 2.5s)
             previous_count = len(card_htmls)
             deadline = time.monotonic() + 2.5
             while time.monotonic() < deadline:
@@ -825,6 +824,9 @@ class GoogleMapsPlaywrightScraper:
                 except Exception:
                     pass
                 await page.wait_for_timeout(300)
+
+            if scroll_attempts % 3 == 0:
+                gc.collect()
 
             scroll_attempts += 1
 
