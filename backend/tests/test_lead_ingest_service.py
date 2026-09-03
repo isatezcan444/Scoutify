@@ -112,3 +112,47 @@ async def test_merge_heals_name_prefixed_address():
         assert new_c == 0 and upd_c == 1
         assert leads[0].address == "Atatürk, Meriç Cd. NO: 21/35"
     await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ingest_progress_callback_reports_checkpoints():
+    session_maker, engine = await get_in_memory_db()
+    async with session_maker() as db:
+        raw = [
+            {"name": f"Klinik {i}", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": f"gmaps_prog_{i}", "phone": None, "phone_e164": None}
+            for i in range(25)
+        ]
+        checkpoints = []
+        async def on_progress(done, total):
+            checkpoints.append((done, total))
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(
+            db, raw, progress_callback=on_progress
+        )
+        assert new_c == 25
+        assert checkpoints[0] == (0, 25)
+        assert (10, 25) in checkpoints
+        assert (20, 25) in checkpoints
+        assert checkpoints[-1] == (25, 25)
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_ingest_batch_blacklist_prefetch_marks_unsubscribed():
+    from backend.app.models.lead import LeadStatus
+    session_maker, engine = await get_in_memory_db()
+    async with session_maker() as db:
+        db.add(Blacklist(phone_e164="+905321112233", reason="USER_REQUEST"))
+        await db.commit()
+        raw = [
+            {"name": "Engelli Klinik", "city": "İstanbul", "district": "Kadıköy",
+             "place_id": "gmaps_bl_01", "phone": "05321112233"},
+            {"name": "Temiz Klinik", "city": "İstanbul", "district": "Kadıköy",
+             "place_id": "gmaps_bl_02", "phone": "05329998877"},
+        ]
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+        assert new_c == 2
+        by_name = {l.name: l for l in leads}
+        assert by_name["Engelli Klinik"].status == LeadStatus.UNSUBSCRIBED
+        assert by_name["Temiz Klinik"].status == LeadStatus.NEW
+    await engine.dispose()

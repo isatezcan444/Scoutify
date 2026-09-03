@@ -63,6 +63,19 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const resultsSectionRef = useRef<HTMLDivElement>(null);
   const activeJobIdRef = useRef<number | null>(null);
+  // Idempotency: the WS 'scraper_completed' event and the 3s polling fallback
+  // can both observe the terminal state — only the first one may render it.
+  const jobDoneRef = useRef(false);
+
+  // Renders a backend stream line: structured key (localized) wins,
+  // legacy free-text message stays as fallback.
+  const formatStreamLine = (d: any): string => {
+    if (d?.key) {
+      const localized = t(d.key, d.params);
+      if (localized && localized !== d.key) return localized;
+    }
+    return d?.message ?? '';
+  };
 
   const handleOpenSaveModal = async (initialMode: 'NEW' | 'EXISTING') => {
     setSaveMode(initialMode);
@@ -133,10 +146,16 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
 
     setIsScraping(true);
     setProgress(5);
+    jobDoneRef.current = false;
+    const targetLabel = maxResults === 0
+      ? t('leadFinder.scopeAll')
+      : `${maxResults} ${t('common.entries')}`;
     setLogs([
-      `[${new Date().toLocaleTimeString()}] 🚀 Search started: "${keyword}"`,
-      `[${new Date().toLocaleTimeString()}] 📍 Location: ${locationDisplay}`,
-      `[${new Date().toLocaleTimeString()}] 🎯 Target: ${maxResults === 0 ? 'Unlimited' : `${maxResults} Leads`}`
+      `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.searchSummary', {
+        keyword: keyword.trim(),
+        display: locationDisplay,
+        target: targetLabel,
+      })}`,
     ]);
     setDiscoveredLeads([]);
 
@@ -152,7 +171,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
 
       setLogs((prev) => [
         ...prev,
-        `[${new Date().toLocaleTimeString()}] 📡 Job #${job.id} active. Searching in ${locationDisplay}...`,
+        `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.jobActive', { id: job.id })}`,
       ]);
 
       let pollInterval: any = null;
@@ -163,20 +182,28 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         }
       };
 
-      const handleJobCompletion = (totalFound: number, totalNew: number) => {
+      const handleJobCompletion = (totalFound: number, totalNew: number, leads?: any[]) => {
+        if (jobDoneRef.current) return;
+        jobDoneRef.current = true;
         stopPolling();
         setIsScraping(false);
         setProgress(100);
         setLogs((prev) => [
           ...prev,
-          `[${new Date().toLocaleTimeString()}] 🎉 Discovery completed! Total found: ${totalFound}, New CRM Leads: ${totalNew}`,
+          `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.completed', { found: totalFound, new: totalNew })}`,
         ]);
         onRefreshStats();
-        ApiClient.getLeads({ page: 1, size: 50 }).then((res) => {
-          if (res?.items?.length) {
-            setDiscoveredLeads(res.items);
-          }
-        }).catch(() => {});
+        // Prefer the job's own exact result set (with CRM ids); the paged
+        // CRM fetch below is only a degraded fallback for the polling path.
+        if (leads && leads.length > 0) {
+          setDiscoveredLeads(leads);
+        } else {
+          ApiClient.getLeads({ page: 1, size: 100 }).then((res) => {
+            if (res?.items?.length) {
+              setDiscoveredLeads(res.items);
+            }
+          }).catch(() => {});
+        }
 
         setTimeout(() => {
           if (resultsSectionRef.current) {
@@ -186,9 +213,11 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
       };
 
       const handleJobFailure = (errorMsg: string) => {
+        if (jobDoneRef.current) return;
+        jobDoneRef.current = true;
         stopPolling();
         setIsScraping(false);
-        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Scraper error: ${errorMsg}`]);
+        setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.failed', { error: errorMsg })}`]);
       };
 
       // Fallback Polling (3s interval) to guarantee state progression
@@ -215,7 +244,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
         if (eventData.event === 'scraper_progress') {
           const d = eventData.data;
           if (d.type === 'log') {
-            setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${d.message}`]);
+            setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${formatStreamLine(d)}`]);
             if (d.progress) setProgress(d.progress);
           } else if (d.type === 'lead_found' && d.lead) {
             setDiscoveredLeads((prev) => {
@@ -229,7 +258,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
             });
           }
         } else if (eventData.event === 'scraper_completed') {
-          handleJobCompletion(eventData.total_found, eventData.total_new_leads);
+          handleJobCompletion(eventData.total_found, eventData.total_new_leads, eventData.leads);
           ws.close();
         } else if (eventData.event === 'scraper_failed') {
           handleJobFailure(eventData.error);
@@ -239,7 +268,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
 
     } catch (err: any) {
       setIsScraping(false);
-      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}`]);
+      setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${t('leadFinder.stream.failed', { error: err.message })}`]);
     }
   };
 
@@ -462,16 +491,16 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                         {lead.name}
                       </h4>
                     </div>
-                    {lead.is_verified ? (
-                      <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/20">
-                        <Check className="w-2.5 h-2.5" />
-                        <span>Verified</span>
-                      </span>
-                    ) : (
-                      <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#FF9F43]/15 text-[#FF9F43] border border-[#FF9F43]/20">
-                        <span>Lead</span>
-                      </span>
-                    )}
+                      {lead.is_verified ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#28C76F]/15 text-[#28C76F] border border-[#28C76F]/20">
+                          <Check className="w-2.5 h-2.5" />
+                          <span>{t('leadFinder.verifiedBadge')}</span>
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#FF9F43]/15 text-[#FF9F43] border border-[#FF9F43]/20">
+                          <span>{t('leadFinder.leadBadge')}</span>
+                        </span>
+                      )}
                   </div>
                   
                   {/* Category & Entity Type placed below the title */}
@@ -532,7 +561,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                       <span className="truncate">{lead.website.replace(/^https?:\/\/(www\.)?/, '')}</span>
                     </a>
                   ) : (
-                    <span className="text-slate-400 text-[11px] italic">{t('leads.noPhone')}</span>
+                    <span className="text-slate-400 text-[11px] italic">{t('leads.noWebsite')}</span>
                   )}
 
                   <a
@@ -581,7 +610,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                   {t('leadFinder.saveOptionNew')}
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  Bu aramadan yeni bir hedef kitle grubu oluşturun.
+                  {t('leadFinder.saveOptionNewDesc')}
                 </span>
               </div>
             </label>
@@ -609,7 +638,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                 <span className="text-[11px] text-slate-400">
                   {existingGroups.length === 0
                     ? t('leadFinder.noExistingGroups')
-                    : 'Mevcut bir grubu seçip yeni işletmeleri ekleyin.'}
+                    : t('leadFinder.saveOptionExistingDesc')}
                 </span>
               </div>
             </label>

@@ -226,7 +226,7 @@ class GoogleMapsHttpScraper:
         district: str,
         max_results: Optional[int] = None,
         on_place_inspected: Optional[Callable[[Dict[str, Any], int, int], Awaitable[None]]] = None,
-        on_progress_status: Optional[Callable[[str, int], Awaitable[None]]] = None,
+        on_progress_status: Optional[Callable[..., Awaitable[None]]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Executes paginated HTTP JSON retrieval for the given district query.
@@ -246,7 +246,10 @@ class GoogleMapsHttpScraper:
             f"[GMAPS_HTTP] Starting fast retrieval: query='{search_query}', target={target_count}"
         )
         if on_progress_status:
-            await on_progress_status(f"⚡ Hızlı Google Maps akışı başlatıldı: '{search_query}'", 15)
+            await on_progress_status(
+                f"Google Maps taraması başlatıldı: '{search_query}'", 15,
+                "leadFinder.stream.engineStarted", {"query": search_query},
+            )
 
         discovered: List[Dict[str, Any]] = []
         seen_place_ids: Set[str] = set()
@@ -340,7 +343,10 @@ class GoogleMapsHttpScraper:
                 pct = min(90, int((len(discovered) / max(target_count, 1)) * 90))
                 if on_progress_status:
                     await on_progress_status(
-                        f"⚡ Keşif akıyor: {len(discovered)} işletme incelendi...", pct
+                        f"Keşif akıyor: {len(discovered)} işletme incelendi...",
+                        pct,
+                        "leadFinder.stream.discoveryProgress",
+                        {"count": len(discovered)},
                     )
 
                 # If fewer listings were returned than page size, Google has no more results

@@ -445,7 +445,12 @@ class GoogleMapsScraper(BaseScraper):
         if progress_callback:
             await progress_callback({
                 "type": "log",
-                "message": f"🚀 Google Maps Arama Motoru Başlatıldı: '{clean_keyword}' ({clean_city} > {', '.join(target_districts[:3])}...)",
+                "key": "leadFinder.stream.searchStarted",
+                "params": {
+                    "keyword": clean_keyword,
+                    "location": f"{clean_city} > {', '.join(target_districts[:3])}{'...' if len(target_districts) > 3 else ''}",
+                },
+                "message": f"🚀 Google Maps taraması başlatıldı: '{clean_keyword}' ({clean_city} > {', '.join(target_districts[:3])}...)",
                 "progress": 5
             })
 
@@ -469,10 +474,22 @@ class GoogleMapsScraper(BaseScraper):
             base_pct = int(10 + (dist_idx / len(target_districts)) * 80)
             district_span_pct = int(80 / len(target_districts))
 
-            async def handle_status(message: str, local_pct: int, _b: int = base_pct, _span: int = district_span_pct) -> None:
+            async def handle_status(
+                message: str,
+                local_pct: int,
+                key: Optional[str] = None,
+                params: Optional[Dict[str, Any]] = None,
+                _b: int = base_pct,
+                _span: int = district_span_pct,
+            ) -> None:
                 if progress_callback:
                     mapped_pct = min(95, _b + int((local_pct / 100.0) * _span))
-                    await progress_callback({"type": "log", "message": message, "progress": mapped_pct})
+                    event: Dict[str, Any] = {"type": "log", "message": message, "progress": mapped_pct}
+                    if key:
+                        event["key"] = key
+                    if params:
+                        event["params"] = params
+                    await progress_callback(event)
 
             async def handle_place_inspected(
                 place: Dict[str, Any],
@@ -485,6 +502,8 @@ class GoogleMapsScraper(BaseScraper):
                 stats["raw_found"] += 1
 
                 # --- Geo fence gate (runs BEFORE phone enrichment to avoid wasted HTTP) ---
+                # Out-of-scope rejections are counted silently (metrics carry the
+                # funnel); per-place lines only added noise to the live stream.
                 if geo_filter_active:
                     verdict = self.geo_scope_filter.evaluate(
                         target_city=clean_city,
@@ -494,15 +513,6 @@ class GoogleMapsScraper(BaseScraper):
                     )
                     if verdict.decision == GeoScopeDecision.REJECT_OUTSIDE:
                         stats["geo_filtered"] += 1
-                        if progress_callback:
-                            await progress_callback({
-                                "type": "log",
-                                "message": (
-                                    f"🚫 Hedef dışı konum elendi: {place.get('name')} "
-                                    f"— {verdict.reason}"
-                                ),
-                                "progress": min(95, _b),
-                            })
                         return
                 else:
                     verdict = GeoScopeVerdict(
@@ -544,15 +554,25 @@ class GoogleMapsScraper(BaseScraper):
                 })
 
                 intra_pct = int((current_idx / max(total_count, 1)) * _span)
-                phone_display = lead_record.get("phone") or "Numara Yok"
-                suffix = " — paylaşımlı hat" if decision == DedupDecision.SHARED_PHONE else ""
-                tuner_msg = (
-                    f"📡 Bulundu ({len(all_discovered_leads)}): {lead_record['name']} — "
-                    f"{lead_record['address']} ({phone_display}{suffix})"
-                )
+                phone_display = lead_record.get("phone") or "—"
+                shared = decision == DedupDecision.SHARED_PHONE
                 await progress_callback({
                     "type": "log",
-                    "message": tuner_msg,
+                    "key": (
+                        "leadFinder.stream.placeFoundSharedLine"
+                        if shared else "leadFinder.stream.placeFound"
+                    ),
+                    "params": {
+                        "count": len(all_discovered_leads),
+                        "name": lead_record["name"],
+                        "address": lead_record["address"],
+                        "phone": phone_display,
+                    },
+                    "message": (
+                        f"📡 Bulundu ({len(all_discovered_leads)}): {lead_record['name']} — "
+                        f"{lead_record['address']} ({phone_display}"
+                        f"{' — paylaşımlı hat' if shared else ''})"
+                    ),
                     "progress": min(95, _b + intra_pct)
                 })
 
@@ -596,6 +616,8 @@ class GoogleMapsScraper(BaseScraper):
                     )
                     await progress_callback({
                         "type": "log",
+                        "key": "leadFinder.stream.variantDone",
+                        "params": {"term": term, "district": district},
                         "message": f"🔎 '{term}' varyantı tamamlandı ({district}).",
                         "progress": term_pct
                     })
@@ -607,6 +629,8 @@ class GoogleMapsScraper(BaseScraper):
             if progress_callback and not target_reached:
                 await progress_callback({
                     "type": "log",
+                    "key": "leadFinder.stream.districtDone",
+                    "params": {"district": district, "count": len(all_discovered_leads)},
                     "message": f"✅ {district} tamamlandı. Toplam {len(all_discovered_leads)} işletme keşfedildi.",
                     "progress": min(95, base_pct + district_span_pct)
                 })

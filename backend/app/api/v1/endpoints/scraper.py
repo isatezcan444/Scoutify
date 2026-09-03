@@ -80,13 +80,24 @@ async def run_scraper_task(
                     progress_callback=on_progress,
                 )
 
-            # Ingest leads cleanly via LeadIngestService
+            # Ingest leads cleanly via LeadIngestService (with live progress so
+            # the Supabase write phase never looks like a post-scan hang).
+            async def on_ingest_progress(done: int, total: int) -> None:
+                await on_progress({
+                    "type": "log",
+                    "key": "leadFinder.stream.savingLeads",
+                    "params": {"done": done, "total": total},
+                    "message": f"💾 Kaydediliyor: {done}/{total} işletme...",
+                    "progress": 95 if total == 0 else min(99, 95 + int(4 * done / max(total, 1))),
+                })
+
             all_leads, new_count, updated_count = await LeadIngestService.ingest_leads(
                 db=db,
                 raw_leads=raw_leads,
                 source="GOOGLE_MAPS",
                 search_keyword=keyword,
                 search_location=f"{city} {', '.join(districts)}",
+                progress_callback=on_ingest_progress,
             )
 
             job.status = ScraperJobStatus.COMPLETED

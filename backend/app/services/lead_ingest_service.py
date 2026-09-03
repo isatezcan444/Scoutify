@@ -3,7 +3,7 @@ Lead Ingestion and Deduplication Service.
 Extracted from God Router endpoints to ensure Single Responsibility Principle.
 """
 import logging
-from typing import List, Dict, Any, Tuple, Optional
+from typing import List, Dict, Any, Tuple, Optional, Callable, Awaitable, Set
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,14 +43,44 @@ class LeadIngestService:
         source: str = "GOOGLE_MAPS",
         search_keyword: Optional[str] = None,
         search_location: Optional[str] = None,
+        progress_callback: Optional[Callable[[int, int], Awaitable[None]]] = None,
     ) -> Tuple[List[Lead], int, int]:
         """
         Processes and saves raw leads into the database.
         Returns:
             (created_leads, total_new_count, total_updated_count)
+
+        progress_callback (optional) receives (processed_count, total) roughly
+        every 10 leads so long Supabase round-trips never look like a hang.
         """
         if not raw_leads:
             return [], 0, 0
+
+        total = len(raw_leads)
+        if progress_callback:
+            await progress_callback(0, total)
+
+        # Pre-pass 1: normalize phones once (sync, cheap) so blacklist lookup
+        # collapses from N round-trips into ONE batched query.
+        prepared: List[Tuple[Dict[str, Any], str, Optional[str]]] = []
+        wanted_e164s: Set[str] = set()
+        for raw in raw_leads:
+            name = (raw.get("name") or "").strip()
+            raw_phone = raw.get("phone")
+            phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
+            e164 = phone_data["e164"] if (phone_data and phone_data["is_valid"]) else raw.get("phone_e164")
+            prepared.append((raw, name, e164))
+            if e164:
+                wanted_e164s.add(e164)
+
+        blacklisted: Set[str] = set()
+        if wanted_e164s:
+            bl_rows = (
+                await db.execute(
+                    select(Blacklist.phone_e164).where(Blacklist.phone_e164.in_(wanted_e164s))
+                )
+            ).scalars().all()
+            blacklisted = set(bl_rows)
 
         all_processed_leads: List[Lead] = []
         created_leads: List[Lead] = []
@@ -62,29 +92,16 @@ class LeadIngestService:
         race_merged = 0
         assigned_batch_e164s: Set[str] = set()
 
-        for raw in raw_leads:
-            name = (raw.get("name") or "").strip()
+        for idx, (raw, name, e164) in enumerate(prepared):
             if not name:
                 skipped_no_name += 1
                 continue
 
             raw_phone = raw.get("phone")
             phone_data = PhoneService.normalize_to_e164(raw_phone) if raw_phone else None
-            e164 = phone_data["e164"] if (phone_data and phone_data["is_valid"]) else raw.get("phone_e164")
 
-            # Check blacklist
-            is_blacklisted = False
-            if e164:
-                # Fail-safe limit(1): legacy prod rows may hold duplicates.
-                bl_stmt = (
-                    select(Blacklist)
-                    .where(Blacklist.phone_e164 == e164)
-                    .order_by(Blacklist.id)
-                    .limit(1)
-                )
-                bl_res = await db.execute(bl_stmt)
-                if bl_res.scalars().first():
-                    is_blacklisted = True
+            # Check blacklist (prefetched set — zero extra round-trips)
+            is_blacklisted = bool(e164 and e164 in blacklisted)
 
             # Identity resolution (policy-owned). A distinct business that merely
             # shares a line with an existing row keeps its own row; its targeting
@@ -148,9 +165,19 @@ class LeadIngestService:
                     new_count += 1
                 all_processed_leads.append(lead)
 
+            if progress_callback and (idx + 1 == total or (idx + 1) % 10 == 0):
+                await progress_callback(idx + 1, total)
+
         await db.commit()
-        for l in all_processed_leads:
-            await db.refresh(l)
+        # Single batched re-read instead of N per-row refresh round-trips
+        # (matters on remote Postgres: N RTTs looked like a post-scan hang).
+        if all_processed_leads:
+            ids_in_order = [l.id for l in all_processed_leads]
+            rows = (
+                await db.execute(select(Lead).where(Lead.id.in_(ids_in_order)))
+            ).scalars().all()
+            by_id = {r.id: r for r in rows}
+            all_processed_leads = [by_id.get(l.id, l) for l in all_processed_leads]
 
         logger.info(
             f"[LeadIngestService] Ingest complete: total_raw={len(raw_leads)}, "
