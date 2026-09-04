@@ -16,6 +16,27 @@ _LOCATION_SUFFIX_TOKENS = ("il", "ili", "ilce", "ilcesi")
 # Separators preserved while rebuilding sanitized keywords.
 _KEYWORD_SEPARATORS = r"([\s&+/,:;|-]+)"
 
+# First-segment markers proving an address head is a street/building, NOT a
+# neighborhood (mahalle). Used by extract_mahalle_candidates: anything carrying
+# these is rejected so subdivision queries are built from mahalles only.
+_STREET_HEAD_MARKERS = (
+    "no", "kat", "daire", "blok", "plaza", "residence", "rezidans", "carsi",
+    "çarsı", "çarşı", "sitesi", "site", "ishani", "işhanı", "apartman", "apartmanı",
+    "apt", "tower", "towers", "avm", "cd", "cad", "caddesi", "sk", "sokak",
+    "sokagi", "sokağı", "blv", "bulvar", "bulvari", "bulvarı", "mah", "mahalle",
+    "mahallesi", "yolu", "hastane", "hastanesi", "merkez", "merkezi",
+    "okul", "okulu", "cami", "camii", "park", "parki", "parkı",
+)
+
+# Building-type tokens rejected even as a lone first segment ("Site" alone is
+# a complex, never a mahalle). Bare "Merkez" stays allowed — it is a genuine
+# mahalle name in many districts.
+_ALWAYS_REJECT_SINGLE = frozenset({
+    "site", "sitesi", "plaza", "avm", "tower", "towers", "residence",
+    "rezidans", "carsi", "çarsı", "çarşı", "hastane", "hastanesi",
+    "apartman", "apartmanı", "ishani", "işhanı",
+})
+
 
 class QueryExpander:
     """
@@ -300,6 +321,65 @@ class QueryExpander:
                 if len(unique) >= max_terms:
                     break
         return unique
+
+    @classmethod
+    def primary_term(cls, keyword: str) -> str:
+        """First connector-split segment of a sector label.
+
+        Used as the head term for adaptive subdivision queries: for
+        'Diş Klinikleri & Ağız Sağlığı Merkezleri' this is 'Diş Klinikleri'
+        (measured: single-term subdivision queries pull the long tail).
+        """
+        if not keyword or not keyword.strip():
+            return ""
+        parts = re.split(r'\s*(?:&|ve|\+|\/|,)\s*', keyword)
+        for part in parts:
+            if len(part.strip()) >= 3:
+                return part.strip()
+        return keyword.strip()
+
+    @classmethod
+    def extract_mahalle_candidates(
+        cls,
+        addresses: List[str],
+        top_k: int = 4,
+        min_mentions: int = 3,
+    ) -> List[str]:
+        """Derives neighborhood (mahalle) subdivision tokens from result addresses.
+
+        Data-driven (no hardcoded mahalle registry): the leading comma segment
+        of each address is a mahalle when it carries no street/building markers
+        ('Barbaros, Fesleğen Sk.…' → 'Barbaros'; 'Ataşehir Bulvarı Ata 4-4…'
+        is rejected as a street). Returns up to top_k mahalles with at least
+        min_mentions hits, most-mentioned first, in display form.
+        """
+        from collections import Counter
+
+        counts: Counter = Counter()
+        surface: Dict[str, str] = {}
+        for raw_addr in addresses:
+            if not raw_addr:
+                continue
+            head = re.sub(r'\s+', ' ', raw_addr).split(",")[0].strip().strip(" -–—;:")
+            # Explicit 'X Mahallesi' suffix → the mahalle is X.
+            head = re.sub(r'\s+(mahallesi|mahalle|mah\.?)$', '', head, flags=re.IGNORECASE).strip()
+            if len(head) < 3:
+                continue
+            if re.search(r'[\d\/\-:;()"\']', head):
+                continue
+            tokens = re.findall(r'\w+', normalize_turkish(head).lower())
+            if not tokens:
+                continue
+            if len(tokens) == 1 and tokens[0] in _ALWAYS_REJECT_SINGLE:
+                continue
+            if len(tokens) > 1 and any(tok in _STREET_HEAD_MARKERS for tok in tokens):
+                continue
+            key = normalize_turkish(head).lower()
+            counts[key] += 1
+            surface.setdefault(key, head)
+
+        ranked = [surface[k] for k, _ in counts.most_common() if counts[k] >= min_mentions]
+        return ranked[:max(0, top_k)]
 
     @classmethod
     def expand_queries(cls, keyword: str, district: str, city: str) -> List[str]:

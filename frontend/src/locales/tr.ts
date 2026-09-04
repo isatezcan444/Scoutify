@@ -193,6 +193,7 @@ export const tr = {
       placeFound: '📡 Bulundu ({count}): {name} — {address} ({phone})',
       placeFoundSharedLine: '📡 Bulundu ({count}): {name} — {address} ({phone} — paylaşımlı hat)',
       variantDone: "🔎 '{term}' varyantı tamamlandı ({district}).",
+      mahalleStarted: '🏘️ Mahalle taraması: {mahalle} ({district}).',
       districtDone: '✅ {district} tamamlandı. Toplam {count} işletme keşfedildi.',
       savingLeads: '💾 Kaydediliyor: {done}/{total} işletme...',
       searchSummary: '🔍 Arama: "{keyword}" — {display} ({target})',

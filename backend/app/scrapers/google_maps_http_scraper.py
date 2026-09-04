@@ -227,6 +227,7 @@ class GoogleMapsHttpScraper:
         max_results: Optional[int] = None,
         on_place_inspected: Optional[Callable[[Dict[str, Any], int, int], Awaitable[None]]] = None,
         on_progress_status: Optional[Callable[..., Awaitable[None]]] = None,
+        max_pages: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Executes paginated HTTP JSON retrieval for the given district query.
@@ -257,9 +258,10 @@ class GoogleMapsHttpScraper:
 
         start = 0
         consecutive_empty = 0
+        page_budget = max_pages if (max_pages and max_pages > 0) else self.max_pages
 
         async with httpx.AsyncClient(headers=self.headers, timeout=self.timeout) as client:
-            for page_num in range(self.max_pages):
+            for page_num in range(page_budget):
                 if len(discovered) >= target_count:
                     logger.info(f"[GMAPS_HTTP] Target count {target_count} satisfied.")
                     break
@@ -274,9 +276,26 @@ class GoogleMapsHttpScraper:
                     await asyncio.sleep(1.0)
                     continue
 
+                # Retry with backoff on transient HTTP errors: a single 429/5xx
+                # must not truncate the whole district stream.
                 if resp.status_code != 200:
-                    logger.warning(f"[GMAPS_HTTP] HTTP error status={resp.status_code} at start={start}")
-                    break
+                    recovered = False
+                    for attempt in (1, 2):
+                        await asyncio.sleep(float(attempt))
+                        try:
+                            resp = await client.get(page_url)
+                        except httpx.HTTPError as net_err:
+                            logger.warning(f"[GMAPS_HTTP] Retry {attempt} network glitch: {net_err}")
+                            continue
+                        if resp.status_code == 200:
+                            recovered = True
+                            break
+                        logger.warning(
+                            f"[GMAPS_HTTP] Retry {attempt} HTTP status={resp.status_code} at start={start}"
+                        )
+                    if not recovered:
+                        logger.warning(f"[GMAPS_HTTP] Giving up page at start={start}")
+                        break
 
                 text = resp.text.split("/*")[0]
                 try:

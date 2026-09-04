@@ -456,3 +456,94 @@ async def test_metrics_pages_visited_equals_executed_sessions():
     executed = expected_terms * 2  # terms × two districts
     assert captured_metrics["queries_executed"] == executed
     assert captured_metrics["pages_visited"] == executed        # one page per session — truthful
+
+
+# ============================================================
+# Adaptive mahalle subdivision phase
+# ============================================================
+
+class TestMahallePhase:
+    def test_primary_term_picks_first_segment(self):
+        from backend.app.services.query_expander import QueryExpander
+        assert QueryExpander.primary_term("Diş Klinikleri & Ağız Sağlığı Merkezleri") == "Diş Klinikleri"
+        assert QueryExpander.primary_term("Güzellik Merkezleri") == "Güzellik Merkezleri"
+        assert QueryExpander.primary_term("  ") == ""
+
+    def test_extract_mahalle_candidates_rejects_streets(self):
+        from backend.app.services.query_expander import QueryExpander
+        addrs = [
+            "Barbaros, Fesleğen Sk. No:7, 34746 Ataşehir/İstanbul",
+            "BARBAROS, Halk Cd. No: 63/1",
+            "Atatürk Mahallesi, Ertuğrul Gazi Sokak No: 2",
+            "Ataşehir Bulvarı Ata 4-4 Çarşı No:17",
+            "Fesleğen Sk. No:7, 34746 Ataşehir",
+            "Küçükbakkalköy, Brandium Residence R2 Blok",
+        ]
+        got = QueryExpander.extract_mahalle_candidates(addrs, top_k=5, min_mentions=1)
+        assert "Barbaros" in got
+        assert "Atatürk" in got
+        assert "Küçükbakkalköy" in got
+        assert not any("Bulvar" in g or "Fesleğen" in g or "Brandium" in g for g in got)
+
+    def test_extract_mahalle_candidates_honors_threshold(self):
+        from backend.app.services.query_expander import QueryExpander
+        addrs = ["Barbaros, X Sk. No:1", "Barbaros, Y Sk. No:2", "Tekil, Z Sk. No:3"]
+        got = QueryExpander.extract_mahalle_candidates(addrs, top_k=5, min_mentions=2)
+        assert got == ["Barbaros"]
+
+    @pytest.mark.asyncio
+    async def test_mahalle_phase_runs_bounded_queries(self):
+        from unittest.mock import AsyncMock
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+
+        scraper = GoogleMapsScraper()
+        calls = []
+
+        async def fake_mahalle(keyword, city, district, max_results=None, max_pages=None,
+                               on_place_inspected=None, on_progress_status=None):
+            calls.append((keyword, max_pages))
+            assert max_pages == settings.SCRAPER_MAHALLE_MAX_PAGES
+            await on_place_inspected(
+                {"name": f"{keyword} Klinik", "address": f"{district}, {city}",
+                 "phone": None, "google_maps_url": f"https://maps.example/{keyword}"},
+                1, 1,
+            )
+
+        scraper.http_scraper.scrape_district_places = AsyncMock(side_effect=fake_mahalle)
+        # Force HTTP engine regardless of settings
+        scraper._resolve_active_engine = lambda: scraper.http_scraper  # type: ignore[method-assign]
+
+        discovered: list = []
+
+        async def collecting_handler(place, idx, total):
+            discovered.append(place)
+
+        q, marginal = await scraper._run_mahalle_phase(
+            primary_term="Diş Klinikleri",
+            clean_city="İstanbul",
+            district="Ataşehir",
+            district_addresses=["Barbaros, X Sk. No:1"] * 4 + ["Atatürk, Y Cd. No:2"] * 3,
+            all_discovered_leads=discovered,
+            handle_place_inspected=collecting_handler,
+            handle_status=AsyncMock(),
+            progress_callback=AsyncMock(),
+        )
+        assert q == 2
+        assert marginal == 2
+        assert calls[0][0] == "Barbaros Diş Klinikleri"
+
+    @pytest.mark.asyncio
+    async def test_mahalle_phase_skipped_without_primary_or_mahalles(self):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+        scraper = GoogleMapsScraper()
+        noop = AsyncMock()
+        assert await scraper._run_mahalle_phase(
+            primary_term="", clean_city="X", district="Y", district_addresses=[],
+            all_discovered_leads=[], handle_place_inspected=noop,
+            handle_status=noop, progress_callback=noop,
+        ) == (0, 0)
+        assert await scraper._run_mahalle_phase(
+            primary_term="Diş", clean_city="X", district="Y", district_addresses=[],
+            all_discovered_leads=[], handle_place_inspected=noop,
+            handle_status=noop, progress_callback=noop,
+        ) == (0, 0)

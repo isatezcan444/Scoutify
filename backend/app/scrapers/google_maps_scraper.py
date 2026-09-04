@@ -462,6 +462,8 @@ class GoogleMapsScraper(BaseScraper):
             "geo_filtered": 0,
             "dup_place": 0,
             "dup_name": 0,
+            "mahalle_queries": 0,
+            "mahalle_marginals": 0,
         }
         target_reached = False
 
@@ -473,6 +475,8 @@ class GoogleMapsScraper(BaseScraper):
 
             base_pct = int(10 + (dist_idx / len(target_districts)) * 80)
             district_span_pct = int(80 / len(target_districts))
+            # Phase-1 addresses feed the adaptive subdivision phase.
+            district_addresses: List[str] = []
 
             async def handle_status(
                 message: str,
@@ -500,6 +504,8 @@ class GoogleMapsScraper(BaseScraper):
                 _span: int = district_span_pct,
             ) -> None:
                 stats["raw_found"] += 1
+                if place.get("address"):
+                    district_addresses.append(str(place["address"]))
 
                 # --- Geo fence gate (runs BEFORE phone enrichment to avoid wasted HTTP) ---
                 # Out-of-scope rejections are counted silently (metrics carry the
@@ -626,6 +632,28 @@ class GoogleMapsScraper(BaseScraper):
                     target_reached = True
                     break
 
+            # ---- Adaptive subdivision phase (unlimited mode only) ----
+            # Mahalle queries pull the long tail the district corpus misses
+            # (measured +30% marginal). Same dedup/geo/phone pipeline applies.
+            if (
+                max_results <= 0
+                and settings.SCRAPER_MAHALLE_PHASE_ENABLED
+                and not target_reached
+            ):
+                mah_queries, mah_marginal = await self._run_mahalle_phase(
+                    primary_term=QueryExpander.primary_term(clean_keyword),
+                    clean_city=clean_city,
+                    district=district,
+                    district_addresses=district_addresses,
+                    all_discovered_leads=all_discovered_leads,
+                    handle_place_inspected=handle_place_inspected,
+                    handle_status=handle_status,
+                    progress_callback=progress_callback,
+                )
+                stats["queries_executed"] += mah_queries
+                stats["mahalle_queries"] += mah_queries
+                stats["mahalle_marginals"] += mah_marginal
+
             # District closure line always fires (even when the global target was
             # just hit): the stream must never go silent about a finished area.
             if progress_callback:
@@ -648,6 +676,9 @@ class GoogleMapsScraper(BaseScraper):
             "duplicates_by_place": stats["dup_place"],
             "duplicates_by_name": stats["dup_name"],
             "geo_filtered_out": stats["geo_filtered"],
+            "mahalle_queries": stats["mahalle_queries"],
+            "mahalle_marginals": stats["mahalle_marginals"],
+            "geo_filtered_out": stats["geo_filtered"],
             "shared_phone_lines": sum(1 for l in all_discovered_leads if l.get("phone_line_shared")),
         }
 
@@ -665,6 +696,75 @@ class GoogleMapsScraper(BaseScraper):
         )
 
         return all_discovered_leads
+
+    async def _run_mahalle_phase(
+        self,
+        *,
+        primary_term: str,
+        clean_city: str,
+        district: str,
+        district_addresses: List[str],
+        all_discovered_leads: List[Dict[str, Any]],
+        handle_place_inspected: Callable[..., Any],
+        handle_status: Callable[..., Any],
+        progress_callback: Optional[Callable[[Dict[str, Any]], Any]],
+    ) -> Tuple[int, int]:
+        """Runs adaptive neighborhood subdivision queries for one district.
+
+        Mahalles are derived from phase-1 result addresses (no external
+        registry); each runs one bounded query session through the identical
+        inspection pipeline. The HTTP engine is required (page-bounded
+        sessions); other engines skip the phase explicitly.
+        Returns (queries_executed, marginal_new_leads).
+        """
+        if not primary_term:
+            return 0, 0
+        mahalles = QueryExpander.extract_mahalle_candidates(
+            district_addresses,
+            top_k=settings.SCRAPER_MAX_MAHALLE_QUERIES,
+            min_mentions=settings.SCRAPER_MAHALLE_MIN_MENTIONS,
+        )
+        if not mahalles:
+            return 0, 0
+
+        active_engine = self._resolve_active_engine()
+        if not isinstance(active_engine, GoogleMapsHttpScraper):
+            logger.info("[GMAPS_ENGINE] Mahalle phase needs the HTTP engine — skipping.")
+            return 0, 0
+
+        before_count = len(all_discovered_leads)
+        queries = 0
+        for mah in mahalles:
+            if progress_callback:
+                await progress_callback({
+                    "type": "log",
+                    "key": "leadFinder.stream.mahalleStarted",
+                    "params": {"mahalle": mah, "district": district},
+                    "message": f"🏘️ Mahalle taraması: {mah} ({district}).",
+                    "progress": 95,
+                })
+            try:
+                logger.info(f"[GMAPS_ENGINE] Executing mahalle query '{mah} {primary_term}'.")
+                await active_engine.scrape_district_places(
+                    keyword=f"{mah} {primary_term}",
+                    city=clean_city,
+                    district=district,
+                    max_results=None,
+                    max_pages=settings.SCRAPER_MAHALLE_MAX_PAGES,
+                    on_place_inspected=handle_place_inspected,
+                    on_progress_status=handle_status,
+                )
+                queries += 1
+            except GoogleMapsBlockedError:
+                raise
+            except Exception as mah_err:
+                logger.warning(
+                    f"[GMAPS_ENGINE] Mahalle query '{mah}' failed for {clean_city} > {district}: {mah_err}"
+                )
+            finally:
+                gc.collect()
+                await asyncio.sleep(0.5)
+        return queries, max(0, len(all_discovered_leads) - before_count)
 
     @staticmethod
     def _remaining_budget(max_results: int, discovered_so_far: int) -> Optional[int]:

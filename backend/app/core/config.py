@@ -162,6 +162,12 @@ class Settings(BaseSettings):
     SCRAPER_ENRICH_TIMEOUT_SECONDS: float = 1.5
     # Sektör etiketinden türetilecek maksimum arama varyantı sayısı
     SCRAPER_MAX_QUERY_VARIANTS: int = 3
+    # Adaptif mahalle fazı: 1. faz adreslerinden türetilen alt-bölge sorguları
+    # (ölçüldü: +%30 marjinal recall). Yalnızca limitsiz modda koşar.
+    SCRAPER_MAHALLE_PHASE_ENABLED: bool = True
+    SCRAPER_MAX_MAHALLE_QUERIES: int = 4
+    SCRAPER_MAHALLE_MAX_PAGES: int = 4
+    SCRAPER_MAHALLE_MIN_MENTIONS: int = 3
     # Coğrafi çit: adresi hedef ilçe dışını kanıtlayan işletmeleri ele
     SCRAPER_GEO_FILTER_ENABLED: bool = True
     # İlçe kanıtı taşımayan (CITY_ONLY/UNKNOWN) adresleri de ele (en katı mod)

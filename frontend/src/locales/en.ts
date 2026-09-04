@@ -193,6 +193,7 @@ export const en = {
       placeFound: '📡 Found ({count}): {name} — {address} ({phone})',
       placeFoundSharedLine: '📡 Found ({count}): {name} — {address} ({phone} — shared line)',
       variantDone: "🔎 Variant '{term}' done ({district}).",
+      mahalleStarted: '🏘️ Subdivision scan: {mahalle} ({district}).',
       districtDone: '✅ {district} done. {count} businesses discovered in total.',
       savingLeads: '💾 Saving: {done}/{total} businesses...',
       searchSummary: '🔍 Search: "{keyword}" — {display} ({target})',
