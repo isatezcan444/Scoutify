@@ -30,7 +30,8 @@ import {
   WhatsAppIcon,
   GoogleMapsIcon,
   BulkActionToolbar,
-  ToolbarActionButton
+  ToolbarActionButton,
+  Pagination
 } from '../components/ui';
 import { Modal } from '../components/ui/Modal';
 import { TextInput } from '../components/forms/TextInput';
@@ -61,12 +62,23 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
   // no CRM id until the user saves them).
   const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  // Client-side pagination over the in-memory discovery set (same shared
+  // Pagination component as the CRM table).
+  const [resultsPage, setResultsPage] = useState(1);
+  const [resultsPageSize, setResultsPageSize] = useState(12);
 
   const leadKey = (l: any): string => String(l?.place_id || l?.name || '');
   const allKeys = discoveredLeads.map(leadKey).filter(Boolean);
   const unsavedLeads = discoveredLeads.filter((l) => !l.id);
   const savedLeads = discoveredLeads.filter((l) => l.id);
   const isAllSelected = allKeys.length > 0 && allKeys.every((k) => selectedKeys.includes(k));
+  // Clamp (never yank the user back): streaming appends keep the current page.
+  const totalResultPages = Math.max(1, Math.ceil(discoveredLeads.length / resultsPageSize));
+  const safeResultsPage = Math.min(resultsPage, totalResultPages);
+  const pagedLeads = discoveredLeads.slice(
+    (safeResultsPage - 1) * resultsPageSize,
+    safeResultsPage * resultsPageSize
+  );
 
   const handleToggleSingleSelect = (key: string) => {
     setSelectedKeys((prev) =>
@@ -175,6 +187,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
     setProgress(5);
     jobDoneRef.current = false;
     setSelectedKeys([]);
+    setResultsPage(1);
     const targetLabel = maxResults === 0
       ? t('leadFinder.scopeAll')
       : `${maxResults} ${t('common.entries')}`;
@@ -565,7 +578,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
 
           {/* Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {discoveredLeads.map((lead, idx) => {
+            {pagedLeads.map((lead, idx) => {
               const key = leadKey(lead) || `lead-${idx}`;
               const isSelected = selectedKeys.includes(key);
               const isSaved = Boolean(lead.id);
@@ -687,6 +700,24 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
               );
             })}
           </div>
+
+          {/* Shared pagination (same component as Müşteri Adayları) */}
+          {discoveredLeads.length > resultsPageSize && (
+            <Pagination
+              currentPage={safeResultsPage}
+              totalItems={discoveredLeads.length}
+              pageSize={resultsPageSize}
+              onPageChange={(newPage) => {
+                setResultsPage(newPage);
+                resultsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              onPageSizeChange={(newSize) => {
+                setResultsPageSize(newSize);
+                setResultsPage(1);
+              }}
+              pageSizeOptions={[9, 12, 24, 48]}
+            />
+          )}
 
           {/* Bulk Selection Toolbar (CRM pattern): save selection to CRM */}
           <BulkActionToolbar
