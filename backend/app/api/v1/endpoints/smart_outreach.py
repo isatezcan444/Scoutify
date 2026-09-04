@@ -1,9 +1,10 @@
 """
 Smart Outreach, Category Confirmation, and Lead Matching Endpoints.
 """
+import asyncio
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -22,7 +23,7 @@ from backend.app.schemas.smart_outreach import (
 from backend.app.services.category_recommendation_service import CategoryRecommendationService
 from backend.app.services.smart_matching_service import SmartMatchingService
 from backend.app.services.message_strategy_service import MessageStrategyService
-from backend.app.api.v1.endpoints.scraper import run_scraper_task
+from backend.app.api.v1.endpoints.scraper import run_scraper_task, active_tasks
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,6 @@ async def recommend_message(
 @router.post("/start-targeted-discovery")
 async def start_targeted_discovery(
     request: TargetedDiscoveryRequest,
-    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -134,14 +134,20 @@ async def start_targeted_discovery(
         await db.refresh(job)
 
         job_ids.append(job.id)
-        background_tasks.add_task(
-            run_scraper_task,
-            job_id=job.id,
-            keyword=cat_term,
-            city=request.city,
-            districts=request.districts,
-            max_results=request.max_results_per_category
+        # Tracked asyncio task (not a fire-and-forget BackgroundTask) so the
+        # job honors the scraper semaphore inside run_scraper_task AND stays
+        # cancellable via POST /scraper/cancel/{job_id} like all other jobs.
+        # run_scraper_task removes itself from active_tasks when done.
+        task = asyncio.create_task(
+            run_scraper_task(
+                job_id=job.id,
+                keyword=cat_term,
+                city=request.city,
+                districts=request.districts,
+                max_results=request.max_results_per_category,
+            )
         )
+        active_tasks[job.id] = task
 
     return {
         "status": "started",

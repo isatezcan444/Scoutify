@@ -604,7 +604,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const handleLaunchCampaign = async (campaignId: number) => {
     try {
       await ApiClient.launchCampaign(campaignId, { limit: 50 });
-      toast.success('Campaign launched and running safely in the background!', t('common.success'));
+      toast.success(t('campaigns.campaignLaunched'), t('common.success'));
       fetchCampaigns();
       onRefreshStats();
     } catch (err: any) {
@@ -626,7 +626,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
   const handleCancelCampaign = async (campaignId: number) => {
     const confirmed = await toast.confirm({
       title: t('campaigns.pauseCampaign') + '?',
-      message: 'Are you sure you want to pause this campaign dispatch?',
+      message: t('campaigns.pauseCampaignConfirmMsg'),
       confirmText: t('campaigns.pauseCampaign'),
       variant: 'warning',
     });
@@ -702,7 +702,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
 
     const confirmed = await toast.confirm({
       title: `${t('campaigns.deleteCampaign')} (${count})`,
-      message: `${count} kampanyayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+      message: t('campaigns.bulkDeleteConfirm', { count }),
       confirmText: t('common.delete') || 'Sil',
       variant: 'danger',
     });
@@ -859,7 +859,7 @@ export const CampaignsPage: React.FC<CampaignsPageProps> = ({
                 {/* 1. Basic Info & Target Audience */}
                 <FormSection
                   title={t('campaigns.campaignName')}
-                  subtitle="Hedef kitlenizi ve kampanyanızın genel kapsamını belirleyin."
+                  subtitle={t('campaigns.builderInfoSubtitle')}
                   icon={Target}
                 >
                   {/* Selected Group Badge */}

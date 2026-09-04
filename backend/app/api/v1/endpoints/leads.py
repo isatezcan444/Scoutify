@@ -1,7 +1,8 @@
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, delete
+from sqlalchemy import select, func, or_, delete, insert
+from sqlalchemy.exc import IntegrityError
 
 from backend.app.core.database import get_db
 from backend.app.core.search_utils import build_tr_search_filter, generate_tr_search_terms
@@ -237,6 +238,15 @@ async def update_lead(lead_id: int, lead_in: LeadUpdate, db: AsyncSession = Depe
             lead.phone_e164 = phone_data["e164"]
             lead.is_mobile = phone_data.get("is_mobile", False)
             lead.is_whatsapp_eligible = phone_data.get("is_whatsapp_eligible", False)
+        else:
+            # Fail-closed (mirrors the ingest guard): an unverifiable number
+            # must not keep a stale e164 behind.
+            lead.phone_e164 = None
+            lead.is_mobile = False
+            lead.is_whatsapp_eligible = False
+        # The display number owns the validated fields: an explicitly passed
+        # phone_e164 must not bypass validation.
+        update_data.pop("phone_e164", None)
 
     for field, value in update_data.items():
         setattr(lead, field, value)
@@ -307,18 +317,63 @@ async def bulk_blacklist_leads(payload: BulkBlacklistRequest, db: AsyncSession =
         raise HTTPException(status_code=400, detail="Kara listeye eklenecek lead belirtilmedi")
 
     count = 0
+    # Batched blacklist existence check (was N+1) + bulk insert.
+    wanted = {lead.phone_e164 for lead in leads if lead.phone_e164}
+    already: set = set()
+    if wanted:
+        already = set(
+            (await db.execute(select(Blacklist.phone_e164).where(Blacklist.phone_e164.in_(wanted)))).scalars().all()
+        )
+    missing = sorted(wanted - already)
+    if missing:
+        reason = payload.reason or "Toplu kara listeye eklendi"
+        try:
+            async with db.begin_nested():
+                await db.execute(
+                    insert(Blacklist).values(
+                        [{"phone_e164": e164, "reason": reason} for e164 in missing]
+                    )
+                )
+            count = len(missing)
+        except IntegrityError:
+            # Concurrent race: fall back per row, skipping present pairs.
+            for e164 in missing:
+                try:
+                    async with db.begin_nested():
+                        await db.execute(
+                            insert(Blacklist).values(phone_e164=e164, reason=reason)
+                        )
+                    count += 1
+                except IntegrityError:
+                    pass
     for lead in leads:
         lead.status = LeadStatus.UNSUBSCRIBED
-        if lead.phone_e164:
-            bl_stmt = select(Blacklist).where(Blacklist.phone_e164 == lead.phone_e164)
-            bl_res = await db.execute(bl_stmt)
-            if not bl_res.scalar_one_or_none():
-                bl = Blacklist(phone_e164=lead.phone_e164, reason=payload.reason or "Toplu kara listeye eklendi")
-                db.add(bl)
-                count += 1
 
     await db.commit()
     return {"blacklisted_count": count, "leads_updated": len(leads)}
+
+
+def _lead_export_dict(l: Lead) -> dict:
+    """Explicit export projection: never leak SQLAlchemy internals
+    (_sa_instance_state) or unreviewed columns into customer files."""
+    return {
+        "id": l.id,
+        "name": l.name,
+        "category": l.category,
+        "phone_e164": l.phone_e164,
+        "phone": l.phone,
+        "is_mobile": l.is_mobile,
+        "is_whatsapp_eligible": l.is_whatsapp_eligible,
+        "city": l.city,
+        "district": l.district,
+        "address": l.address,
+        "rating": l.rating,
+        "reviews_count": l.reviews_count,
+        "website": l.website,
+        "search_keyword": l.search_keyword,
+        "status": l.status.value if hasattr(l.status, "value") else str(l.status),
+        "created_at": l.created_at,
+    }
 
 
 @router.post("/export/csv")
@@ -355,7 +410,7 @@ async def export_leads_csv(
     res = await db.execute(query.order_by(Lead.id.desc()))
     leads = res.scalars().all()
 
-    leads_dicts = [l.__dict__ for l in leads]
+    leads_dicts = [_lead_export_dict(l) for l in leads]
     csv_bytes = ExportService.export_csv(leads_dicts)
 
     return Response(
@@ -398,7 +453,7 @@ async def export_leads_excel(
     res = await db.execute(query.order_by(Lead.id.desc()))
     leads = res.scalars().all()
 
-    leads_dicts = [l.__dict__ for l in leads]
+    leads_dicts = [_lead_export_dict(l) for l in leads]
     excel_bytes = ExportService.export_excel(leads_dicts)
 
     return Response(

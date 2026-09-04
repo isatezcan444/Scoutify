@@ -8,7 +8,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from backend.app.core.database import AsyncSessionLocal
 from backend.app.models.lead import Lead, LeadStatus
@@ -42,6 +42,25 @@ class CampaignRunner:
         if cls.is_campaign_running(campaign_id):
             logger.warning(f"[CampaignRunner] Campaign #{campaign_id} is already running.")
             return False
+
+        # DB-backed claim: exactly one worker owns a campaign, surviving
+        # restarts and multi-worker setups. The conditional UPDATE wins the
+        # race atomically; rowcount 0 means already ACTIVE (owned) or missing.
+        async with AsyncSessionLocal() as db:
+            claimed = await db.execute(
+                update(Campaign)
+                .where(
+                    Campaign.id == campaign_id,
+                    Campaign.status != CampaignStatus.ACTIVE,
+                )
+                .values(status=CampaignStatus.ACTIVE)
+            )
+            await db.commit()
+            if claimed.rowcount == 0:
+                logger.warning(
+                    f"[CampaignRunner] Campaign #{campaign_id} already active or missing."
+                )
+                return False
 
         task = asyncio.create_task(
             cls._execute_campaign_worker(campaign_id, lead_ids, limit)
@@ -117,9 +136,12 @@ class CampaignRunner:
                 was_stopped_early = False
 
                 for idx, lead in enumerate(leads):
-                    # Re-check if campaign was paused or cancelled
-                    await db.refresh(campaign)
-                    if campaign.status in (CampaignStatus.PAUSED, CampaignStatus.ARCHIVED):
+                    # Re-check if campaign was paused or cancelled. Narrow
+                    # status poll — no full-row refresh per lead.
+                    live_status = await db.scalar(
+                        select(Campaign.status).where(Campaign.id == campaign_id)
+                    )
+                    if live_status in (CampaignStatus.PAUSED, CampaignStatus.ARCHIVED):
                         logger.info(f"[CampaignRunner] Campaign #{campaign_id} was paused/stopped by user.")
                         was_stopped_early = True
                         break
@@ -155,8 +177,10 @@ class CampaignRunner:
 
                 # State transition at loop end:
                 # If paused or cancelled early, preserve that status instead of incorrectly forcing COMPLETED!
-                await db.refresh(campaign)
-                if not was_stopped_early and campaign.status == CampaignStatus.ACTIVE:
+                live_status = await db.scalar(
+                    select(Campaign.status).where(Campaign.id == campaign_id)
+                )
+                if not was_stopped_early and live_status == CampaignStatus.ACTIVE:
                     campaign.status = CampaignStatus.COMPLETED
                     await db.commit()
 
@@ -177,5 +201,20 @@ class CampaignRunner:
             raise
         except Exception as e:
             logger.exception(f"[CampaignRunner] Campaign #{campaign_id} error: {e}")
+            # Fail-visible: never leave a campaign stuck ACTIVE. PAUSED matches
+            # the restart-recovery semantics (user decides resume/retry).
+            try:
+                async with AsyncSessionLocal() as db:
+                    broken = await db.get(Campaign, campaign_id)
+                    if broken and broken.status == CampaignStatus.ACTIVE:
+                        broken.status = CampaignStatus.PAUSED
+                        await db.commit()
+            except Exception as record_err:
+                logger.error(f"[CampaignRunner] Could not park failed campaign #{campaign_id}: {record_err}")
+            await ws_manager.broadcast({
+                "event": "campaign_failed",
+                "campaign_id": campaign_id,
+                "error": str(e)[:300],
+            })
         finally:
             active_campaign_tasks.pop(campaign_id, None)

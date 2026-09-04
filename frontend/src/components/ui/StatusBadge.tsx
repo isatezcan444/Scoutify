@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "../../lib/utils";
+import { useI18n } from "../../context/I18nContext";
 
 export type StatusVariant = 
   | "active" 
@@ -28,61 +29,62 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({
   size = "md",
   className,
 }) => {
-  const styles: Record<StatusVariant, { badge: string; dot: string; defaultLabel: string }> = {
+  const { t } = useI18n();
+  const styles: Record<StatusVariant, { badge: string; dot: string; labelKey: string }> = {
     active: {
       badge: "bg-[#28C76F]/15 text-[#28C76F] border-[#28C76F]/25 dark:bg-[#28C76F]/20 dark:text-[#28C76F]",
       dot: "bg-[#28C76F]",
-      defaultLabel: "Active",
+      labelKey: "common.statusActive",
     },
     online: {
       badge: "bg-[#28C76F]/15 text-[#28C76F] border-[#28C76F]/25 dark:bg-[#28C76F]/20 dark:text-[#28C76F]",
       dot: "bg-[#28C76F]",
-      defaultLabel: "Online",
+      labelKey: "common.statusOnline",
     },
     offline: {
       badge: "bg-slate-100 text-slate-500 border-slate-200 dark:bg-white/[0.06] dark:text-slate-400 dark:border-white/[0.08]",
       dot: "bg-slate-400",
-      defaultLabel: "Offline",
+      labelKey: "common.statusOffline",
     },
     pending: {
       badge: "bg-[#FF9F43]/15 text-[#FF9F43] border-[#FF9F43]/25 dark:bg-[#FF9F43]/20 dark:text-[#FF9F43]",
       dot: "bg-[#FF9F43]",
-      defaultLabel: "Pending",
+      labelKey: "common.statusPending",
     },
     completed: {
       badge: "bg-[#7367F0]/15 text-[#7367F0] border-[#7367F0]/25 dark:bg-[#7367F0]/20 dark:text-[#A59DF8]",
       dot: "bg-[#7367F0]",
-      defaultLabel: "Completed",
+      labelKey: "common.statusCompleted",
     },
     failed: {
       badge: "bg-[#EA5455]/15 text-[#EA5455] border-[#EA5455]/25 dark:bg-[#EA5455]/20 dark:text-[#EA5455]",
       dot: "bg-[#EA5455]",
-      defaultLabel: "Failed",
+      labelKey: "common.statusFailed",
     },
     danger: {
       badge: "bg-[#EA5455]/15 text-[#EA5455] border-[#EA5455]/25 dark:bg-[#EA5455]/20 dark:text-[#EA5455]",
       dot: "bg-[#EA5455]",
-      defaultLabel: "Danger",
+      labelKey: "common.statusDanger",
     },
     warning: {
       badge: "bg-[#FF9F43]/15 text-[#FF9F43] border-[#FF9F43]/25 dark:bg-[#FF9F43]/20 dark:text-[#FF9F43]",
       dot: "bg-[#FF9F43]",
-      defaultLabel: "Warning",
+      labelKey: "common.statusWarning",
     },
     info: {
       badge: "bg-[#00CFE8]/15 text-[#00CFE8] border-[#00CFE8]/25 dark:bg-[#00CFE8]/20 dark:text-[#00CFE8]",
       dot: "bg-[#00CFE8]",
-      defaultLabel: "Info",
+      labelKey: "common.statusInfo",
     },
     neutral: {
       badge: "bg-slate-100 text-slate-600 border-slate-200 dark:bg-white/[0.06] dark:text-slate-300 dark:border-white/[0.08]",
       dot: "bg-slate-400",
-      defaultLabel: "Neutral",
+      labelKey: "common.statusNeutral",
     },
   };
 
   const current = styles[status] || styles.neutral;
-  const displayText = label || current.defaultLabel;
+  const displayText = label || t(current.labelKey);
 
   return (
     <span

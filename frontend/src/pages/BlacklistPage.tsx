@@ -156,7 +156,7 @@ export const BlacklistPage: React.FC = () => {
       } finally {
         setIsSearchingLeads(false);
       }
-    }, 250);
+    }, 300);
 
     return () => clearTimeout(timer);
   }, [searchQuery, selectedLead]);

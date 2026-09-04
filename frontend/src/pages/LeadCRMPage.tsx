@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Users, 
   Search, 
@@ -110,7 +110,10 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
   const [newLeadDistrict, setNewLeadDistrict] = useState('');
   const [formError, setFormError] = useState('');
 
+  const fetchLeadsRequestIdRef = useRef(0);
+
   const fetchLeads = async () => {
+    const requestId = ++fetchLeadsRequestIdRef.current;
     setLoading(true);
     try {
       const data = await ApiClient.getLeads({
@@ -123,12 +126,13 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
         status: statusFilter || undefined,
         whatsapp_eligible_only: waOnly,
       });
+      if (requestId !== fetchLeadsRequestIdRef.current) return;
       setLeads(data.items);
       setTotal(data.total);
     } catch (err) {
       console.error('Error fetching leads:', err);
     } finally {
-      setLoading(false);
+      if (requestId === fetchLeadsRequestIdRef.current) setLoading(false);
     }
   };
 
@@ -290,7 +294,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
       }
 
       if (targetLeadIds.length === 0) {
-        toast.warning('Eklenecek işletme bulunamadı.');
+        toast.warning(t('leads.noLeadsToAdd'));
         return;
       }
 
@@ -791,7 +795,7 @@ export const LeadCRMPage: React.FC<LeadCRMPageProps> = ({ onRefreshStats }) => {
                           href={getGoogleMapsUrl(lead)}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Google Maps'te Aç"
+                          title={t('leads.openInGoogleMaps')}
                           className="group/loc inline-flex items-start space-x-1.5 text-xs text-slate-600 dark:text-slate-300 hover:text-[#7367F0] dark:hover:text-[#7367F0] transition-colors cursor-pointer"
                         >
                           <MapPin className="w-3.5 h-3.5 text-slate-400 group-hover/loc:text-[#7367F0] shrink-0 mt-0.5 transition-colors" />

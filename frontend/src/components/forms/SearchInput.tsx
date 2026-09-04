@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../context/I18nContext';
 
 export interface SearchInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   value?: string;
@@ -20,12 +21,14 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
       debounceMs = 300,
       loading = false,
       sizeVariant = 'md',
-      placeholder = 'Search...',
+      placeholder,
       className,
       ...props
     },
     ref
   ) => {
+    const { t } = useI18n();
+    const resolvedPlaceholder = placeholder ?? t('common.searchPlaceholder');
     const [localValue, setLocalValue] = useState(controlledValue || '');
     const onChangeRef = useRef(onChange);
     const onClearRef = useRef(onClear);
@@ -97,8 +100,8 @@ export const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
           ref={ref}
           type="text"
           value={localValue}
-          onChange={(e) => setLocalValue(e.target.value)}
-          placeholder={placeholder}
+          onChange={handleInputChange}
+          placeholder={resolvedPlaceholder}
           className={cn(
             'w-full rounded-lg vuexy-input font-medium transition-all',
             sizeClasses[sizeVariant],

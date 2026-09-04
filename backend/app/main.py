@@ -1,4 +1,3 @@
-import collections
 import logging
 from contextlib import asynccontextmanager
 
@@ -18,23 +17,6 @@ from backend.app.core.migrations import (
 from backend.app.core.seed import seed_demo_data_if_empty
 from backend.app.models.blacklist import ScraperJob, ScraperJobStatus
 from backend.app.models.campaign import Campaign, CampaignStatus
-
-# In-memory log handler for live diagnostics
-class MemoryLogHandler(logging.Handler):
-    def __init__(self, capacity: int = 300):
-        super().__init__()
-        self.buffer = collections.deque(maxlen=capacity)
-
-    def emit(self, record):
-        try:
-            msg = self.format(record)
-            self.buffer.append(msg)
-        except Exception:
-            pass
-
-memory_log_handler = MemoryLogHandler()
-memory_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-logging.getLogger().addHandler(memory_log_handler)
 
 # Setup logging
 logging.basicConfig(
@@ -76,22 +58,25 @@ async def recover_stuck_jobs() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Connecting to Database & Creating Tables...")
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    # Fail-closed on schema/connectivity/recovery errors: serving traffic on
+    # a broken database corrupts jobs and leads. Only demo seeding (explicitly
+    # non-critical, disabled in production) is allowed to fail open.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
-        # Bilinen şema geçişleri (idempotent)
-        await ensure_leads_phone_nullable(engine)
-        await ensure_conversations_columns(engine)
-        await ensure_messages_media_columns(engine)
+    # Bilinen şema geçişleri (idempotent)
+    await ensure_leads_phone_nullable(engine)
+    await ensure_conversations_columns(engine)
+    await ensure_messages_media_columns(engine)
 
-        # Restart sonrası yarıda kalan arka plan işlerini toparla
-        await recover_stuck_jobs()
+    # Restart sonrası yarıda kalan arka plan işlerini toparla
+    await recover_stuck_jobs()
 
-        if settings.SEED_DEMO_DATA:
+    if settings.SEED_DEMO_DATA:
+        try:
             await seed_demo_data_if_empty()
-    except Exception as e:
-        logger.error(f"[STARTUP_ERROR] Database/seed initialization exception: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"[STARTUP_ERROR] Demo seed failed (non-critical): {e}", exc_info=True)
 
     yield
     # Cleanup
@@ -108,10 +93,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Configuration: Allow all origins so Vercel preview branches and custom domains never get blocked
+# CORS: strict allowlist from settings (AGENTS.md single source of truth).
+# Vercel preview deployments (*.vercel.app) are matched by regex so feature
+# branches keep working without reopening to "*". Credentials stay disabled.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -137,11 +125,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Include API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-
-@app.get("/system-log", tags=["Health"])
-async def get_system_log():
-    return {"logs": list(memory_log_handler.buffer)}
 
 
 @app.get("/", tags=["Health"])

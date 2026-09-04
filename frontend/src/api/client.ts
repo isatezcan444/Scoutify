@@ -27,7 +27,7 @@ const host = typeof window !== 'undefined' ? window.location.hostname : 'localho
 const isRemoteHost = typeof window !== 'undefined' && host !== 'localhost' && host !== '127.0.0.1';
 
 function resolveApiBase(): string {
-  const envApi = (import.meta as any).env?.VITE_API_URL;
+  const envApi = import.meta.env?.VITE_API_URL as string | undefined;
   if (envApi) {
     return envApi.endsWith('/api/v1') ? envApi : `${envApi.replace(/\/$/, '')}/api/v1`;
   }
@@ -38,14 +38,14 @@ function resolveApiBase(): string {
 }
 
 function resolveWsUrl(): string {
-  const envWs = (import.meta as any).env?.VITE_WS_URL;
+  const envWs = import.meta.env?.VITE_WS_URL as string | undefined;
   if (envWs) {
     if (isHttps && envWs.startsWith('ws://')) {
       return envWs.replace(/^ws:\/\//i, 'wss://');
     }
     return envWs;
   }
-  const envApi = (import.meta as any).env?.VITE_API_URL;
+  const envApi = import.meta.env?.VITE_API_URL as string | undefined;
   if (envApi) {
     const wsProto = envApi.startsWith('https://') || isHttps ? 'wss://' : 'ws://';
     const cleanHost = envApi.replace(/^https?:\/\//i, '').replace(/\/api\/v1\/?$/i, '').replace(/\/$/, '');

@@ -14,10 +14,15 @@ import { Card, Badge, PageHeader, Button } from '../components/ui';
 import { FormSection, Select } from '../components/forms';
 import { useTheme } from '../context/ThemeContext';
 import { useI18n } from '../context/I18nContext';
+import { API_BASE } from '../api/client';
 
 export const SettingsPage: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const { language, setLanguage, t } = useI18n();
+
+  const apiBaseLabel = API_BASE;
+  const gatewayBaseLabel =
+    (import.meta.env?.VITE_GATEWAY_URL as string | undefined) || 'http://localhost:3001';
 
   return (
     <div className="space-y-6 pb-16 max-w-4xl select-none animate-fade-in">
@@ -32,7 +37,7 @@ export const SettingsPage: React.FC = () => {
       <Card className="p-5 sm:p-6 space-y-4">
         <FormSection
           title={t('settings.languageSection')}
-          subtitle={language === 'en' ? 'Choose the interface language for Scoutify.' : 'Scoutify arayüz ve bildirim dilini seçin.'}
+          subtitle={t('settings.languageSubtitle')}
           icon={Languages}
         >
           <div className="p-4 rounded-xl bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] space-y-3">
@@ -65,7 +70,7 @@ export const SettingsPage: React.FC = () => {
       <Card className="p-5 sm:p-6 space-y-4">
         <FormSection
           title={t('settings.themeSection')}
-          subtitle="Toggle between high-contrast dark mode and clean light theme."
+          subtitle={t('settings.themeSubtitle')}
           icon={theme === 'light' ? Sun : Moon}
         >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-lg bg-slate-50 dark:bg-[#25293C] border border-slate-200/60 dark:border-white/[0.05] gap-3">
@@ -102,7 +107,7 @@ export const SettingsPage: React.FC = () => {
       <Card className="p-5 sm:p-6 space-y-4 sm:space-y-6">
         <FormSection
           title={t('settings.servicesSection')}
-          subtitle="Status and endpoint configurations for backend microservices and databases."
+          subtitle={t('settings.servicesSubtitle')}
           icon={Server}
         >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
@@ -114,7 +119,7 @@ export const SettingsPage: React.FC = () => {
                 </span>
                 <Badge variant="success">{t('common.active')}</Badge>
               </div>
-              <p className="font-mono text-[#7367F0] text-[11px] font-bold">http://localhost:8000/api/v1</p>
+              <p className="font-mono text-[#7367F0] text-[11px] font-bold">{apiBaseLabel}</p>
               <p className="text-slate-400 dark:text-[#7E7F96] text-[10px]">Pydantic v2 & SQLAlchemy 2.0 Async Session</p>
             </div>
 
@@ -126,7 +131,7 @@ export const SettingsPage: React.FC = () => {
                 </span>
                 <Badge variant="success">{t('common.active')}</Badge>
               </div>
-              <p className="font-mono text-[#00CFE8] text-[11px] font-bold">http://localhost:3001</p>
+              <p className="font-mono text-[#00CFE8] text-[11px] font-bold">{gatewayBaseLabel}</p>
               <p className="text-slate-400 dark:text-[#7E7F96] text-[10px]">Baileys WebSocket Multi-Device Socket Engine</p>
             </div>
 

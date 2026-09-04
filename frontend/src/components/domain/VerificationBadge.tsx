@@ -1,12 +1,16 @@
 import * as React from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, ShieldCheck } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../context/I18nContext';
 
 export interface VerificationBadgeProps {
   status?: string;
   isVerified?: boolean;
   score?: number;
   className?: string;
+  verifiedLabel?: string;
+  rejectedLabel?: string;
+  unverifiedLabel?: string;
 }
 
 export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
@@ -14,7 +18,11 @@ export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
   isVerified = true,
   score,
   className,
+  verifiedLabel,
+  rejectedLabel,
+  unverifiedLabel,
 }) => {
+  const { t } = useI18n();
   if (isVerified || status === 'VERIFIED') {
     return (
       <span
@@ -24,7 +32,7 @@ export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
         )}
       >
         <ShieldCheck className="w-3 h-3" />
-        <span>Verified {score ? `(${score})` : ''}</span>
+        <span>{verifiedLabel ?? t('common.verified')} {score ? `(${score})` : ''}</span>
       </span>
     );
   }
@@ -38,7 +46,7 @@ export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
         )}
       >
         <XCircle className="w-3 h-3" />
-        <span>Rejected</span>
+        <span>{rejectedLabel ?? t('common.rejected')}</span>
       </span>
     );
   }
@@ -51,7 +59,7 @@ export const VerificationBadge: React.FC<VerificationBadgeProps> = ({
       )}
     >
       <AlertTriangle className="w-3 h-3" />
-      <span>Unverified</span>
+      <span>{unverifiedLabel ?? t('common.unverified')}</span>
     </span>
   );
 };

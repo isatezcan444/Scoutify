@@ -8,6 +8,7 @@ import { LanguageSwitcher } from '../ui/LanguageSwitcher';
 interface TopHeaderProps {
   title: string;
   subtitle?: string;
+  menuButtonTitle?: string;
   onOpenQuickScrape?: () => void;
   onToggleMobileMenu?: () => void;
   onOpenSettings?: () => void;
@@ -16,6 +17,7 @@ interface TopHeaderProps {
 export const TopHeader: React.FC<TopHeaderProps> = ({
   title,
   subtitle,
+  menuButtonTitle,
   onOpenQuickScrape,
   onToggleMobileMenu,
   onOpenSettings,
@@ -33,7 +35,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
               type="button"
               onClick={onToggleMobileMenu}
               className="lg:hidden p-2 rounded-lg text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors cursor-pointer"
-              title="Menu"
+              title={menuButtonTitle ?? t('common.menuTitle')}
             >
               <Menu className="w-5 h-5" />
             </button>

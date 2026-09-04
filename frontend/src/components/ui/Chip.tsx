@@ -1,10 +1,12 @@
 import * as React from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../context/I18nContext';
 
 export interface ChipProps {
   label: React.ReactNode;
   onRemove?: () => void;
+  removeLabel?: string;
   variant?: 'primary' | 'success' | 'warning' | 'danger' | 'info' | 'default';
   size?: 'sm' | 'md';
   icon?: React.ReactNode;
@@ -14,11 +16,13 @@ export interface ChipProps {
 export const Chip: React.FC<ChipProps> = ({
   label,
   onRemove,
+  removeLabel,
   variant = 'default',
   size = 'md',
   icon,
   className,
 }) => {
+  const { t } = useI18n();
   const variantStyles = {
     default: 'bg-slate-100 dark:bg-white/[0.06] text-slate-700 dark:text-slate-200 border-slate-200 dark:border-white/[0.08]',
     primary: 'bg-[#7367F0]/15 text-[#7367F0] dark:bg-[#7367F0]/25 dark:text-[#A59DF8] border-[#7367F0]/30',
@@ -52,7 +56,7 @@ export const Chip: React.FC<ChipProps> = ({
             onRemove();
           }}
           className="hover:opacity-75 p-0.5 rounded-full hover:bg-black/10 dark:hover:bg-white/10 transition-colors cursor-pointer shrink-0 ml-0.5"
-          aria-label="Remove"
+          aria-label={removeLabel ?? t('common.removeLabel')}
         >
           <X className="w-3 h-3" />
         </button>

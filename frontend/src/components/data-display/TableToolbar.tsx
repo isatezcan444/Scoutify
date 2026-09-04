@@ -2,6 +2,7 @@ import * as React from 'react';
 import { RotateCcw } from 'lucide-react';
 import { Chip } from '../ui/Chip';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../context/I18nContext';
 
 export interface ActiveFilterChip {
   id: string;
@@ -26,9 +27,11 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
   actionsSlot,
   activeChips = [],
   onResetFilters,
-  resetLabel = 'Reset Filters',
+  resetLabel,
   className,
 }) => {
+  const { t } = useI18n();
+  const resolvedResetLabel = resetLabel ?? t('common.resetFilters');
   const hasChips = activeChips.length > 0;
 
   return (
@@ -69,7 +72,7 @@ export const TableToolbar: React.FC<TableToolbarProps> = ({
               className="text-xs font-bold text-slate-400 hover:text-[#EA5455] flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>{resetLabel}</span>
+              <span>{resolvedResetLabel}</span>
             </button>
           )}
         </div>

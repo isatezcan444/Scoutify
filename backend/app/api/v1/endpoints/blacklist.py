@@ -2,7 +2,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, func, or_
+from sqlalchemy import select, delete, func
 
 from backend.app.core.database import get_db
 from backend.app.core.search_utils import build_tr_search_filter
@@ -153,18 +153,20 @@ async def bulk_delete_blacklist(payload: BulkDeleteBlacklistRequest, db: AsyncSe
         if payload.search or payload.reason:
             subq = select(Blacklist.id).outerjoin(Lead, Blacklist.phone_e164 == Lead.phone_e164)
             if payload.search and payload.search.strip():
-                q = f"%{payload.search.strip()}%"
-                subq = subq.where(
-                    or_(
-                        Blacklist.phone_e164.ilike(q),
-                        Blacklist.reason.ilike(q),
-                        Blacklist.notes.ilike(q),
-                        Lead.name.ilike(q),
-                        Lead.category.ilike(q),
-                        Lead.city.ilike(q),
-                        Lead.district.ilike(q)
-                    )
+                search_filter = build_tr_search_filter(
+                    [
+                        Blacklist.phone_e164,
+                        Blacklist.reason,
+                        Blacklist.notes,
+                        Lead.name,
+                        Lead.category,
+                        Lead.city,
+                        Lead.district,
+                    ],
+                    payload.search.strip(),
                 )
+                if search_filter is not None:
+                    subq = subq.where(search_filter)
             if payload.reason and payload.reason.strip():
                 subq = subq.where(Blacklist.reason == payload.reason.strip())
             

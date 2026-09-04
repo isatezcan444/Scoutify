@@ -59,14 +59,14 @@ export const SpintaxPreviewCard: React.FC<SpintaxPreviewCardProps> = ({
 
     // 1. Replace template variables (supporting both TR and EN tokens)
     let resolved = text
-      .replace(/\{(name|isim|ad)\}/gi, activeSampleLead.name || (language === 'tr' ? 'Yetkili' : 'Director'))
-      .replace(/\{(city|sehir|şehir)\}/gi, activeSampleLead.city || (language === 'tr' ? 'İstanbul' : 'London'))
-      .replace(/\{(district|ilce|ilçe)\}/gi, activeSampleLead.district || (language === 'tr' ? 'Kadıköy' : 'Westminster'))
-      .replace(/\{(category|kategori|sektor|sektör)\}/gi, activeSampleLead.category || targetCategory || (language === 'tr' ? 'İşletme' : 'Business'))
+      .replace(/\{(name|isim|ad)\}/gi, activeSampleLead.name || t('campaigns.sampleContactName'))
+      .replace(/\{(city|sehir|şehir)\}/gi, activeSampleLead.city || t('campaigns.sampleCityFallback'))
+      .replace(/\{(district|ilce|ilçe)\}/gi, activeSampleLead.district || t('campaigns.sampleDistrictFallback'))
+      .replace(/\{(category|kategori|sektor|sektör)\}/gi, activeSampleLead.category || targetCategory || t('campaigns.sampleCategoryFallback'))
       .replace(/\{(rating|puan)\}/gi, String(activeSampleLead.rating || 4.9))
-      .replace(/\{(address|adres)\}/gi, language === 'tr' ? 'Atatürk Cad. No:12' : '10 Downing St')
-      .replace(/\{(phone|telefon)\}/gi, language === 'tr' ? '+90 532 000 00 00' : '+44 7700 900077')
-      .replace(/\{(website|web)\}/gi, language === 'tr' ? 'www.isletme.com' : 'www.business.com');
+      .replace(/\{(address|adres)\}/gi, t('campaigns.sampleAddressFallback'))
+      .replace(/\{(phone|telefon)\}/gi, t('campaigns.samplePhoneFallback'))
+      .replace(/\{(website|web)\}/gi, t('campaigns.sampleWebsiteFallback'));
 
     // 2. Resolve Spintax syntax {choice1|choice2|choice3}
     const spintaxRegex = /\{([^{}]+)\}/g;
@@ -150,10 +150,10 @@ export const SpintaxPreviewCard: React.FC<SpintaxPreviewCardProps> = ({
 
       <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
         <span>
-          {language === 'tr' ? 'Örnek Veri' : 'Sample Lead'}: {activeSampleLead.name}
+          {t('campaigns.sampleLeadLabel')}: {activeSampleLead.name}
         </span>
         <span>
-          {language === 'tr' ? 'Varyasyon' : 'Variation'}: #{iteration + 1}
+          {t('campaigns.variationLabel')}: #{iteration + 1}
         </span>
       </div>
     </Card>

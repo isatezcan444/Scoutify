@@ -217,7 +217,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
   const [testMsg, setTestMsg] = useState('Scoutify WhatsApp Gateway test message.');
   const [selectedSessionForTest] = useState<number | undefined>(undefined);
   const [testSending, setTestSending] = useState(false);
-  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   const fetchSessionsAndLogs = async () => {
     setLoading(true);
@@ -406,11 +406,11 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
 
     try {
       const res = await ApiClient.sendTestMessage(testPhone, testMsg, selectedSessionForTest);
-      setTestResult(res.message);
+      setTestResult({ ok: true, message: res.message });
       fetchSessionsAndLogs();
       onRefreshStats();
     } catch (err: any) {
-      setTestResult(`${t('common.error')}: ${err.message}`);
+      setTestResult({ ok: false, message: `${t('common.error')}: ${err.message}` });
     } finally {
       setTestSending(false);
     }
@@ -1147,7 +1147,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
-                  placeholder="0532 123 45 67"
+                  placeholder={t('whatsapp.testPhonePlaceholder')}
                   className="w-full px-3 py-2 rounded-lg vuexy-input text-xs font-mono font-bold"
                   required
                 />
@@ -1160,7 +1160,7 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
                   onChange={(e) => setTestMsg(e.target.value)}
                   rows={3}
                   className="w-full p-3 rounded-lg vuexy-input text-xs leading-relaxed font-medium"
-                  placeholder="Test message..."
+                  placeholder={t('whatsapp.testMessagePlaceholder')}
                   required
                 />
               </div>
@@ -1168,12 +1168,12 @@ export const WhatsAppHubPage: React.FC<WhatsAppHubPageProps> = ({ onRefreshStats
               {testResult && (
                 <div
                   className={`p-3 rounded-lg text-xs font-bold ${
-                    testResult.includes('Hata') || testResult.includes('Error')
-                      ? 'bg-[#EA5455]/15 border border-[#EA5455]/30 text-[#EA5455]'
-                      : 'bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F]'
+                    testResult.ok
+                      ? 'bg-[#28C76F]/15 border border-[#28C76F]/30 text-[#28C76F]'
+                      : 'bg-[#EA5455]/15 border border-[#EA5455]/30 text-[#EA5455]'
                   }`}
                 >
-                  {testResult}
+                  {testResult.message}
                 </div>
               )}
 

@@ -1,8 +1,8 @@
 import logging
-from datetime import datetime, time
+from datetime import datetime
 from typing import Optional, Tuple, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from backend.app.core.config import settings
 from backend.app.models.lead import Lead, LeadStatus
@@ -27,21 +27,6 @@ class OutreachManager:
     def calculate_jitter_delay(cls, min_delay: int, max_delay: int) -> int:
         """Calculates a realistic humanized delay using Gaussian distribution."""
         return gaussian_jitter_seconds(min_delay, max_delay)
-
-    @classmethod
-    def is_within_working_hours(cls, start_str: str = "09:30", end_str: str = "18:30") -> bool:
-        """
-        Checks if current local time is within allowable outreach working hours.
-        Fail-closed: returns False if format is invalid.
-        """
-        try:
-            now = datetime.now().time()
-            s_h, s_m = map(int, start_str.strip().split(":"))
-            e_h, e_m = map(int, end_str.strip().split(":"))
-            return time(s_h, s_m) <= now <= time(e_h, e_m)
-        except Exception as e:
-            logger.warning(f"Working hours parse failed ({start_str}-{end_str}): {e}. Failing closed.")
-            return False
 
     @classmethod
     async def is_blacklisted(cls, db: AsyncSession, phone_e164: str) -> bool:
@@ -72,9 +57,11 @@ class OutreachManager:
             session = res.scalar_one_or_none()
             if session:
                 if session.last_reset_date and session.last_reset_date.date() < now_date:
+                    # Reset without committing: this is a read path, the caller
+                    # persists once after its own state changes (single commit).
                     session.daily_sent_count = 0
                     session.last_reset_date = datetime.utcnow()
-                    await db.commit()
+                    await db.flush()
                 if session.daily_sent_count < session.max_daily_limit:
                     return session
             return None
@@ -90,9 +77,10 @@ class OutreachManager:
         
         for s in sessions:
             if s.last_reset_date and s.last_reset_date.date() < now_date:
+                # Read path: flush only, the caller commits once afterwards.
                 s.daily_sent_count = 0
                 s.last_reset_date = datetime.utcnow()
-                await db.commit()
+                await db.flush()
             if s.daily_sent_count < s.max_daily_limit:
                 return s
                 
@@ -203,18 +191,27 @@ class OutreachManager:
             log.status = MessageStatus.SENT
             log.sent_at = datetime.utcnow()
             log.wa_message_id = send_res.get("message_id")
-            
+
             # Update Lead Status
             lead.status = LeadStatus.CONTACTED
             lead.last_contacted_at = datetime.utcnow()
-            
-            # Update Session counters
-            target_session.daily_sent_count += 1
-            target_session.last_sent_at = datetime.utcnow()
-            
-            # Update Campaign counters
-            campaign.sent_count += 1
-            
+
+            # Atomic counter bumps (concurrent campaigns may share a session;
+            # read-modify-write would lose increments).
+            await db.execute(
+                update(WhatsAppSession)
+                .where(WhatsAppSession.id == target_session.id)
+                .values(
+                    daily_sent_count=WhatsAppSession.daily_sent_count + 1,
+                    last_sent_at=datetime.utcnow(),
+                )
+            )
+            await db.execute(
+                update(Campaign)
+                .where(Campaign.id == campaign.id)
+                .values(sent_count=Campaign.sent_count + 1)
+            )
+
             await db.commit()
             is_sim = send_res.get("is_simulated", False)
             sim_badge = " (DEMO / Simüle)" if is_sim else ""
@@ -222,6 +219,10 @@ class OutreachManager:
         else:
             log.status = MessageStatus.FAILED
             log.error_reason = send_res.get("error") or "Gönderim başarısız oldu"
-            campaign.failed_count += 1
+            await db.execute(
+                update(Campaign)
+                .where(Campaign.id == campaign.id)
+                .values(failed_count=Campaign.failed_count + 1)
+            )
             await db.commit()
             return False, log.error_reason, log.id

@@ -60,6 +60,7 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (typeof value !== 'string') {
+        console.warn(`[i18n] Missing translation for key: "${path}" (language: "${language}")`);
         return path;
       }
 

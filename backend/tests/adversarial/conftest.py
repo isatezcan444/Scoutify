@@ -9,9 +9,23 @@ from backend.app.main import app
 from backend.app.core.database import AsyncSessionLocal
 
 
-def unique_phone(prefix: str = "+90555") -> str:
-    """Generate a unique random E.164 Turkish phone number."""
-    return f"{prefix}{uuid.uuid4().int % 100000000:08d}"
+def unique_phone(prefix: str = "+90532") -> str:
+    """Generate a unique random E.164 Turkish phone number.
+
+    Uses the 532 mobile block (libphonenumber-valid for any subscriber part)
+    so tests exercise the strict validation path with genuinely valid numbers
+    instead of relying on the removed best-effort fallback.
+    """
+    import phonenumbers
+
+    for _ in range(100):
+        candidate = f"{prefix}{uuid.uuid4().int % 10000000:07d}"
+        try:
+            if phonenumbers.is_valid_number(phonenumbers.parse(candidate, "TR")):
+                return candidate
+        except Exception:
+            continue
+    raise AssertionError("Could not generate a valid test phone number")
 
 
 @pytest_asyncio.fixture

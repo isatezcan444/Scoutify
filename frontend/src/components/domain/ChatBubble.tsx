@@ -96,7 +96,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onRetry }) => {
               {message.media_url ? (
                 <img 
                   src={message.media_url} 
-                  alt={message.media_caption || 'Görsel'} 
+                  alt={message.media_caption || t('leads.imageAltFallback')} 
                   className="w-full h-auto max-h-60 object-cover group-hover:scale-105 transition-transform duration-200"
                 />
               ) : (
@@ -127,7 +127,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onRetry }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-bold truncate text-slate-800 dark:text-slate-100">
-                  {message.media_filename || 'Belge.pdf'}
+                  {message.media_filename || t('leads.documentFallbackName')}
                 </p>
                 <p className="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate">
                   {message.media_mime_type || 'application/pdf'}
@@ -264,7 +264,7 @@ export const ChatBubble: React.FC<ChatBubbleProps> = ({ message, onRetry }) => {
             {message.media_url ? (
               <img 
                 src={message.media_url} 
-                alt="Görsel" 
+                alt={t('leads.imageAltFallback')} 
                 className="max-h-[60vh] object-contain rounded-lg shadow-md"
               />
             ) : (

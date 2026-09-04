@@ -97,6 +97,7 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
   const [showLeadSuggestions, setShowLeadSuggestions] = useState(false);
   const [selectedLeadsToAdd, setSelectedLeadsToAdd] = useState<Lead[]>([]);
   const leadSearchContainerRef = useRef<HTMLDivElement>(null);
+  const leadSearchRequestIdRef = useRef(0);
 
   // Close lead suggestions on click outside
   useEffect(() => {
@@ -117,18 +118,20 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
     }
 
     const timer = setTimeout(async () => {
+      const requestId = ++leadSearchRequestIdRef.current;
       setIsSearchingLeads(true);
       try {
         const res = await ApiClient.getLeads({
           search: leadSearchQuery.trim(),
           size: 8,
         });
+        if (requestId !== leadSearchRequestIdRef.current) return;
         setLeadSearchResults(res.items || []);
         setShowLeadSuggestions(true);
       } catch (err) {
         console.error('Lead search error in edit group modal:', err);
       } finally {
-        setIsSearchingLeads(false);
+        if (requestId === leadSearchRequestIdRef.current) setIsSearchingLeads(false);
       }
     }, 250);
 
@@ -142,7 +145,7 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
       setGroups(data);
     } catch (err) {
       console.error('Error loading campaign groups:', err);
-      toast.error('Kampanya grupları yüklenemedi.');
+      toast.error(t('campaignGroups.loadError'));
     } finally {
       setLoading(false);
     }
@@ -316,7 +319,7 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
 
     const confirmed = await toast.confirm({
       title: `${t('campaignGroups.deleteGroupTitle')} (${count})`,
-      message: `${count} kampanya grubunu silmek istediğinizden emin misiniz? Bu gruptaki işletmeler CRM'de kalmaya devam edecektir.`,
+      message: t('campaignGroups.bulkDeleteConfirm', { count }),
       confirmText: t('common.delete') || 'Sil',
       variant: 'danger',
     });
@@ -398,7 +401,7 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
                 actions={
                   <ToolbarActionButton tone="danger" onClick={handleBulkDelete} disabled={isBulkDeleting}>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>{isBulkDeleting ? t('common.loading') : `Seçilenleri Sil (${selectedIds.length})`}</span>
+                    <span>{isBulkDeleting ? t('common.loading') : t('campaignGroups.bulkDeleteSelected', { count: selectedIds.length })}</span>
                   </ToolbarActionButton>
                 }
               />
@@ -536,20 +539,20 @@ export const CampaignGroupsPage: React.FC<CampaignGroupsPageProps> = ({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-800 dark:text-white">
-                      Hedef Kitle Grupları
+                      {t('campaignGroups.guideTitle')}
                     </h4>
-                    <p className="text-[11px] text-slate-400">Tekrar seçmeden kampanya başlatın</p>
+                    <p className="text-[11px] text-slate-400">{t('campaignGroups.guideSubtitle')}</p>
                   </div>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-[#7E7F96] leading-relaxed">
-                  İşletme Ara ekranından bulduğunuz veya burada belirlediğiniz hedef kitledeki işletmeleri bir grupta toplar. Bu sayede aynı işletmeleri her kampanya için tekrar aramak zorunda kalmazsınız.
+                  {t('campaignGroups.guideDesc')}
                 </p>
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/[0.02] border border-slate-100 dark:border-white/[0.05] text-[11px] text-slate-400 space-y-1">
                   <div className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-[#7367F0]" />
-                    <span>Hızlı Kullanım:</span>
+                    <span>{t('campaignGroups.guideQuickTitle')}</span>
                   </div>
-                  <p>İşletme Ara → Sonuçları Gruba Kaydet → Kampanya Grupları → Kampanya Başlat.</p>
+                  <p>{t('campaignGroups.guideQuickDesc')}</p>
                 </div>
               </Card>
             </div>

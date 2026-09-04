@@ -13,6 +13,7 @@ from typing import Protocol, Dict, Any, Optional
 import httpx
 
 from backend.app.core.config import settings
+from backend.app.services.phone_service import PhoneService
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,11 @@ class SimulatedSender:
     ) -> Dict[str, Any]:
         message_id = f"sim_{DateStamp()}_{random.randint(100000, 999999)}"
         logger.info(
-            f"[SimulatedSender] (DEMO) Mesaj iletildi: session={session_name}, "
-            f"phone={phone_e164}, msg_len={len(message_text)}, id={message_id}"
+            "[SimulatedSender] (DEMO) Mesaj iletildi: session=%s, phone=%s, msg_len=%d, id=%s",
+            session_name,
+            PhoneService.mask_for_log(phone_e164),
+            len(message_text),
+            message_id,
         )
         return {
             "success": True,

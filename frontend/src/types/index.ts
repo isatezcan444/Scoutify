@@ -39,7 +39,7 @@ export interface Lead {
   category_classification?: 'MATCH' | 'PARTIAL_MATCH' | 'RELATED' | 'AMBIGUOUS' | 'MISMATCH';
   discovered_from?: string;
   verified_by?: string;
-  verification_trace?: any;
+  verification_trace?: unknown;
   notes?: string;
   custom_data?: Record<string, any>;
   created_at: string;

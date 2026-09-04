@@ -102,10 +102,10 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-extrabold text-slate-800 dark:text-white leading-tight">
-                Kategori & Sektör Filtresi
+                {t('leadFinder.categoryFilterTitle')}
               </h3>
               <p className="text-[10px] sm:text-[11px] text-slate-400 dark:text-[#7E7F96] font-medium">
-                Birden fazla sektör seçerek listeyi filtreleyebilirsiniz.
+                {t('leadFinder.categoryFilterSubtitle')}
               </p>
             </div>
           </div>
@@ -122,11 +122,11 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
         <div className="px-4 py-2.5 bg-slate-50 dark:bg-[#25293C] border-b border-slate-100 dark:border-white/[0.06] flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center space-x-1.5 flex-wrap gap-y-1 overflow-x-auto max-h-16 py-0.5">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-[#7E7F96] mr-1 shrink-0">
-              Seçilen:
+              {t('leadFinder.selectedLabel')}
             </span>
             {localCategories.length === 0 ? (
               <span className="text-[11px] text-slate-400 italic shrink-0">
-                (Tüm Kategoriler Gösterilecek)
+                {t('leadFinder.allCategoriesShown')}
               </span>
             ) : (
               localCategories.map((cat) => (
@@ -148,7 +148,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
           </div>
 
           <span className="text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 shrink-0 font-mono pl-2">
-            {localCategories.length} Seçili
+            {t('leadFinder.selectedCount', { count: localCategories.length })}
           </span>
         </div>
 
@@ -160,7 +160,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Kategori veya sektör ara (Örn: Diş, Estetik, Hukuk)..."
+              placeholder={t('leadFinder.searchCategoriesPlaceholder')}
               className="w-full pl-9 pr-3 py-2 rounded-lg vuexy-input text-xs font-medium"
             />
           </div>
@@ -168,7 +168,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
           <div className="flex-1 overflow-y-auto space-y-1 pr-1 border border-slate-200/80 dark:border-white/[0.08] rounded-xl p-2 bg-white dark:bg-[#2F3349]">
             {filtered.length === 0 ? (
               <div className="py-8 text-center text-xs text-slate-400">
-                Aramanızla eşleşen kategori bulunamadı.
+                {t('leadFinder.noCategoryMatch')}
               </div>
             ) : (
               filtered.map((cat) => {
@@ -208,7 +208,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
             onClick={handleClear}
             className="text-xs font-bold text-slate-400 hover:text-[#EA5455] transition-colors"
           >
-            Seçimi Temizle
+            {t('leadFinder.clearCategorySelection')}
           </button>
 
           <div className="flex items-center space-x-2">
@@ -218,7 +218,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
               size="sm"
               onClick={() => setIsOpen(false)}
             >
-              Vazgeç
+              {t('leadFinder.cancelSelection')}
             </Button>
             <Button
               type="button"
@@ -227,7 +227,7 @@ export const CategoryMultiSelect: React.FC<CategoryMultiSelectProps> = ({
               className="space-x-1.5 font-bold shadow-md shadow-[#7367F0]/30"
             >
               <Check className="w-4 h-4" />
-              <span>Seçimi Uygula</span>
+              <span>{t('leadFinder.applySelection')}</span>
             </Button>
           </div>
         </div>

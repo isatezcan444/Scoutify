@@ -92,18 +92,33 @@ def generate_tr_search_terms(query: str) -> List[str]:
     return [v for v in variants if v]
 
 
+# Hard cap: variants explode combinatorially (case forms × words); beyond this
+# the OR-list only adds DB load, never user-visible recall.
+MAX_SEARCH_VARIANTS = 24
+
+
+def escape_like_literal(text: str) -> str:
+    """Escapes %, _ and backslash so user input cannot act as LIKE wildcards."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def build_tr_search_filter(columns: Sequence, query: str):
     """
     Builds a composite SQLAlchemy OR filter across specified columns
     using Turkish case-folded and transliterated variations.
+    Deterministic (raw query first, rest sorted) and capped so a single
+    keystroke cannot fan out into hundreds of ILIKE clauses.
     """
     variants = generate_tr_search_terms(query)
     if not variants:
         return None
 
+    raw = query.strip()
+    ordered = ([raw] if raw in variants else []) + sorted(v for v in variants if v != raw)
     clauses = []
-    for var in variants:
+    for var in ordered[:MAX_SEARCH_VARIANTS]:
+        lit = escape_like_literal(var)
         for col in columns:
-            clauses.append(col.ilike(f"%{var}%"))
+            clauses.append(col.ilike(f"%{lit}%", escape="\\"))
 
     return or_(*clauses) if clauses else None

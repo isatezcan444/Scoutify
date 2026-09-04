@@ -2,7 +2,7 @@ import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
 from backend.app.core.database import get_db
 from backend.app.models.campaign import Campaign, CampaignStatus
@@ -143,16 +143,16 @@ async def bulk_delete_campaigns(
     if not req.campaign_ids:
         return {"deleted_count": 0, "message": "Silinecek kampanya belirtilmedi."}
 
-    deleted_count = 0
-    for cid in req.campaign_ids:
-        campaign = await db.get(Campaign, cid)
-        if campaign:
-            if CampaignRunner.is_campaign_running(cid):
-                await CampaignRunner.cancel_campaign(cid)
-            await db.delete(campaign)
-            deleted_count += 1
+    distinct_ids = list(set(req.campaign_ids))
+    # Stop live workers first (in-memory, no DB round-trips).
+    for cid in distinct_ids:
+        if CampaignRunner.is_campaign_running(cid):
+            await CampaignRunner.cancel_campaign(cid)
 
+    # Single bulk delete; FKs are DB-level SET NULL, no ORM cascade needed.
+    res = await db.execute(delete(Campaign).where(Campaign.id.in_(distinct_ids)))
     await db.commit()
+    deleted_count = res.rowcount if res.rowcount is not None and res.rowcount >= 0 else 0
     return {"deleted_count": deleted_count, "message": f"{deleted_count} kampanya başarıyla silindi."}
 
 

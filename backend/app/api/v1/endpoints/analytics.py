@@ -1,5 +1,6 @@
 from typing import Dict, Any, List
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -64,8 +65,21 @@ async def get_dashboard_stats(db: AsyncSession = Depends(get_db)):
     )
     total_messages_sent = total_sent_res.scalar_one()
 
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_sent_res = await db.execute(select(func.count(MessageLog.id)).where(MessageLog.created_at >= today_start))
+    # "Today" follows the product's home market (Europe/Istanbul, fixed UTC+3,
+    # no DST since 2016); columns store naive UTC, so compare naive instants.
+    # Same success set as the lifetime counter — FAILED sends never count.
+    tr_now = datetime.now(ZoneInfo("Europe/Istanbul"))
+    today_start = (
+        tr_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        .astimezone(timezone.utc)
+        .replace(tzinfo=None)
+    )
+    today_sent_res = await db.execute(
+        select(func.count(MessageLog.id)).where(
+            MessageLog.created_at >= today_start,
+            MessageLog.status.in_([MessageStatus.SENT, MessageStatus.DELIVERED, MessageStatus.READ, MessageStatus.REPLIED]),
+        )
+    )
     messages_sent_today = today_sent_res.scalar_one()
 
     # 8. Leads by Status Breakdown

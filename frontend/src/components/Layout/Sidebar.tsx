@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { 
   LayoutDashboard, 
   Search, 
@@ -182,20 +183,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer Backdrop & Overlay */}
-      {isOpenMobile && (
-        <div 
-          className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-300 animate-fade-in"
-          onClick={onCloseMobile}
-        >
+      {/* Mobile Drawer Backdrop & Overlay (portaled to document.body like Modal) */}
+      {isOpenMobile &&
+        typeof document !== 'undefined' &&
+        createPortal(
           <div 
-            className="w-72 max-w-[85vw] h-full shadow-2xl animate-slide-right flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+            className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm transition-opacity duration-300 animate-fade-in"
+            onClick={onCloseMobile}
           >
-            {sidebarContent}
-          </div>
-        </div>
-      )}
+            <div 
+              className="w-72 max-w-[85vw] h-full shadow-2xl animate-slide-right flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {sidebarContent}
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 };

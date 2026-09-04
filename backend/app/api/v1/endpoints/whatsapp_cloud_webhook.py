@@ -27,8 +27,10 @@ def verify_meta_signature(raw_body: bytes, signature_header: Optional[str], app_
     Validates the X-Hub-Signature-256 header sent by Meta using HMAC-SHA256.
     """
     if not app_secret:
-        # If no app secret is configured (e.g. initial development), allow with warning
-        return True
+        # Fail-closed: without a configured secret no signature can be
+        # trusted. Configure WHATSAPP_CLOUD_APP_SECRET to enable the webhook.
+        logger.warning("[MetaWebhook] Rejecting webhook: WHATSAPP_CLOUD_APP_SECRET is not configured.")
+        return False
 
     if not signature_header or not signature_header.startswith("sha256="):
         return False

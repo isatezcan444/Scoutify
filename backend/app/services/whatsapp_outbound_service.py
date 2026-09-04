@@ -3,7 +3,9 @@ Dedicated service for WhatsApp Outbound Message Dispatching.
 Handles conversation validation, recipient phone resolution, Meta Graph API dispatch / simulation,
 database persistence, and realtime WebSocket event broadcasting.
 """
+import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from fastapi import HTTPException
@@ -27,8 +29,36 @@ from backend.app.api.v1.websocket import ws_manager
 logger = logging.getLogger(__name__)
 
 
-# In-memory TTL cache for idempotency keys -> (timestamp, message_id)
+# In-memory TTL cache for idempotency keys -> (timestamp, message_id).
+# Bounded + lock-guarded: entries expire after 1h, oldest-first eviction past
+# the cap keeps memory flat under retry storms.
+_IDEMPOTENCY_TTL_SECONDS = 3600
+_IDEMPOTENCY_MAX_ENTRIES = 5000
 _idempotency_cache: Dict[str, Any] = {}
+_idempotency_lock = asyncio.Lock()
+
+
+async def _idempotency_get(key: str) -> Optional[int]:
+    """Returns the cached message id for a fresh key, else None."""
+    async with _idempotency_lock:
+        entry = _idempotency_cache.get(key)
+        if entry is None:
+            return None
+        if time.time() - entry[0] > _IDEMPOTENCY_TTL_SECONDS:
+            _idempotency_cache.pop(key, None)
+            return None
+        return entry[1]
+
+
+async def _idempotency_put(key: str, message_id: int) -> None:
+    """Stores a key, evicting expired then oldest-first past the cap."""
+    async with _idempotency_lock:
+        now_ts = time.time()
+        for k in [k for k, v in _idempotency_cache.items() if now_ts - v[0] > _IDEMPOTENCY_TTL_SECONDS]:
+            _idempotency_cache.pop(k, None)
+        while len(_idempotency_cache) >= _IDEMPOTENCY_MAX_ENTRIES:
+            _idempotency_cache.pop(next(iter(_idempotency_cache)), None)
+        _idempotency_cache[key] = (now_ts, message_id)
 
 
 class WhatsAppOutboundService:
@@ -99,15 +129,8 @@ class WhatsAppOutboundService:
 
         # 4. Check Idempotency (if key provided)
         if idempotency_key:
-            import time
-            now_ts = time.time()
-            # Clean expired cache entries (> 1 hour)
-            expired_keys = [k for k, v in _idempotency_cache.items() if now_ts - v[0] > 3600]
-            for k in expired_keys:
-                _idempotency_cache.pop(k, None)
-
-            if idempotency_key in _idempotency_cache:
-                _, cached_msg_id = _idempotency_cache[idempotency_key]
+            cached_msg_id = await _idempotency_get(idempotency_key)
+            if cached_msg_id is not None:
                 cached_msg = await db.get(Message, cached_msg_id)
                 if cached_msg:
                     logger.info(f"[WhatsAppOutboundService] Idempotency cache hit for key {idempotency_key}")
@@ -178,8 +201,7 @@ class WhatsAppOutboundService:
         await db.refresh(outbound_msg)
 
         if idempotency_key:
-            import time
-            _idempotency_cache[idempotency_key] = (time.time(), outbound_msg.id)
+            await _idempotency_put(idempotency_key, outbound_msg.id)
 
         # 8. Broadcast Realtime Event
         await ws_manager.broadcast({
@@ -361,9 +383,8 @@ class WhatsAppOutboundService:
 
         # Check idempotency
         if idempotency_key:
-            from backend.app.services.whatsapp_outbound_service import _idempotency_cache
-            if idempotency_key in _idempotency_cache:
-                _, cached_msg_id = _idempotency_cache[idempotency_key]
+            cached_msg_id = await _idempotency_get(idempotency_key)
+            if cached_msg_id is not None:
                 cached_msg = await db.get(Message, cached_msg_id)
                 if cached_msg:
                     return cached_msg
@@ -419,9 +440,7 @@ class WhatsAppOutboundService:
         await db.refresh(outbound_msg)
 
         if idempotency_key:
-            import time
-            from backend.app.services.whatsapp_outbound_service import _idempotency_cache
-            _idempotency_cache[idempotency_key] = (time.time(), outbound_msg.id)
+            await _idempotency_put(idempotency_key, outbound_msg.id)
 
         await ws_manager.broadcast({
             "event": "outbound_message_sent",

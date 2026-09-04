@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.models.lead import Lead, LeadStatus, EntityType, VerificationStatus
 from backend.app.models.conversation import Conversation
+from backend.app.core.search_utils import build_tr_search_filter
 from backend.app.schemas.smart_outreach import (
     FitAssessment,
     CategoryFitLevel,
@@ -197,7 +198,9 @@ class SmartMatchingService:
         if lead_ids:
             query = query.where(Lead.id.in_(lead_ids))
         elif city and city.strip():
-            query = query.where(Lead.city.ilike(f"%{city.strip()}%"))
+            city_filter = build_tr_search_filter([Lead.city], city.strip())
+            if city_filter is not None:
+                query = query.where(city_filter)
         if category_filter:
             query = query.where(Lead.category == category_filter)
 

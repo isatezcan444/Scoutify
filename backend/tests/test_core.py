@@ -33,3 +33,15 @@ def test_phone_service_turkish_numbers():
     assert p3 is not None
     assert p3["e164"] == "+905331112233"
     assert p3["is_mobile"] is True
+
+
+def test_phone_service_strict_rejects_unverifiable():
+    # Fail-closed: digit strings libphonenumber rejects are NOT targeting
+    # numbers (no best-effort e164, no wa_jid fabrication).
+    assert PhoneService.normalize_to_e164("12345") is None
+    assert PhoneService.normalize_to_e164("+90555999999999999") is None
+    assert PhoneService.normalize_to_e164("not a phone") is None
+    assert PhoneService.normalize_to_e164("") is None
+    assert PhoneService.normalize_to_e164(None) is None  # type: ignore[arg-type]
+    # Random 555-block numbers are not valid TR mobiles
+    assert PhoneService.normalize_to_e164("+9055518034063") is None

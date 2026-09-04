@@ -13,7 +13,7 @@ import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from backend.app.models.lead import Lead, LeadStatus
 from backend.app.models.blacklist import Blacklist
@@ -79,13 +79,17 @@ class WhatsAppCloudService:
         Idempotent: Duplicate message IDs will not create duplicate Message/Conversation entries or corrupted notes.
         """
         phone_data = PhoneService.normalize_to_e164(msg.sender_phone)
-        e164 = phone_data["e164"] if phone_data else (
-            f"+{msg.sender_phone}" if not msg.sender_phone.startswith("+") else msg.sender_phone
-        )
+        # Fail-closed: an unverifiable sender is NEVER given a fabricated e164.
+        # Display keeps the raw value; targeting stays None until verified.
+        display_phone = (msg.sender_phone or "").strip()
+        e164 = phone_data["e164"] if (phone_data and phone_data["is_valid"]) else None
+        is_mobile = bool(phone_data and phone_data.get("is_mobile"))
 
         logger.info(
-            f"[WhatsAppCloudService] Processing incoming message: "
-            f"id={msg.message_id}, sender={e164}, len={len(msg.text)}"
+            "[WhatsAppCloudService] Processing incoming message: id=%s, sender=%s, len=%d",
+            msg.message_id,
+            PhoneService.mask_for_log(e164),
+            len(msg.text),
         )
 
         # 1. Idempotency Check on Message Entity
@@ -99,21 +103,23 @@ class WhatsAppCloudService:
                 "message_id": msg.message_id,
             }
 
-        # 2. Correlate with Lead (or auto-provision for inbound new prospect)
-        lead_stmt = select(Lead).where(
-            (Lead.phone_e164 == e164) | (Lead.phone == e164)
-        )
+        # 2. Correlate with Lead (or auto-provision for inbound new prospect).
+        # NULL e164 never participates in matching (NULL never equals).
+        phone_clauses = [Lead.phone == display_phone]
+        if e164:
+            phone_clauses.append(Lead.phone_e164 == e164)
+        lead_stmt = select(Lead).where(or_(*phone_clauses))
         lead_res = await db.execute(lead_stmt)
-        lead = lead_res.scalar_one_or_none()
+        lead = lead_res.scalars().first()
 
         if not lead:
-            contact_name = (msg.sender_name or "").strip() or f"WhatsApp İletişim ({e164})"
+            contact_name = (msg.sender_name or "").strip() or f"WhatsApp İletişim ({display_phone})"
             lead = Lead(
                 name=contact_name,
-                phone=e164,
+                phone=display_phone,
                 phone_e164=e164,
-                is_mobile=True,
-                is_whatsapp_eligible=True,
+                is_mobile=is_mobile,
+                is_whatsapp_eligible=is_mobile,
                 status=LeadStatus.NEW,
                 notes=f"Otomatik WhatsApp Webhook Girişi ({msg.timestamp.strftime('%Y-%m-%d %H:%M')})",
             )

@@ -11,6 +11,8 @@ import {
   Loader2
 } from 'lucide-react';
 import { Button } from '../components/ui/button';
+import { translations, Language } from '../locales';
+import { useI18n } from './I18nContext';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info' | 'reply';
 
@@ -47,26 +49,53 @@ const ToastContext = createContext<ToastContextType | undefined>(undefined);
 type ToastListener = (toast: ToastItem) => void;
 const listeners: ToastListener[] = [];
 
+// Resolve default toast titles from dictionaries (usable outside React, no hardcoded strings)
+function getStoredLanguage(): Language {
+  if (typeof window !== 'undefined') {
+    const saved = window.localStorage.getItem('scoutify_lang');
+    if (saved === 'en' || saved === 'tr') return saved;
+  }
+  return 'en';
+}
+
+function defaultToastTitle(type: ToastType): string {
+  const lang = getStoredLanguage();
+  const key =
+    type === 'success'
+      ? 'successTitle'
+      : type === 'error'
+        ? 'errorTitle'
+        : type === 'warning'
+          ? 'warningTitle'
+          : type === 'reply'
+            ? 'replyTitle'
+            : 'infoTitle';
+  const dict = translations[lang].common as Record<string, string>;
+  const fallback = translations.en.common as Record<string, string>;
+  return dict[key] ?? fallback[key] ?? type;
+}
+
 export const toast = {
   show: (type: ToastType, desc: string, title?: string) => {
     const item: ToastItem = {
       id: Math.random().toString(36).substring(2, 9),
       type,
       desc,
-      title: title || (type === 'success' ? 'Başarılı' : type === 'error' ? 'Hata' : type === 'warning' ? 'Uyarı' : 'Bilgi'),
+      title: title || defaultToastTitle(type),
       duration: 4500,
     };
     listeners.forEach((fn) => fn(item));
     return item.id;
   },
-  success: (desc: string, title: string = 'Başarılı') => toast.show('success', desc, title),
-  error: (desc: string, title: string = 'Hata') => toast.show('error', desc, title),
-  warning: (desc: string, title: string = 'Uyarı') => toast.show('warning', desc, title),
-  info: (desc: string, title: string = 'Bilgilendirme') => toast.show('info', desc, title),
-  reply: (desc: string, title: string = 'Yeni Yanıt') => toast.show('reply', desc, title),
+  success: (desc: string, title?: string) => toast.show('success', desc, title || defaultToastTitle('success')),
+  error: (desc: string, title?: string) => toast.show('error', desc, title || defaultToastTitle('error')),
+  warning: (desc: string, title?: string) => toast.show('warning', desc, title || defaultToastTitle('warning')),
+  info: (desc: string, title?: string) => toast.show('info', desc, title || defaultToastTitle('info')),
+  reply: (desc: string, title?: string) => toast.show('reply', desc, title || defaultToastTitle('reply')),
 };
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t } = useI18n();
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [confirmState, setConfirmState] = useState<{
     isOpen: boolean;
@@ -112,11 +141,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [removeToast]);
 
-  const success = useCallback((desc: string, title: string = 'Başarılı') => showToast({ type: 'success', title, desc }), [showToast]);
-  const error = useCallback((desc: string, title: string = 'Hata') => showToast({ type: 'error', title, desc }), [showToast]);
-  const warning = useCallback((desc: string, title: string = 'Uyarı') => showToast({ type: 'warning', title, desc }), [showToast]);
-  const info = useCallback((desc: string, title: string = 'Bilgilendirme') => showToast({ type: 'info', title, desc }), [showToast]);
-  const reply = useCallback((desc: string, title: string = 'Yeni WhatsApp Yanıtı') => showToast({ type: 'reply', title, desc }), [showToast]);
+  const success = useCallback((desc: string, title?: string) => showToast({ type: 'success', title: title ?? t('common.successTitle'), desc }), [showToast, t]);
+  const error = useCallback((desc: string, title?: string) => showToast({ type: 'error', title: title ?? t('common.errorTitle'), desc }), [showToast, t]);
+  const warning = useCallback((desc: string, title?: string) => showToast({ type: 'warning', title: title ?? t('common.warningTitle'), desc }), [showToast, t]);
+  const info = useCallback((desc: string, title?: string) => showToast({ type: 'info', title: title ?? t('common.infoTitle'), desc }), [showToast, t]);
+  const reply = useCallback((desc: string, title?: string) => showToast({ type: 'reply', title: title ?? t('common.replyTitle'), desc }), [showToast, t]);
 
   const confirm = useCallback((options: ConfirmDialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -154,14 +183,14 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {typeof document !== 'undefined' &&
         createPortal(
           <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-[999999] space-y-2.5 max-w-[calc(100vw-2rem)] sm:max-w-sm w-full pointer-events-none select-none">
-            {toasts.map((t) => {
+            {toasts.map((toastItem) => {
               const borderStyles = {
                 success: 'border-[#28C76F]/40 shadow-[#28C76F]/10',
                 error: 'border-[#EA5455]/40 shadow-[#EA5455]/10',
                 warning: 'border-[#FF9F43]/40 shadow-[#FF9F43]/10',
                 info: 'border-[#00CFE8]/40 shadow-[#00CFE8]/10',
                 reply: 'border-[#7367F0]/40 shadow-[#7367F0]/10',
-              }[t.type];
+              }[toastItem.type];
 
               const iconStyles = {
                 success: <CheckCircle2 className="w-5 h-5 text-[#28C76F] shrink-0" />,
@@ -169,29 +198,29 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 warning: <AlertTriangle className="w-5 h-5 text-[#FF9F43] shrink-0" />,
                 info: <Info className="w-5 h-5 text-[#00CFE8] shrink-0" />,
                 reply: <MessageCircle className="w-5 h-5 text-[#7367F0] shrink-0" />,
-              }[t.type];
+              }[toastItem.type];
 
               return (
                 <div
-                  key={t.id}
+                  key={toastItem.id}
                   className={`pointer-events-auto p-4 rounded-xl shadow-xl border bg-white dark:bg-[#2F3349] flex items-start space-x-3 animate-slide-left transition-all duration-200 ${borderStyles}`}
                 >
                   <div className="mt-0.5">{iconStyles}</div>
                   <div className="flex-1 text-xs min-w-0">
                     <h4 className="font-bold text-slate-900 dark:text-white mb-0.5 tracking-tight">
-                      {t.title}
+                      {toastItem.title}
                     </h4>
-                    {t.desc && (
+                    {toastItem.desc && (
                       <p className="text-slate-600 dark:text-[#DBD7EC] font-medium leading-relaxed break-words">
-                        {t.desc}
+                        {toastItem.desc}
                       </p>
                     )}
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeToast(t.id)}
+                    onClick={() => removeToast(toastItem.id)}
                     className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/[0.05] transition-colors shrink-0 cursor-pointer"
-                    title="Kapat"
+                    title={t('common.close')}
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -238,7 +267,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
                     {confirmState.options.title}
                   </h3>
-                  <p className="text-[11px] text-slate-400 font-medium">İşlem Onayı</p>
+                  <p className="text-[11px] text-slate-400 font-medium">{t('common.confirmTitle')}</p>
                 </div>
               </div>
 
@@ -256,7 +285,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                   onClick={() => handleConfirmClose(false)}
                   className="font-bold cursor-pointer"
                 >
-                  {confirmState.options.cancelText || 'Vazgeç'}
+                  {confirmState.options.cancelText || t('common.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -270,7 +299,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       : 'bg-[#7367F0] hover:bg-[#6254EB] text-white shadow-[#7367F0]/30'
                   }`}
                 >
-                  {confirmState.options.confirmText || 'Onayla'}
+                  {confirmState.options.confirmText || t('common.confirm')}
                 </Button>
               </div>
             </div>

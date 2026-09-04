@@ -122,28 +122,24 @@ async def send_test_message(req: TestMessageRequest, db: AsyncSession = Depends(
         
     res = await db.execute(stmt)
     session = res.scalar_one_or_none()
-    
-    if not session:
-        session = WhatsAppSession(
-            session_name="Varsayılan Hat",
-            phone_number="+905321002030",
-            status=SessionStatus.CONNECTED
-        )
-        db.add(session)
-        await db.commit()
-        await db.refresh(session)
+
+    # No persisted demo session: the sender only needs a name, and the log
+    # row tolerates a NULL session. Persisting fake-number sessions polluted
+    # operating data.
+    session_name = session.session_name if session else "Test Hattı (geçici)"
+    session_id = session.id if session else None
 
     sender = get_whatsapp_sender()
     send_res = await sender.send_message(
-        session_name=session.session_name,
+        session_name=session_name,
         phone_e164=phone_data["e164"],
         message_text=req.message,
-        typing_seconds=2
+        typing_seconds=settings.DEFAULT_TYPING_DELAY_SECONDS
     )
 
     lead_stmt = select(Lead).where(Lead.phone_e164 == phone_data["e164"])
     lead_res = await db.execute(lead_stmt)
-    matching_lead = lead_res.scalar_one_or_none()
+    matching_lead = lead_res.scalars().first()
 
     if not matching_lead:
         matching_lead = Lead(
@@ -151,13 +147,14 @@ async def send_test_message(req: TestMessageRequest, db: AsyncSession = Depends(
             phone=phone_data["e164"],
             phone_e164=phone_data["e164"],
             status=LeadStatus.NEW,
+            source="WHATSAPP_TEST",
         )
         db.add(matching_lead)
         await db.flush()
 
     log = MessageLog(
         lead_id=matching_lead.id,
-        session_id=session.id,
+        session_id=session_id,
         target_phone=phone_data["e164"],
         rendered_message=req.message,
         status=MessageStatus.SENT if send_res.get("success") else MessageStatus.FAILED,
@@ -166,7 +163,7 @@ async def send_test_message(req: TestMessageRequest, db: AsyncSession = Depends(
         error_reason=send_res.get("error")
     )
     db.add(log)
-    if send_res.get("success"):
+    if send_res.get("success") and session is not None:
         session.daily_sent_count += 1
     await db.commit()
     
@@ -199,7 +196,8 @@ async def handle_inbound_webhook(
     Inbound webhook for incoming WhatsApp replies.
     Secured with X-Webhook-Secret header.
     """
-    if settings.WA_GATEWAY_WEBHOOK_SECRET and x_webhook_secret != settings.WA_GATEWAY_WEBHOOK_SECRET:
+    # Fail-closed: a missing/empty secret or a mismatch both deny.
+    if not settings.WA_GATEWAY_WEBHOOK_SECRET or x_webhook_secret != settings.WA_GATEWAY_WEBHOOK_SECRET:
         logger.warning("[Webhook] Yetkisiz webhook isteği engellendi (geçersiz secret).")
         raise HTTPException(status_code=401, detail="Yetkisiz Webhook İsteği (Geçersiz Secret)")
 

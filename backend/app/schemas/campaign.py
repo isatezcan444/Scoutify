@@ -2,17 +2,18 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, ConfigDict
 from backend.app.models.campaign import CampaignStatus
+from backend.app.core.config import settings
 
 class CampaignBase(BaseModel):
     name: str
     description: Optional[str] = None
     message_template: str
-    min_delay_seconds: int = 45
-    max_delay_seconds: int = 120
-    typing_delay_seconds: int = 5
+    min_delay_seconds: int = settings.DEFAULT_MIN_DELAY_SECONDS
+    max_delay_seconds: int = settings.DEFAULT_MAX_DELAY_SECONDS
+    typing_delay_seconds: int = settings.DEFAULT_TYPING_DELAY_SECONDS
     working_hours_enabled: bool = True
-    working_hours_start: str = "09:30"
-    working_hours_end: str = "18:30"
+    working_hours_start: str = settings.DEFAULT_WORKING_HOURS_START
+    working_hours_end: str = settings.DEFAULT_WORKING_HOURS_END
     session_id: Optional[int] = None
     group_id: Optional[int] = None
 
