@@ -247,7 +247,7 @@ class LeadIngestService:
         if planned_inserts:
             try:
                 async with db.begin_nested():
-                    id_by_triple = await cls._bulk_insert_transients(
+                    id_by_key = await cls._bulk_insert_transients(
                         db, [t for t, *_ in planned_inserts]
                     )
             except IntegrityError:
@@ -258,32 +258,35 @@ class LeadIngestService:
                     "[LeadIngestService] Bulk insert hit a concurrent race; "
                     "retrying rows individually."
                 )
-                for (transient, fraw, fname, fe164, fpdata, fwa, fver, fbl, apos) in planned_inserts:
+                trans_to_real_fb: Dict[int, Lead] = {}
+                for (transient, fraw, fname, fe164, fpdata, fwa, fver, fbl, _apos) in planned_inserts:
                     fvals = {c: getattr(transient, c) for c in cls._LEAD_VALUE_COLS}
                     lead, merged_flag = await cls._persist_new_lead(
                         db, fraw, fname, fe164, fpdata, fwa, fver, fbl,
                         source, search_keyword, search_location, values=fvals,
                     )
-                    all_processed_leads[apos] = lead
+                    trans_to_real_fb.setdefault(id(transient), lead)
                     new_count -= 1
                     if merged_flag:
                         updated_count += 1
                         race_merged += 1
                     else:
                         new_count += 1
+                # Identity substitution: one transient may occupy several
+                # positions when same-batch raws merged into it.
+                all_processed_leads = [
+                    trans_to_real_fb.get(id(l), l) for l in all_processed_leads
+                ]
             else:
                 # Substitute real rows for transients (single batched fetch).
-                # Map by transient identity: the same transient can occupy
-                # several positions when same-batch raws merged into it.
-                new_ids = list(id_by_triple.values())
+                new_ids = list(id_by_key.values())
                 fresh = (
                     await db.execute(select(Lead).where(Lead.id.in_(new_ids)))
                 ).scalars().all()
                 fresh_by_id = {r.id: r for r in fresh}
                 trans_to_real: Dict[int, Lead] = {}
                 for (transient, *_rest) in planned_inserts:
-                    triple = (transient.name, transient.city, transient.district)
-                    real = fresh_by_id.get(id_by_triple.get(triple))  # type: ignore[arg-type]
+                    real = fresh_by_id.get(id_by_key.get(cls._bulk_key(transient)))  # type: ignore[arg-type]
                     if real is not None:
                         trans_to_real.setdefault(id(transient), real)
                 if trans_to_real:
@@ -443,17 +446,30 @@ class LeadIngestService:
             "custom_data": cls._initial_custom_data(raw),
         }
 
+    @staticmethod
+    def _bulk_key(transient: Lead) -> Tuple[str, Any, Any, Optional[str], Optional[str]]:
+        """Correlation key mapping a planned transient to its bulk-inserted row.
+
+        Full (name, city, district, phone_e164, place_id): any strict subset
+        can repeat across two inserts (shared phone line on one triple; see
+        SHARED_PHONE), but the full key is distinct — an exact repeat would
+        have merged during planning instead of inserting.
+        """
+        return (
+            transient.name, transient.city, transient.district,
+            transient.phone_e164, transient.place_id,
+        )
+
     @classmethod
     async def _bulk_insert_transients(
         cls, db: AsyncSession, transients: List[Lead]
-    ) -> Dict[Tuple[str, Any, Any], int]:
+    ) -> Dict[Tuple[str, Any, Any, Optional[str], Optional[str]], int]:
         """Persists planned new rows with ONE multi-VALUES statement.
 
         Values are materialized from the transient objects (which already carry
         any same-batch merges), so the bulk row equals what row-mode would
-        have flushed. Returns {(name, city, district): id}; inserted triples
-        are globally distinct (anything else would have merged), which makes
-        the mapping exact without relying on RETURNING order.
+        have flushed. Returns {_bulk_key: id} for exact response mapping
+        without relying on RETURNING order.
         """
         rows = [{c: getattr(t, c) for c in cls._LEAD_VALUE_COLS} for t in transients]
         prev_autoflush = db.autoflush
@@ -462,11 +478,14 @@ class LeadIngestService:
             res = await db.execute(
                 insert(Lead)
                 .values(rows)
-                .returning(Lead.id, Lead.name, Lead.city, Lead.district)
+                .returning(
+                    Lead.id, Lead.name, Lead.city, Lead.district,
+                    Lead.phone_e164, Lead.place_id,
+                )
             )
         finally:
             db.autoflush = prev_autoflush
-        return {(r[1], r[2], r[3]): r[0] for r in res.all()}
+        return {(r[1], r[2], r[3], r[4], r[5]): r[0] for r in res.all()}
 
     @classmethod
     async def _persist_new_lead(

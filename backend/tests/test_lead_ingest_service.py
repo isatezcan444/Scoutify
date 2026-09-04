@@ -243,3 +243,27 @@ async def test_reingest_identical_batch_writes_nothing():
     await engine.dispose()
     assert new_c == 0 and upd_c == 10
     assert counter["n"] <= 10, f"no-op re-ingest wrote too much: {counter['n']}"
+
+
+@pytest.mark.asyncio
+async def test_bulk_maps_shared_phone_sibling_rows_to_distinct_ids():
+    """Same (name, city, district) + shared line across two place_ids must
+    persist as TWO rows and map back to DISTINCT response ids (bulk
+    correlation key includes phone_e164 + place_id, not just the triple)."""
+    session_maker, engine = await get_in_memory_db()
+    async with session_maker() as db:
+        raw = [
+            {"name": "Franchise X", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": "gmaps_fran_A", "phone": "08500000011", "phone_e164": "+908500000011"},
+            {"name": "Franchise X", "city": "İstanbul", "district": "Ataşehir",
+             "place_id": "gmaps_fran_B", "phone": "08500000011", "phone_e164": "+908500000011"},
+        ]
+        leads, new_c, upd_c = await LeadIngestService.ingest_leads(db, raw)
+        assert new_c == 2 and upd_c == 0
+        by_place = {l.place_id: l for l in leads}
+        assert set(by_place) == {"gmaps_fran_A", "gmaps_fran_B"}
+        assert by_place["gmaps_fran_A"].id != by_place["gmaps_fran_B"].id
+        assert all(l.id is not None for l in leads)
+        # Second row kept display phone but no targeting number
+        assert by_place["gmaps_fran_B"].phone_e164 is None
+    await engine.dispose()

@@ -678,7 +678,6 @@ class GoogleMapsScraper(BaseScraper):
             "geo_filtered_out": stats["geo_filtered"],
             "mahalle_queries": stats["mahalle_queries"],
             "mahalle_marginals": stats["mahalle_marginals"],
-            "geo_filtered_out": stats["geo_filtered"],
             "shared_phone_lines": sum(1 for l in all_discovered_leads if l.get("phone_line_shared")),
         }
 
