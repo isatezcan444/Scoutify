@@ -479,6 +479,8 @@ class GoogleMapsScraper(BaseScraper):
             "raw_found": 0,
             "queries_executed": 0,
             "geo_filtered": 0,
+            "spam_filtered": 0,
+            "coords_stripped": 0,
             "category_filtered": 0,
             "dup_place": 0,
             "dup_name": 0,
@@ -545,6 +547,33 @@ class GoogleMapsScraper(BaseScraper):
                 stats["raw_found"] += 1
                 if place.get("address"):
                     district_addresses.append(str(place["address"]))
+
+                # --- Spam / degenerate-name gate ("e", symbols-only, digits-
+                # only): incompletely-entered listings are dropped, counted.
+                raw_name = str(place.get("name") or "")
+                name_alnum = re.sub(r"[^0-9A-Za-zÇçĞğİıÖöŞşÜü]", "", raw_name)
+                if len(name_alnum) < 2 or not re.search(
+                    r"[A-Za-zÇçĞğİıÖöŞşÜü]", raw_name
+                ):
+                    stats["spam_filtered"] += 1
+                    return
+
+                # --- Coordinate plausibility: an address-less listing must not
+                # pin hundreds of km away on false precision (observed). Keep
+                # the row, drop coords+stored URLs — the pin falls back to a
+                # name text-search that resolves Google's own listing.
+                if not (place.get("address") or "").strip() and (
+                    place.get("latitude") is not None
+                    or place.get("longitude") is not None
+                ):
+                    stats["coords_stripped"] += 1
+                    place = {
+                        **place,
+                        "latitude": None,
+                        "longitude": None,
+                        "google_maps_url": None,
+                        "maps_url": None,
+                    }
 
                 # --- Geo fence gate (runs BEFORE phone enrichment to avoid wasted HTTP) ---
                 # Out-of-scope rejections are counted silently (metrics carry the
@@ -778,6 +807,8 @@ class GoogleMapsScraper(BaseScraper):
             "duplicates_by_place": stats["dup_place"],
             "duplicates_by_name": stats["dup_name"],
             "geo_filtered_out": stats["geo_filtered"],
+            "spam_filtered_out": stats["spam_filtered"],
+            "coords_stripped": stats["coords_stripped"],
             "category_filtered_out": stats["category_filtered"],
             "mahalle_queries": stats["mahalle_queries"],
             "mahalle_marginals": stats["mahalle_marginals"],

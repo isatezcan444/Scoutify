@@ -708,3 +708,89 @@ class TestGenericClinicalDowngrade:
         names = [l["name"] for l in leads]
         assert "DentX Polikliniği" in names      # dental-specific evidence keeps
         assert "X Polikliniği" not in names      # generic-only MATCH dropped
+
+
+class TestSpamAndCoordsGates:
+    @pytest.mark.asyncio
+    async def test_degenerate_names_dropped_counted(self, monkeypatch):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+
+        class _FakeSpam:
+            PLACES = [
+                {"name": "e", "address": "Barbaros, Ataşehir, İstanbul",
+                 "phone": None, "category": "Diş Kliniği",
+                 "google_maps_url": "https://maps.google.com/?cid=31", "place_id": "gmaps_spam_31"},
+                {"name": "123", "address": "Barbaros, Ataşehir, İstanbul",
+                 "phone": None, "category": "Diş Kliniği",
+                 "google_maps_url": "https://maps.google.com/?cid=32", "place_id": "gmaps_spam_32"},
+                {"name": "Gerçek Klinik", "address": "Barbaros, Ataşehir, İstanbul",
+                 "phone": None, "category": "Diş Kliniği",
+                 "google_maps_url": "https://maps.google.com/?cid=33", "place_id": "gmaps_spam_33"},
+            ]
+
+            async def scrape_district_places(self, keyword, city, district, max_results,
+                                             on_place_inspected=None, on_progress_status=None, **kwargs):
+                for idx, place in enumerate(self.PLACES):
+                    if on_place_inspected:
+                        await on_place_inspected(dict(place), idx + 1, len(self.PLACES))
+
+        monkeypatch.setattr(settings, "SCRAPER_MAX_QUERY_VARIANTS", 1)
+        monkeypatch.setattr(settings, "SCRAPER_MAHALLE_PHASE_ENABLED", False)
+        scraper = GoogleMapsScraper()
+        monkeypatch.setattr(scraper, "playwright_scraper", _FakeSpam())
+        monkeypatch.setattr(scraper, "http_scraper", _FakeSpam())
+        metrics_holder: dict = {}
+
+        async def capture(event):
+            if event.get("type") == "completed":
+                metrics_holder.update(event["metrics"])
+
+        leads = await scraper.scrape(
+            keyword="Diş Klinikleri", city="İstanbul", districts=["Ataşehir"],
+            max_results=0, progress_callback=capture,
+        )
+        assert [l["name"] for l in leads] == ["Gerçek Klinik"]
+        assert metrics_holder["spam_filtered_out"] == 2
+
+    @pytest.mark.asyncio
+    async def test_addressless_row_keeps_lead_drops_coords(self, monkeypatch):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+
+        class _FakeNoAddr:
+            PLACES = [
+                {"name": "Adresiz Klinik", "address": None,
+                 "phone": None, "category": "Diş Kliniği",
+                 "latitude": 39.0, "longitude": 35.0,
+                 "google_maps_url": "https://maps.google.com/place/Adresiz",
+                 "place_id": "gmaps_noaddr_41"},
+            ]
+
+            async def scrape_district_places(self, keyword, city, district, max_results,
+                                             on_place_inspected=None, on_progress_status=None, **kwargs):
+                for idx, place in enumerate(self.PLACES):
+                    if on_place_inspected:
+                        await on_place_inspected(dict(place), idx + 1, len(self.PLACES))
+
+        monkeypatch.setattr(settings, "SCRAPER_MAX_QUERY_VARIANTS", 1)
+        monkeypatch.setattr(settings, "SCRAPER_MAHALLE_PHASE_ENABLED", False)
+        scraper = GoogleMapsScraper()
+        monkeypatch.setattr(scraper, "playwright_scraper", _FakeNoAddr())
+        monkeypatch.setattr(scraper, "http_scraper", _FakeNoAddr())
+        metrics_holder: dict = {}
+
+        async def capture(event):
+            if event.get("type") == "completed":
+                metrics_holder.update(event["metrics"])
+
+        leads = await scraper.scrape(
+            keyword="Diş Klinikleri", city="İstanbul", districts=["Ataşehir"],
+            max_results=0, progress_callback=capture,
+        )
+        assert len(leads) == 1
+        assert leads[0]["latitude"] is None and leads[0]["longitude"] is None
+        assert leads[0]["google_maps_url"] is None and leads[0]["maps_url"] is None
+        # Display fallback shows the city scope only — the district is
+        # unproven, so it must NOT be claimed (truthful labeling).
+        assert leads[0]["address"] == "İstanbul"
+        assert leads[0]["district"] is None
+        assert metrics_holder["coords_stripped"] == 1

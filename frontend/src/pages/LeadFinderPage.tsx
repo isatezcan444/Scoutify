@@ -20,6 +20,7 @@ import {
   Database
 } from 'lucide-react';
 import { ApiClient, createWebSocket } from '../api/client';
+import { toTitleCaseTr } from '../lib/utils';
 import {
   Button,
   Badge,
@@ -46,6 +47,17 @@ interface LeadFinderPageProps {
   onNavigate: (tab: string, prefillData?: any) => void;
   onRefreshStats: () => void;
 }
+
+// Entity badge labels resolve through i18n with raw-value fallback.
+const ENTITY_TYPE_LABEL_KEYS: Record<string, string> = {
+  BUSINESS: 'leadFinder.entityBusiness',
+  CLINIC: 'leadFinder.entityClinic',
+  COMPANY: 'leadFinder.entityCompany',
+  PROFESSIONAL: 'leadFinder.entityProfessional',
+  PERSON: 'leadFinder.entityPerson',
+  DIRECTORY_PROFILE: 'leadFinder.entityDirectory',
+  UNKNOWN: 'leadFinder.entityUnknown',
+};
 
 export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRefreshStats }) => {
   const { t } = useI18n();
@@ -607,7 +619,7 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                       </button>
                       <Avatar name={lead.name} size="sm" shape="rounded" />
                       <h4 className="text-sm font-extrabold text-slate-800 dark:text-white leading-snug break-words truncate">
-                        {lead.name}
+                        {toTitleCaseTr(lead.name)}
                       </h4>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
@@ -637,7 +649,9 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
                     </span>
                     {lead.entity_type && (
                       <span className="inline-block text-[9px] font-mono uppercase px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/[0.08] text-slate-600 dark:text-slate-300">
-                        {lead.entity_type}
+                        {ENTITY_TYPE_LABEL_KEYS[lead.entity_type]
+                          ? t(ENTITY_TYPE_LABEL_KEYS[lead.entity_type])
+                          : lead.entity_type}
                       </span>
                     )}
                   </div>

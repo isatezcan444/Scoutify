@@ -25,6 +25,24 @@ export function renderIcon(
 }
 
 /**
+ * Turkish-aware Title Case for display only (data stays untouched).
+ * Every whitespace-separated token gets its first alphabetic char uppercased:
+ * "ALGAN (7Dent) AĞIZ VE DİŞ SAĞLIĞI" -> "Algan (7Dent) Ağız Ve Diş Sağlığı".
+ * Handles dotted/dotless I explicitly (JS toUpperCase is locale-blind).
+ */
+export function toTitleCaseTr(input: string | undefined | null): string {
+  if (!input) return '';
+  const lowered = input
+    .replace(/I/g, 'ı')
+    .replace(/İ/g, 'i')
+    .toLowerCase();
+  return lowered.replace(
+    /(^|[\s([{["'“‘\-–—/]+)([a-zçğıöşü])/g,
+    (_m, pre: string, ch: string) => pre + (ch === 'i' ? 'İ' : ch.toUpperCase())
+  );
+}
+
+/**
  * Normalizes text for case-insensitive and Turkish diacritic-insensitive search.
  * Handles 'i' <-> 'İ', 'ı' <-> 'I', 'ş' <-> 's', 'ç' <-> 'c', 'ğ' <-> 'g', 'ü' <-> 'u', 'ö' <-> 'o'.
  */

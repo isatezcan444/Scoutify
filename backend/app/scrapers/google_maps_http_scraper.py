@@ -179,10 +179,13 @@ class GoogleMapsHttpScraper:
 
         # Address (pd[18] carries a "Business Name, street..." prefix — strip it
         # BEFORE cleaning so cards show streets and dedup compares streets).
+        # No address → None (never a fabricated "district, city": the display
+        # fallback lives in the orchestrator, while geo/coord logic must see
+        # the absence honestly).
         raw_addr = pd[18] if (len(pd) > 18 and isinstance(pd[18], str)) else None
         if raw_addr:
             raw_addr = strip_leading_business_name(safe_name, raw_addr)
-        full_address = clean_extracted_address(raw_addr) if raw_addr else f"{district}, {city}"
+        full_address = clean_extracted_address(raw_addr) if raw_addr else None
 
         # Category
         safe_category = self._extract_category(pd, keyword)
@@ -215,7 +218,7 @@ class GoogleMapsHttpScraper:
             "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,
             "is_whatsapp_eligible": phone_data.get("is_whatsapp_eligible", False) if phone_data else False,
             "website": website[:500] if website else None,
-            "address": full_address[:500],
+            "address": full_address[:500] if full_address else None,
             "city": city[:100],
             "district": district[:100],
             "latitude": lat,
