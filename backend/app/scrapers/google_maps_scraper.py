@@ -38,6 +38,9 @@ from backend.app.scrapers.google_maps_http_scraper import GoogleMapsHttpScraper
 from backend.app.services.phone_service import PhoneService
 from backend.app.services.geo_scope_filter import GeoScopeFilter, GeoScopeDecision, GeoScopeVerdict
 from backend.app.services.query_expander import QueryExpander
+from backend.app.services.taxonomy_registry import TaxonomyRegistry
+from backend.app.services.category_relevance_engine import CategoryRelevanceEngine
+from backend.app.schemas.intelligence import RawBusinessCandidate, CategoryMatchClassification
 from backend.app.data.turkey_locations import (
     normalize_turkish,
     get_districts_for_city
@@ -272,6 +275,7 @@ class GoogleMapsScraper(BaseScraper):
         clean_keyword: str,
         phone_data: Optional[Dict[str, Any]],
         shared_phone_line: bool,
+        category_fit: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Converts an inspected place into a canonical lead record.
@@ -281,6 +285,9 @@ class GoogleMapsScraper(BaseScraper):
         requested district never masks where the business actually lives —
         Google Maps spillover from neighboring districts must not be relabeled
         as the target district.
+
+        `category_fit` (CategoryAssessment or None) replaces the legacy
+        hardcoded MATCH/1.0 with the measured relevance verdict.
         """
         is_phone_verified = bool(phone_data and phone_data.get("is_valid")) and not shared_phone_line
 
@@ -291,8 +298,8 @@ class GoogleMapsScraper(BaseScraper):
             "name": place["name"],
             "category": place.get("category") or clean_keyword.title(),
             "canonical_category": clean_keyword.lower(),
-            "category_score": 1.0,
-            "category_classification": "MATCH",
+            "category_score": round(category_fit.score, 3) if category_fit else 1.0,
+            "category_classification": category_fit.classification.value if category_fit else "MATCH",
             "entity_type": "CLINIC" if any(w in place["name"].lower() for w in ["klinik", "poliklinik", "hastane", "diş"]) else "BUSINESS",
             "verification_status": "VERIFIED" if is_phone_verified else "UNVERIFIED",
             "confidence_level": (
@@ -337,6 +344,7 @@ class GoogleMapsScraper(BaseScraper):
         clean_city: str,
         clean_keyword: str,
         deduplicator: LeadDiscoveryDeduplicator,
+        category_fit: Optional[Any] = None,
     ) -> Tuple[Optional[Dict[str, Any]], DedupDecision]:
         """
         Full ingestion pipeline for one inspected place:
@@ -367,6 +375,7 @@ class GoogleMapsScraper(BaseScraper):
             clean_keyword=clean_keyword,
             phone_data=phone_data,
             shared_phone_line=(decision == DedupDecision.SHARED_PHONE),
+            category_fit=category_fit,
         )
 
         deduplicator.register(place_url, name_key, e164, address_key=address_key)
@@ -460,6 +469,7 @@ class GoogleMapsScraper(BaseScraper):
             "raw_found": 0,
             "queries_executed": 0,
             "geo_filtered": 0,
+            "category_filtered": 0,
             "dup_place": 0,
             "dup_name": 0,
             "mahalle_queries": 0,
@@ -468,6 +478,25 @@ class GoogleMapsScraper(BaseScraper):
         target_reached = False
 
         geo_filter_active = settings.SCRAPER_GEO_FILTER_ENABLED
+
+        # Category relevance profile for the relevance gate below. Resolved
+        # once per run from the tested taxonomy registry; None means the
+        # sector is unknown → gate skipped (keep-all, today's behavior).
+        TaxonomyRegistry.initialize()
+        profile_node = TaxonomyRegistry.find_node_by_alias_or_concept(clean_keyword)
+        if profile_node is None:
+            profile_node = TaxonomyRegistry.find_node_by_alias_or_concept(
+                QueryExpander.primary_term(clean_keyword)
+            )
+        category_profile = (
+            TaxonomyRegistry.build_profile_from_node(profile_node)
+            if profile_node is not None else None
+        )
+        if category_profile is not None:
+            logger.info(
+                f"[GMAPS_ENGINE] Category gate armed for profile "
+                f"'{category_profile.canonical_id}'."
+            )
 
         for dist_idx, district in enumerate(target_districts):
             if target_reached:
@@ -526,6 +555,68 @@ class GoogleMapsScraper(BaseScraper):
                         resolved_district=None,
                     )
 
+                # --- Category relevance gate (runs BEFORE phone enrichment) ---
+                # The Maps corpus goes loose on long-tail queries (mahalle
+                # phase returns vets, restaurants, night clubs…). MISMATCH
+                # drops on mutual-exclusivity proof; a provider category that
+                # alone resolves to an excluded industry vetoes even an
+                # overpowered MATCH; AMBIGUOUS survives only with a
+                # health-facility second opinion over name+category.
+                # Unknown sectors skip the gate entirely (keep-all).
+                category_fit = None
+                if category_profile is not None:
+                    category_fit = CategoryRelevanceEngine.evaluate(
+                        category_profile,
+                        RawBusinessCandidate(
+                            candidate_id=str(
+                                place.get("place_id") or place.get("name") or ""
+                            ),
+                            provider="GOOGLE_MAPS",
+                            provider_query=clean_keyword,
+                            raw_name=str(place.get("name") or ""),
+                            clean_name=str(place.get("name") or ""),
+                            raw_category=place.get("category"),
+                            raw_address=place.get("address"),
+                            raw_phone=place.get("phone"),
+                        ),
+                    )
+                    if category_fit.classification == CategoryMatchClassification.MISMATCH:
+                        stats["category_filtered"] += 1
+                        return
+                    raw_category = str(place.get("category") or "")
+                    if raw_category:
+                        category_node = TaxonomyRegistry.find_node_by_alias_or_concept(
+                            raw_category
+                        )
+                        if (
+                            category_node is not None
+                            and category_node.id != category_profile.canonical_id
+                            and TaxonomyRegistry.are_mutually_exclusive(
+                                category_profile.canonical_id, category_node.id
+                            )
+                        ):
+                            stats["category_filtered"] += 1
+                            return
+                    # Downgrade: a MATCH resting ONLY on generic clinical words
+                    # ("klinik"/"poliklinik"/"muayenehane") with no facility
+                    # signal is a loose hit, not proof — treat as AMBIGUOUS.
+                    if category_fit.classification in (
+                        CategoryMatchClassification.MATCH,
+                        CategoryMatchClassification.PARTIAL_MATCH,
+                    ) and self._match_rests_on_generic_clinical_only(
+                        category_fit
+                    ):
+                        stats["category_filtered"] += 1
+                        return
+                    if (
+                        category_fit.classification == CategoryMatchClassification.AMBIGUOUS
+                        and not QueryExpander.has_health_facility_signal(
+                            f"{place.get('name') or ''} {raw_category}"
+                        )
+                    ):
+                        stats["category_filtered"] += 1
+                        return
+
                 processed_record, dup_decision = await self._process_discovered_place(
                     place=place,
                     requested_district=_d,
@@ -533,6 +624,7 @@ class GoogleMapsScraper(BaseScraper):
                     clean_city=clean_city,
                     clean_keyword=clean_keyword,
                     deduplicator=deduplicator,
+                    category_fit=category_fit,
                 )
                 if processed_record is None:
                     # Suppression reasons are counted explicitly so the final
@@ -676,6 +768,7 @@ class GoogleMapsScraper(BaseScraper):
             "duplicates_by_place": stats["dup_place"],
             "duplicates_by_name": stats["dup_name"],
             "geo_filtered_out": stats["geo_filtered"],
+            "category_filtered_out": stats["category_filtered"],
             "mahalle_queries": stats["mahalle_queries"],
             "mahalle_marginals": stats["mahalle_marginals"],
             "shared_phone_lines": sum(1 for l in all_discovered_leads if l.get("phone_line_shared")),
@@ -695,6 +788,32 @@ class GoogleMapsScraper(BaseScraper):
         )
 
         return all_discovered_leads
+
+    # Evidence concepts that alone prove "clinical", never a specialty. A MATCH
+    # resting solely on these (e.g. "X Polikliniği" with a node-less category)
+    # is a loose hit, not dental proof. G-forms included: normalized text
+    # carries ğ→g ("poliklinigi"), never the K-forms.
+    _GENERIC_CLINICAL_CONCEPTS = frozenset({
+        "klinik", "poliklinik", "muayenehane",
+        "klinigi", "poliklinigi", "muayenehanesi",
+    })
+
+    @staticmethod
+    def _match_rests_on_generic_clinical_only(category_fit: Any) -> bool:
+        """True when every positive evidence concept is generic-clinical.
+
+        Only 'Pozitif kavram eşleşmesi' lines carry concepts; the provider
+        bonus line quotes the whole category (vetted separately) and is
+        ignored here.
+        """
+        concepts = set()
+        for ev in getattr(category_fit, "positive_evidence", []) or []:
+            if not ev.startswith("Pozitif kavram"):
+                continue
+            match = re.search(r"'([^']+)'", ev)
+            if match:
+                concepts.add(normalize_turkish(match.group(1)).lower())
+        return bool(concepts) and concepts <= GoogleMapsScraper._GENERIC_CLINICAL_CONCEPTS
 
     async def _run_mahalle_phase(
         self,

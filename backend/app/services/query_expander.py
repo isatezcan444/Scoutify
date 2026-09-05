@@ -5,7 +5,7 @@ directory category slugs, and OSM query parameters without altering the geograph
 """
 import re
 import logging
-from typing import List, Dict, Set
+from typing import List, Dict, Optional, Set
 from backend.app.data.turkey_locations import normalize_turkish
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,22 @@ _ALWAYS_REJECT_SINGLE = frozenset({
     "rezidans", "carsi", "çarsı", "çarşı", "hastane", "hastanesi",
     "apartman", "apartmanı", "ishani", "işhanı",
 })
+
+# Health-facility markers for the AMBIGUOUS second opinion (see
+# has_health_facility_signal). Deliberately specific compounds: bare "merkez"
+# or "klinik" would also match malls and vet clinics (measured). Markers are
+# stored RAW here and normalized once below — normalize_turkish is lossy
+# (ğ→g, ı→i), so raw markers would never match normalized text.
+_HEALTH_FACILITY_MARKERS = (
+    "hastane", "hastanesi", "hastaneler",
+    "tıp merkezi", "tip merkezi",
+    "sağlık merkezi", "saglik merkezi",
+    "poliklinik", "doktor", "hekim",
+    "diş", "dis", "dent", "ağız", "agiz",
+    "ortodont", "periodont", "endodont", "pedodont", "implant",
+    # G-form inflection twin (normalized text carries ğ→g).
+    "poliklinigi",
+)
 
 
 class QueryExpander:
@@ -380,6 +396,24 @@ class QueryExpander:
 
         ranked = [surface[k] for k, _ in counts.most_common() if counts[k] >= min_mentions]
         return ranked[:max(0, top_k)]
+
+    @staticmethod
+    def has_health_facility_signal(text: Optional[str]) -> bool:
+        """Second opinion for relevance-AMBIGUOUS candidates.
+
+        True when the (name + category) text carries a health-facility marker
+        (hospital / medical center / doctor / dental stems), compared in
+        identically-normalized form on both sides. Bare "merkez"/"klinik"
+        deliberately do NOT match (measured: malls, vet clinics).
+        Pure function — no sector input needed.
+        """
+        if not text:
+            return False
+        norm_text = normalize_turkish(text).lower()
+        return any(
+            normalize_turkish(marker).lower() in norm_text
+            for marker in _HEALTH_FACILITY_MARKERS
+        )
 
     @classmethod
     def expand_queries(cls, keyword: str, district: str, city: str) -> List[str]:

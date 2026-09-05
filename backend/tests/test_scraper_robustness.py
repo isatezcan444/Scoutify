@@ -547,3 +547,164 @@ class TestMahallePhase:
             all_discovered_leads=[], handle_place_inspected=noop,
             handle_status=noop, progress_callback=noop,
         ) == (0, 0)
+
+
+# ============================================================
+# Category relevance gate (dental search must not return vets,
+# restaurants, pilates studios...)
+# ============================================================
+
+class TestHealthFacilitySignal:
+    def test_markers_match_in_normalized_form(self):
+        from backend.app.services.query_expander import QueryExpander as Q
+        assert Q.has_health_facility_signal("Barbaros, Tıp Merkezi No:1") is True
+        assert Q.has_health_facility_signal("Ataşehir Ağız Sağlığı") is True
+        assert Q.has_health_facility_signal("Özel Hastane") is True
+        assert Q.has_health_facility_signal("Dr.Toygan BORA Doktor") is True
+
+    def test_bare_merkez_klinik_do_not_match(self):
+        from backend.app.services.query_expander import QueryExpander as Q
+        assert Q.has_health_facility_signal("Palladium Ataşehir AVM") is False
+        assert Q.has_health_facility_signal("Alışveriş merkezi") is False
+        assert Q.has_health_facility_signal("Ebru Işık Pilates Pilates Salonu") is False
+        assert Q.has_health_facility_signal("Shape Club Spor salonu") is False
+        assert Q.has_health_facility_signal(None) is False
+        assert Q.has_health_facility_signal("") is False
+
+
+class _FakeMixedScraper:
+    """Emits dental, health-generic and junk places with Google categories."""
+
+    PLACES = [
+        {"name": "Mozaik Dent", "address": "Atatürk, Meriç Cd., Ataşehir, İstanbul",
+         "phone": None, "category": "Diş Kliniği",
+         "google_maps_url": "https://maps.google.com/?cid=11", "place_id": "gmaps_mix_11"},
+        {"name": "Memorial Ataşehir", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Özel Hastane",
+         "google_maps_url": "https://maps.google.com/?cid=12", "place_id": "gmaps_mix_12"},
+        {"name": "Barbaros Veteriner", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Veteriner",
+         "google_maps_url": "https://maps.google.com/?cid=13", "place_id": "gmaps_mix_13"},
+        {"name": "OVA Pide", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Restoran",
+         "google_maps_url": "https://maps.google.com/?cid=14", "place_id": "gmaps_mix_14"},
+        {"name": "Ebru Pilates", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Pilates Salonu",
+         "google_maps_url": "https://maps.google.com/?cid=15", "place_id": "gmaps_mix_15"},
+        {"name": "Nova Lazer", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Estetik Cerrahi Kliniği",
+         "google_maps_url": "https://maps.google.com/?cid=16", "place_id": "gmaps_mix_16"},
+        {"name": "Palladium AVM", "address": "Barbaros, Ataşehir, İstanbul",
+         "phone": None, "category": "Alışveriş merkezi",
+         "google_maps_url": "https://maps.google.com/?cid=17", "place_id": "gmaps_mix_17"},
+    ]
+
+    async def scrape_district_places(self, keyword, city, district, max_results,
+                                     on_place_inspected=None, on_progress_status=None):
+        for idx, place in enumerate(self.PLACES):
+            if on_place_inspected:
+                await on_place_inspected(dict(place), idx + 1, len(self.PLACES))
+
+
+class TestCategoryGateIntegration:
+    @pytest.mark.asyncio
+    async def test_dental_search_keeps_dental_and_health_drops_junk(self, monkeypatch):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+        monkeypatch.setattr(settings, "SCRAPER_MAX_QUERY_VARIANTS", 1)
+        monkeypatch.setattr(settings, "SCRAPER_MAHALLE_PHASE_ENABLED", False)
+        scraper = GoogleMapsScraper()
+        monkeypatch.setattr(scraper, "playwright_scraper", _FakeMixedScraper())
+        monkeypatch.setattr(scraper, "http_scraper", _FakeMixedScraper())
+
+        metrics_holder: dict = {}
+
+        async def capture(event):
+            if event.get("type") == "completed":
+                metrics_holder.update(event["metrics"])
+
+        leads = await scraper.scrape(
+            keyword="Diş Klinikleri", city="İstanbul", districts=["Ataşehir"],
+            max_results=0, progress_callback=capture,
+        )
+        names = [l["name"] for l in leads]
+        assert "Mozaik Dent" in names            # dental MATCH kept
+        assert "Memorial Ataşehir" in names      # health-generic kept (second opinion)
+        assert "Barbaros Veteriner" not in names  # mutual exclusion
+        assert "OVA Pide" not in names            # mutual exclusion
+        assert "Ebru Pilates" not in names        # ambiguous, no facility signal
+        assert "Nova Lazer" not in names          # hair_beauty veto
+        assert "Palladium AVM" not in names       # ambiguous, no signal
+        assert metrics_holder["category_filtered_out"] == 5
+        assert metrics_holder["unique_candidates"] == 2
+
+    @pytest.mark.asyncio
+    async def test_unknown_sector_skips_gate_keep_all(self, monkeypatch):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+        monkeypatch.setattr(settings, "SCRAPER_MAX_QUERY_VARIANTS", 1)
+        monkeypatch.setattr(settings, "SCRAPER_MAHALLE_PHASE_ENABLED", False)
+        scraper = GoogleMapsScraper()
+        monkeypatch.setattr(scraper, "playwright_scraper", _FakeMixedScraper())
+        monkeypatch.setattr(scraper, "http_scraper", _FakeMixedScraper())
+        leads = await scraper.scrape(
+            keyword="Xyz Bilinmeyen Sektör", city="İstanbul", districts=["Ataşehir"],
+            max_results=0,
+        )
+        assert len(leads) == 7
+
+
+class TestGenericClinicalDowngrade:
+    def test_only_generic_evidence_detected(self):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+        from backend.app.services.taxonomy_registry import TaxonomyRegistry
+        from backend.app.services.category_relevance_engine import CategoryRelevanceEngine
+        from backend.app.schemas.intelligence import RawBusinessCandidate
+        TaxonomyRegistry.initialize()
+        prof = TaxonomyRegistry.build_profile_from_node(TaxonomyRegistry.get_node("dental"))
+
+        def fit_for(name, category):
+            return CategoryRelevanceEngine.evaluate(
+                prof,
+                RawBusinessCandidate(candidate_id="x", provider="G", provider_query="t",
+                                     raw_name=name, clean_name=name, raw_category=category),
+            )
+
+        # Inflected "Polikliniği" matches only the generic clinical concept.
+        generic = fit_for("X Polikliniği", "Danışman")
+        assert generic.classification.value == "MATCH"
+        assert GoogleMapsScraper._match_rests_on_generic_clinical_only(generic) is True
+
+        specific = fit_for("DentX Polikliniği", "Danışman")
+        assert GoogleMapsScraper._match_rests_on_generic_clinical_only(specific) is False
+
+    @pytest.mark.asyncio
+    async def test_generic_only_match_dropped_end_to_end(self, monkeypatch):
+        from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+
+        class _FakeSingle:
+            PLACES = [
+                {"name": "X Polikliniği", "address": "Barbaros, Ataşehir, İstanbul",
+                 "phone": None, "category": "Danışman",
+                 "google_maps_url": "https://maps.google.com/?cid=21", "place_id": "gmaps_gen_21"},
+                {"name": "DentX Polikliniği", "address": "Barbaros, Ataşehir, İstanbul",
+                 "phone": None, "category": "Danışman",
+                 "google_maps_url": "https://maps.google.com/?cid=22", "place_id": "gmaps_gen_22"},
+            ]
+
+            async def scrape_district_places(self, keyword, city, district, max_results,
+                                             on_place_inspected=None, on_progress_status=None, **kwargs):
+                for idx, place in enumerate(self.PLACES):
+                    if on_place_inspected:
+                        await on_place_inspected(dict(place), idx + 1, len(self.PLACES))
+
+        monkeypatch.setattr(settings, "SCRAPER_MAX_QUERY_VARIANTS", 1)
+        monkeypatch.setattr(settings, "SCRAPER_MAHALLE_PHASE_ENABLED", False)
+        scraper = GoogleMapsScraper()
+        monkeypatch.setattr(scraper, "playwright_scraper", _FakeSingle())
+        monkeypatch.setattr(scraper, "http_scraper", _FakeSingle())
+        leads = await scraper.scrape(
+            keyword="Diş Klinikleri", city="İstanbul", districts=["Ataşehir"],
+            max_results=0,
+        )
+        names = [l["name"] for l in leads]
+        assert "DentX Polikliniği" in names      # dental-specific evidence keeps
+        assert "X Polikliniği" not in names      # generic-only MATCH dropped

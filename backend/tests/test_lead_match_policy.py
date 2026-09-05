@@ -289,6 +289,9 @@ async def test_scrape_reports_explicit_suppression_funnel():
         "name": "Tekrar Eden Klinik",
         "address": "Ataşehir, İstanbul",
         "phone": None,
+        # Real engines always attach a Google category; without it the
+        # relevance gate (correctly) treats a bare "Klinik" as unproven.
+        "category": "Diş Kliniği",
         "google_maps_url": "https://maps.google.com/place/dup",
     }
 
@@ -448,3 +451,42 @@ class TestResolveCachesEquivalence:
                     assert self._sig(cache_verdict) == self._sig(db_verdict), (raw, name, e164)
         finally:
             await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_category_gate_filters_before_dedup_accounting(monkeypatch):
+    """A category-less generic 'Klinik' carries no dental proof and must be
+    filtered by the relevance gate (counted, never silently kept)."""
+    from unittest.mock import AsyncMock
+    from backend.app.scrapers.google_maps_scraper import GoogleMapsScraper
+
+    scraper = GoogleMapsScraper()
+    captured: list = []
+
+    async def capture(event):
+        captured.append(event)
+
+    no_evidence = {
+        "name": "Tekrar Eden Klinik",
+        "address": "Ataşehir, İstanbul",
+        "phone": None,
+        "google_maps_url": "https://maps.google.com/place/dup2",
+    }
+
+    async def fake_scrape(keyword, city, district, max_results, on_place_inspected, on_progress_status):
+        await on_place_inspected(dict(no_evidence), 1, 1)
+
+    scraper.playwright_scraper.scrape_district_places = AsyncMock(side_effect=fake_scrape)
+    monkeypatch.setattr(
+        "backend.app.scrapers.google_maps_scraper.QueryExpander.build_search_terms",
+        classmethod(lambda cls, kw, max_terms=3: ["Diş Kliniği"]),
+    )
+    leads = await scraper.scrape(
+        keyword="Diş Kliniği", city="İstanbul", districts=["Ataşehir"],
+        max_results=0, progress_callback=capture,
+    )
+
+    assert leads == []
+    completed = next(e for e in captured if e.get("type") == "completed")
+    assert completed["metrics"]["category_filtered_out"] == 1
+    assert completed["metrics"]["raw_results_found"] == 1

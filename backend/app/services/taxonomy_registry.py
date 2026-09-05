@@ -85,7 +85,11 @@ class TaxonomyRegistry:
             ],
             semantic_concepts=[
                 "diş", "dis", "dent", "dental", "klinik", "poliklinik", "ortodonti", "implant",
-                "ağız ve diş", "diş hekimi", "dentist", "çene cerrahisi", "muayenehane", "pedodonti"
+                "ağız ve diş", "diş hekimi", "dentist", "çene cerrahisi", "muayenehane", "pedodonti",
+                "endodonti", "endodont", "periodont",
+                # G-form inflections: normalize_turkish maps ğ→g, so inflected
+                # real-world text ("Polikliniği") never contains the K-forms.
+                "klinigi", "poliklinigi",
             ],
             directory_slugs=[
                 "diş-hekimleri", "diş-klinikleri", "ağız-ve-diş-sağlığı-merkezleri",
@@ -99,6 +103,10 @@ class TaxonomyRegistry:
                 CategoryRelationship(target_category_id="food_beverage", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
                 CategoryRelationship(target_category_id="bakery", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
                 CategoryRelationship(target_category_id="automotive", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
+                # Beauty/aesthetics/hair-transplant businesses are a distinct
+                # industry: their listings must not pass a dental gate even
+                # when named "... Poliklinik" (measured: lazer epilasyon rows).
+                CategoryRelationship(target_category_id="hair_beauty", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
                 CategoryRelationship(target_category_id="general_healthcare", relationship_type=RelationshipType.SUBCATEGORY_OF),
             ]
         ))
@@ -229,6 +237,7 @@ class TaxonomyRegistry:
                 CategoryRelationship(target_category_id="furniture", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
                 CategoryRelationship(target_category_id="pet_services", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
                 CategoryRelationship(target_category_id="legal", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
+                CategoryRelationship(target_category_id="dental", relationship_type=RelationshipType.MUTUALLY_EXCLUSIVE),
             ]
         ))
 
