@@ -156,16 +156,26 @@ class GoogleMapsHttpScraper:
         # Coordinates
         lat, lon = self._extract_coordinates(pd)
 
-        # Canonical Google Maps URL
+        # Canonical Google Maps URL. base_url is byte-stable: place_id is
+        # hashed from it, so any presentation change MUST NOT alter it
+        # (otherwise re-scrapes would stop matching saved rows by place).
         if lat is not None and lon is not None:
-            maps_url = f"https://www.google.com/maps/place/{urllib.parse.quote(safe_name)}/@{lat},{lon},17z"
+            base_url = f"https://www.google.com/maps/place/{urllib.parse.quote(safe_name)}/@{lat},{lon},17z"
         elif cid:
-            maps_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(safe_name)}&query_place_id={cid}"
+            base_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(safe_name)}&query_place_id={cid}"
         else:
-            maps_url = f"https://www.google.com/maps/search/{urllib.parse.quote(safe_name)}"
+            base_url = f"https://www.google.com/maps/search/{urllib.parse.quote(safe_name)}"
+
+        # Display URL: the FID data payload (!1s<fid>) pins the EXACT listing
+        # even inside dense multi-tenant buildings. Readers ignoring unknown
+        # data params degrade gracefully to base_url (same coordinates).
+        if cid and lat is not None and lon is not None:
+            maps_url = f"{base_url}/data=!4m6!3m5!1s{cid}!8m2!3d{lat}!4d{lon}"
+        else:
+            maps_url = base_url
 
         # Deterministic place_id conforming to AGENTS.md invariant 1.3
-        place_id = f"gmaps_{hashlib.sha256(maps_url.encode()).hexdigest()[:16]}"
+        place_id = f"gmaps_{hashlib.sha256(base_url.encode()).hexdigest()[:16]}"
 
         # Address (pd[18] carries a "Business Name, street..." prefix — strip it
         # BEFORE cleaning so cards show streets and dedup compares streets).

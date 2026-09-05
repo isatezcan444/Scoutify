@@ -343,14 +343,19 @@ export const LeadFinderPage: React.FC<LeadFinderPageProps> = ({ onNavigate, onRe
 
   const handleSaveSelected = () => handleSaveLeads(selectedKeys);
   const handleSaveAll = () => handleSaveLeads(unsavedLeads.map(leadKey));
-
-  const getGoogleMapsUrl = (lead: any) => {    if (lead.maps_url) return lead.maps_url;
+  const getGoogleMapsUrl = (lead: any) => {
+    if (lead.maps_url) return lead.maps_url;
     if (lead.google_maps_url) return lead.google_maps_url;
+    // No stored pin: name the business explicitly. A bare coordinate query
+    // shows whatever is nearest (often a neighbour), so text comes first.
+    const query = `${lead.name} ${lead.address || ''} ${lead.city || ''}`.trim();
+    if (query) {
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    }
     if (lead.latitude && lead.longitude && lead.latitude !== 0) {
       return `https://www.google.com/maps/search/?api=1&query=${lead.latitude},${lead.longitude}`;
     }
-    const query = `${lead.name} ${lead.address || ''} ${lead.city || ''}`.trim();
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    return 'https://www.google.com/maps';
   };
 
   return (

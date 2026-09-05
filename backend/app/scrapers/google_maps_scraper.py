@@ -294,6 +294,17 @@ class GoogleMapsScraper(BaseScraper):
         place_url = place.get("google_maps_url") or f"{clean_keyword}_{clean_city}_{proven_district or ''}_{place['name']}"
         deterministic_place_id = place.get("place_id") or f"gmaps_{hashlib.sha256(place_url.encode()).hexdigest()[:16]}"
 
+        # Display contract: strict-valid numbers show e164; TR-plausible
+        # numbers show the canonical +90 form; implausible input
+        # ("0406…", junk) shows as unspecified — never as a callable number.
+        # Targeting/eligibility always stays behind normalize_to_e164().
+        # Shared lines keep their display value but are withheld from targeting.
+        display_phone = (
+            phone_data["e164"]
+            if phone_data
+            else (PhoneService.canonical_display(place.get("phone")) or "Belirtilmemiş")
+        )
+
         return {
             "name": place["name"],
             "category": place.get("category") or clean_keyword.title(),
@@ -313,8 +324,7 @@ class GoogleMapsScraper(BaseScraper):
             "is_verified": is_phone_verified,
             "discovered_from": "GOOGLE_MAPS",
             "verified_by": "Google Maps Place Registry & Web Verification" if is_phone_verified else None,
-            # Shared lines keep their display value but are withheld from targeting.
-            "phone": phone_data["e164"] if phone_data else (place.get("phone") or "Belirtilmemiş"),
+            "phone": display_phone,
             "phone_e164": None if shared_phone_line else (phone_data["e164"] if phone_data else None),
             "phone_line_shared": shared_phone_line,
             "is_mobile": phone_data.get("is_mobile", False) if phone_data else False,

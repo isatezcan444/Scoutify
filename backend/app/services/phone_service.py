@@ -11,6 +11,54 @@ class PhoneService:
 
     DEFAULT_REGION = "TR"
 
+    # Turkish geographic area codes (BTK numbering plan: 81 provinces, with
+    # 212/216 both in İstanbul) plus TRNC 392. Used ONLY for plausibility of
+    # the display number — validity/eligibility still requires libphonenumber.
+    TR_AREA_CODES = frozenset({
+        "212", "216", "222", "224", "226", "228", "232", "236", "242", "246",
+        "248", "252", "256", "258", "262", "264", "266", "272", "274", "276",
+        "282", "284", "286", "288", "312", "318", "322", "324", "326", "328",
+        "332", "338", "342", "344", "346", "348", "352", "354", "356", "358",
+        "362", "364", "366", "368", "372", "374", "376", "378", "382", "384",
+        "386", "388", "392", "412", "414", "416", "422", "424", "426", "428",
+        "432", "434", "436", "438", "442", "446", "452", "454", "456", "458",
+        "462", "464", "466", "468", "472", "474", "476", "478", "482", "484",
+        "486", "488",
+    })
+
+    @classmethod
+    def canonical_display(cls, raw_phone: Optional[str]) -> Optional[str]:
+        """Best-effort +90 display form for a TR-plausible number.
+
+        Returns the canonical +90… form when the digits fit the Turkish
+        numbering plan (mobile 05xx, geographic area code, 850/800/900,
+        444 short), else None. Display is NOT validity: callers must still
+        gate targeting/eligibility on normalize_to_e164().
+        """
+        if not raw_phone or not isinstance(raw_phone, str):
+            return None
+        digits = re.sub(r"\D", "", raw_phone)
+        if digits.startswith("00"):
+            digits = digits[2:]
+        if digits.startswith("90") and len(digits) > 10:
+            digits = digits[2:]
+        if digits.startswith("0"):
+            digits = digits[1:]
+
+        national: Optional[str] = None
+        if re.fullmatch(r"5\d{9}", digits):
+            national = digits
+        elif re.fullmatch(r"444\d{4}", digits):
+            national = digits
+        elif re.fullmatch(r"(850|800|900)\d{7}", digits):
+            national = digits
+        elif re.fullmatch(r"[2-4]\d{2}\d{7}", digits) and digits[:3] in cls.TR_AREA_CODES:
+            national = digits
+
+        if national is None:
+            return None
+        return f"+90{national}"
+
     @staticmethod
     def mask_for_log(phone_e164: Optional[str]) -> str:
         """PII-safe phone rendering for logs: keeps routing prefix + last 2 digits."""

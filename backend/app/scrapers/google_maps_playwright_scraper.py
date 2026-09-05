@@ -288,13 +288,21 @@ def clean_extracted_website(raw_url: Optional[str]) -> Optional[str]:
         if match:
             url = unquote(match.group(1))
 
-    # Reject social and directory domains as company official website
+    # Reject social, messaging and directory domains as company official website.
+    # Messaging links (businesses often paste api.whatsapp.com/wa.me as their
+    # "website") must surface as "no website", never as a site card link.
     skip_domains = [
         "google.com", "google.com.tr", "maps.google.com", "goo.gl",
         "facebook.com", "instagram.com", "twitter.com", "x.com",
         "youtube.com", "linkedin.com", "pinterest.com", "tiktok.com",
         "bulurum.com", "doktortakvimi.com", "eniyihekim.com", "sahibinden.com",
         "armut.com", "bionluk.com", "yellowpages.com.tr", "sarisayfalar.com"
+    ]
+    # Short messaging domains: exact-or-subdomain match only, so about.me and
+    # similar real sites are NOT caught by substring ("t.me" in "about.me").
+    skip_exact_domains = [
+        "whatsapp.com", "api.whatsapp.com", "chat.whatsapp.com",
+        "wa.me", "t.me", "m.me", "messenger.com",
     ]
 
     try:
@@ -303,6 +311,10 @@ def clean_extracted_website(raw_url: Optional[str]) -> Optional[str]:
         parsed = urlparse(url)
         netloc = parsed.netloc.lower()
         if any(d in netloc for d in skip_domains):
+            return None
+        if netloc in skip_exact_domains or any(
+            netloc.endswith("." + d) for d in skip_exact_domains
+        ):
             return None
         return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
     except Exception:

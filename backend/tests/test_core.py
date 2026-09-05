@@ -45,3 +45,22 @@ def test_phone_service_strict_rejects_unverifiable():
     assert PhoneService.normalize_to_e164(None) is None  # type: ignore[arg-type]
     # Random 555-block numbers are not valid TR mobiles
     assert PhoneService.normalize_to_e164("+9055518034063") is None
+
+
+def test_canonical_display_tr_numbering_plan():
+    from backend.app.services.phone_service import PhoneService as P
+    # Plausible -> canonical +90 form (display only, not validity)
+    assert P.canonical_display("05853684214") == "+905853684214"
+    assert P.canonical_display("02164565533") == "+902164565533"
+    assert P.canonical_display("+905324128241") == "+905324128241"
+    assert P.canonical_display("905321112233") == "+905321112233"
+    assert P.canonical_display("08503451212") == "+908503451212"
+    assert P.canonical_display("0532 123 45 67") == "+905321234567"
+    # Implausible -> None (never displayed as callable)
+    assert P.canonical_display("04069752897") is None   # invalid area 406
+    assert P.canonical_display("12345") is None
+    assert P.canonical_display("+90555999999999999") is None
+    assert P.canonical_display("+491511234567") is None  # foreign
+    assert P.canonical_display("") is None
+    assert P.canonical_display(None) is None
+    assert P.canonical_display("not a phone") is None

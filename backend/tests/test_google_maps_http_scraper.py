@@ -177,3 +177,44 @@ def test_parse_place_entry_strips_name_from_address(http_scraper):
     assert res is not None
     assert res["address"] == "Barbaros Mah. No: 10, Ataşehir, İstanbul"
     assert not res["address"].startswith("Özel Test Diş Kliniği")
+
+
+def test_parse_place_entry_pin_url_carries_fid_and_stable_id(http_scraper):
+    import hashlib
+    entry = [None] * 15
+    pd = [None] * 180
+    pd[10] = "0x14cac8a7a71e149f:0xa626190b5411d777"
+    pd[11] = "Pin Test Kliniği"
+    pd[13] = ["Diş Kliniği"]
+    pd[18] = "Barbaros, Ataşehir"
+    pd[9] = [None, None, 40.9928, 29.1249]
+    entry[14] = pd
+
+    res = http_scraper._parse_place_entry(
+        entry=entry, keyword="Diş", city="İstanbul", district="Ataşehir"
+    )
+    assert res is not None
+    url = res["google_maps_url"]
+    # Exact-listing payload present, coordinates intact
+    assert "/data=!4m6!3m5!1s0x14cac8a7a71e149f:0xa626190b5411d777!8m2!3d40.9928!4d29.1249" in url
+    assert "@40.9928,29.1249,17z" in url
+    # place_id identical to the pre-FID format (dedup stability across deploys)
+    base = "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi/@40.9928,29.1249,17z"
+    assert res["place_id"] == f"gmaps_{hashlib.sha256(base.encode()).hexdigest()[:16]}"
+
+
+def test_extract_website_rejects_messaging_links(http_scraper):
+    pd = [None] * 10
+    for raw in [
+        "https://api.whatsapp.com/send?phone=905321234567",
+        "https://wa.me/905321234567",
+        "https://t.me/klinikadi",
+        "https://m.me/klinikadi",
+    ]:
+        pd[7] = [raw]
+        assert http_scraper._extract_website(pd) is None, raw
+    # Real sites still pass (about.me must NOT be caught by t.me rule)
+    pd[7] = ["https://about.me/klinik"]
+    assert http_scraper._extract_website(pd) == "https://about.me/klinik"
+    pd[7] = ["https://www.dentatasehir.com/"]
+    assert http_scraper._extract_website(pd) == "https://www.dentatasehir.com"
