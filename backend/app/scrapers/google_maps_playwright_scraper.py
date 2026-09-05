@@ -18,14 +18,18 @@ Robustness invariants:
 - Anti-bot interstitials (captcha / unusual traffic) raise GoogleMapsBlockedError —
   failures are reported loudly, never silently as zero results.
 """
+from __future__ import annotations
+
 import gc
 import re
 import hashlib
 import logging
 import time
-from typing import List, Dict, Any, Optional, Set, Callable
+from typing import List, Dict, Any, Optional, Set, Callable, TYPE_CHECKING
 from urllib.parse import quote, unquote, urlparse
-from playwright.async_api import async_playwright, Browser, Page, Locator
+
+if TYPE_CHECKING:  # Imported lazily at browser launch (cold-start cost)
+    from playwright.async_api import Browser, Page, Locator
 from bs4 import BeautifulSoup
 
 from backend.app.core.config import settings
@@ -636,6 +640,10 @@ class GoogleMapsPlaywrightScraper:
 
         if on_progress_status:
             await on_progress_status(f"🌐 Google Maps oturumu başlatılıyor: {city} > {district}...", 10)
+
+        # Lazy import: playwright costs ~1s+ at startup and is only needed
+        # on the fallback engine path (default is pure HTTP).
+        from playwright.async_api import async_playwright
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(

@@ -681,6 +681,8 @@ export const en = {
     scraperCompletedTitle: '🎉 Discovery Completed',
     scraperCompletedMsg: 'Found {found} businesses, added {leads} new leads.',
     policySavedTitle: 'Policy Saved',
+    reconnectedTitle: '🔗 Connected',
+    reconnectedMsg: 'Live sync is active, data is up to date.',
     errorTitle: 'Operation Failed',
     confirmTitle: 'Confirm Action',
   },

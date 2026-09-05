@@ -1,10 +1,13 @@
 import io
 from typing import List, Dict, Any
-import pandas as pd
+
+# NOTE: pandas (+openpyxl) is imported lazily inside the methods below: it
+# costs seconds at startup and is only needed for explicit CSV/Excel exports.
+
 
 class ExportService:
     @staticmethod
-    def leads_to_dataframe(leads: List[Dict[str, Any]]) -> pd.DataFrame:
+    def leads_to_dataframe(leads: List[Dict[str, Any]]) -> "pd.DataFrame":
         formatted = []
         for l in leads:
             formatted.append({
@@ -25,6 +28,8 @@ class ExportService:
                 "Durum": l.get("status"),
                 "Kayıt Tarihi": str(l.get("created_at")),
             })
+        import pandas as pd
+
         return pd.DataFrame(formatted)
 
     @classmethod
@@ -36,6 +41,8 @@ class ExportService:
 
     @classmethod
     def export_excel(cls, leads: List[Dict[str, Any]]) -> bytes:
+        import pandas as pd
+
         df = cls.leads_to_dataframe(leads)
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="openpyxl") as writer:

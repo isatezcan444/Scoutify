@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider, useToast } from './context/ToastContext';
 import { I18nProvider, useI18n } from './context/I18nContext';
@@ -21,6 +21,7 @@ const AppContent: React.FC = () => {
   const [isWsConnected, setIsWsConnected] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [campaignPrefill, setCampaignPrefill] = useState<any>(null);
+  const wasDisconnectedRef = useRef(false);
   const toast = useToast();
   const { t } = useI18n();
 
@@ -77,6 +78,17 @@ const AppContent: React.FC = () => {
         (connected) => {
           if (connected) {
             window.dispatchEvent(new CustomEvent('scoutify:ws_connected'));
+            // Only announce re-connections (cold starts, sleep/wake): the
+            // initial mount connects silently to avoid a boot toast.
+            if (wasDisconnectedRef.current) {
+              toast.info(
+                t('toast.reconnectedMsg'),
+                t('toast.reconnectedTitle')
+              );
+            }
+            wasDisconnectedRef.current = false;
+          } else {
+            wasDisconnectedRef.current = true;
           }
           setIsWsConnected(connected);
         }

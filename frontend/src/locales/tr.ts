@@ -681,6 +681,8 @@ export const tr = {
     scraperCompletedTitle: '🎉 Tarama Tamamlandı',
     scraperCompletedMsg: 'Toplam {found} işletme bulundu, {leads} yeni lead eklendi.',
     policySavedTitle: 'Politika Kaydedildi',
+    reconnectedTitle: '🔗 Bağlantı Kuruldu',
+    reconnectedMsg: 'Canlı senkronize aktif, veriler güncel.',
     errorTitle: 'İşlem Başarısız',
     confirmTitle: 'Onay Gerekiyor',
   },
