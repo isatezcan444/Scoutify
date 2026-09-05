@@ -188,6 +188,9 @@ def test_parse_place_entry_pin_url_canonical_form_and_stable_id(http_scraper):
     pd[13] = ["Diş Kliniği"]
     pd[18] = "Barbaros, Ataşehir"
     pd[9] = [None, None, 40.9928, 29.1249]
+    # Mirrors Google's buried [fid, null, null, /g/…, ChIJ…] identity block.
+    pd[50] = ["0x14cac8a7a71e149f:0xa626190b5411d777", None, None,
+              "/g/11rvk121k9", "ChIJVX4CN8bJyhQRXEuG2ZLGl-k"]
     entry[14] = pd
 
     res = http_scraper._parse_place_entry(
@@ -195,15 +198,52 @@ def test_parse_place_entry_pin_url_canonical_form_and_stable_id(http_scraper):
     )
     assert res is not None
     url = res["google_maps_url"]
-    # Minimal canonical share form: NO hand-built /data= payload (a prior
-    # revision's reconstructed blob made Maps blank the place panel).
-    assert "/data=" not in url
+    # Byte-faithful native share shape (verified against a live share link).
     assert url == (
-        "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi"
+        "https://www.google.com/maps/place/Pin+Test+Klini%C4%9Fi"
         "/@40.9928,29.1249,17z"
+        "/data=!3m1!4b1!4m6!3m5!1s0x14cac8a7a71e149f:0xa626190b5411d777"
+        "!8m2!3d40.9928!4d29.1249!16s%2Fg%2F11rvk121k9"
     )
-    # place_id identical to the long-standing format (dedup stability).
-    assert res["place_id"] == f"gmaps_{hashlib.sha256(url.encode()).hexdigest()[:16]}"
+    # place_id still hashes the minimal base form (dedup stability).
+    base = "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi/@40.9928,29.1249,17z"
+    assert res["place_id"] == f"gmaps_{hashlib.sha256(base.encode()).hexdigest()[:16]}"
+
+
+def test_parse_place_entry_pin_url_without_identity_block(http_scraper):
+    entry = [None] * 15
+    pd = [None] * 180
+    pd[10] = "0x14cac8a7a71e149f:0xa626190b5411d777"
+    pd[11] = "Pin Test Kliniği"
+    pd[13] = ["Diş Kliniği"]
+    pd[18] = "Barbaros, Ataşehir"
+    pd[9] = [None, None, 40.9928, 29.1249]
+    entry[14] = pd
+
+    res = http_scraper._parse_place_entry(
+        entry=entry, keyword="Diş", city="İstanbul", district="Ataşehir"
+    )
+    assert res is not None
+    # No identity block → minimal base form, no /data= payload.
+    assert "/data=" not in res["google_maps_url"]
+    assert res["google_maps_url"].startswith(
+        "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi/@40.9928,29.1249,17z"
+    )
+
+
+def test_extract_place_ids_finds_buried_identity_block(http_scraper):
+    pd = [None] * 180
+    pd[10] = "0xAA:0xBB"
+    pd[50] = ["noise", ["0xAA:0xBB", None, None, "/g/xyz123", "ChIJABCDEFG"]]
+    fid, g_path, chij = http_scraper._extract_place_ids(pd)
+    assert (fid, g_path, chij) == ("0xAA:0xBB", "/g/xyz123", "ChIJABCDEFG")
+
+
+def test_extract_place_ids_absent_returns_empty(http_scraper):
+    pd = [None] * 180
+    pd[10] = "0xAA:0xBB"
+    assert http_scraper._extract_place_ids(pd) == ("0xAA:0xBB", None, None)
+    assert http_scraper._extract_place_ids([]) == ("", None, None)
 
 
 def test_extract_website_rejects_messaging_links(http_scraper):

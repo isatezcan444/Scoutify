@@ -74,6 +74,43 @@ class GoogleMapsHttpScraper:
             f"&pb={pb}&q={encoded_q}&tch=1&ech=1"
         )
 
+    _FID_RE = re.compile(r"0x[0-9a-f]+:0x[0-9a-f]+")
+
+    @classmethod
+    def _extract_place_ids(cls, pd: List[Any]) -> tuple[str, Optional[str], Optional[str]]:
+        """Finds (fid, g_path, chij) in the place descriptor.
+
+        Google buries ["0x…:0x…", null, null, "/g/…", "ChIJ…", …] a few levels
+        deep next to reviews/photos metadata. The FID+/g pair is what Google's
+        own share URLs carry (!1s<fid> … !16s<g/...>), so pins built from it
+        resolve exactly like a native share instead of a bare coordinate view.
+        Returns ("", None, None) when absent — callers fall back to base URLs.
+        """
+        fid = pd[10] if (len(pd) > 10 and isinstance(pd[10], str)) else ""
+
+        def _walk(obj: Any) -> Optional[tuple[str, Optional[str]]]:
+            if isinstance(obj, list):
+                strs = [x for x in obj if isinstance(x, str)]
+                gpaths = [x for x in strs if x.startswith("/g/")]
+                if gpaths:
+                    fids = [x for x in strs if cls._FID_RE.fullmatch(x)]
+                    chijs = [x for x in strs if x.startswith("ChIJ")]
+                    return (fids[0] if fids else fid), (
+                        gpaths[0],
+                        chijs[0] if chijs else None,
+                    )
+                for x in obj:
+                    found = _walk(x)
+                    if found:
+                        return found
+            return None
+
+        found = _walk(pd)
+        if found:
+            pair_fid, (g_path, chij) = found
+            return pair_fid or fid, g_path, chij
+        return fid, None, None
+
     def _extract_phone(self, pd: List[Any]) -> Optional[str]:
         """Extracts candidate phone number from place descriptor."""
         # 1. Direct phone descriptor list at pd[178]
@@ -156,14 +193,8 @@ class GoogleMapsHttpScraper:
         # Coordinates
         lat, lon = self._extract_coordinates(pd)
 
-        # Canonical Google Maps URL, minimal share form.
-        #
-        # DELIBERATELY no hand-built /data= payload: an earlier revision
-        # appended a reconstructed FID blob (!4m6!3m5!1s<fid>!8m2…) and live
-        # pins started opening as blank place//@lat,lon views (Maps blanking
-        # the name segment = failed resolution). The blob shape was never
-        # verifiable server-side, so it violated the no-assumptions rule and
-        # was reverted. place_id hashes base_url, unchanged by this.
+        # Canonical Google Maps URL, minimal share form (also the place_id
+        # hash input — keep byte-stable so re-scrapes match saved rows).
         if lat is not None and lon is not None:
             base_url = f"https://www.google.com/maps/place/{urllib.parse.quote(safe_name)}/@{lat},{lon},17z"
         elif cid:
@@ -171,7 +202,22 @@ class GoogleMapsHttpScraper:
         else:
             base_url = f"https://www.google.com/maps/search/{urllib.parse.quote(safe_name)}"
 
-        maps_url = base_url
+        # Display URL: byte-faithful reconstruction of Google's native share
+        # shape (verified against a live share link):
+        #   place/<slug>/@lat,lon,17z/data=!3m1!4b1!4m6!3m5!1s<fid>!8m2!3d<lat>!4d<lon>!16s<g/…>
+        # The FID+/g pair pins the EXACT listing (dense buildings included);
+        # anything missing degrades to base_url. place_id always hashes
+        # base_url, never the display form.
+        fid, g_path, _chij = self._extract_place_ids(pd)
+        if lat is not None and lon is not None and fid and g_path:
+            slug = urllib.parse.quote_plus(safe_name)
+            maps_url = (
+                f"https://www.google.com/maps/place/{slug}/@{lat},{lon},17z"
+                f"/data=!3m1!4b1!4m6!3m5!1s{fid}"
+                f"!8m2!3d{lat}!4d{lon}!16s{urllib.parse.quote(g_path, safe='')}"
+            )
+        else:
+            maps_url = base_url
 
         # Deterministic place_id conforming to AGENTS.md invariant 1.3
         place_id = f"gmaps_{hashlib.sha256(base_url.encode()).hexdigest()[:16]}"
