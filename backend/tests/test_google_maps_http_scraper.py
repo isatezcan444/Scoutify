@@ -179,7 +179,7 @@ def test_parse_place_entry_strips_name_from_address(http_scraper):
     assert not res["address"].startswith("Özel Test Diş Kliniği")
 
 
-def test_parse_place_entry_pin_url_carries_fid_and_stable_id(http_scraper):
+def test_parse_place_entry_pin_url_canonical_form_and_stable_id(http_scraper):
     import hashlib
     entry = [None] * 15
     pd = [None] * 180
@@ -195,12 +195,15 @@ def test_parse_place_entry_pin_url_carries_fid_and_stable_id(http_scraper):
     )
     assert res is not None
     url = res["google_maps_url"]
-    # Exact-listing payload present, coordinates intact
-    assert "/data=!4m6!3m5!1s0x14cac8a7a71e149f:0xa626190b5411d777!8m2!3d40.9928!4d29.1249" in url
-    assert "@40.9928,29.1249,17z" in url
-    # place_id identical to the pre-FID format (dedup stability across deploys)
-    base = "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi/@40.9928,29.1249,17z"
-    assert res["place_id"] == f"gmaps_{hashlib.sha256(base.encode()).hexdigest()[:16]}"
+    # Minimal canonical share form: NO hand-built /data= payload (a prior
+    # revision's reconstructed blob made Maps blank the place panel).
+    assert "/data=" not in url
+    assert url == (
+        "https://www.google.com/maps/place/Pin%20Test%20Klini%C4%9Fi"
+        "/@40.9928,29.1249,17z"
+    )
+    # place_id identical to the long-standing format (dedup stability).
+    assert res["place_id"] == f"gmaps_{hashlib.sha256(url.encode()).hexdigest()[:16]}"
 
 
 def test_extract_website_rejects_messaging_links(http_scraper):
